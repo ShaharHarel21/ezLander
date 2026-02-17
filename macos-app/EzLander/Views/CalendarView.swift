@@ -2,7 +2,7 @@ import SwiftUI
 import EventKit
 
 struct CalendarView: View {
-    @StateObject private var viewModel = CalendarViewModel()
+    @StateObject private var viewModel = CalendarViewModel.shared
     @State private var showingAddEvent = false
     @State private var selectedEvent: CalendarEvent?
 
@@ -59,7 +59,7 @@ struct CalendarView: View {
             )
         }
         .onAppear {
-            viewModel.loadEvents()
+            viewModel.onAppear()
         }
     }
 
@@ -140,9 +140,9 @@ struct CalendarView: View {
                         isSelected: viewModel.isSameDay(date, viewModel.selectedDate),
                         isToday: viewModel.isSameDay(date, Date()),
                         isCurrentMonth: viewModel.isCurrentMonth(date),
-                        events: viewModel.eventsForDate(date),
+                        eventCount: viewModel.eventCountForDate(date),
                         onTap: {
-                            viewModel.selectedDate = date
+                            viewModel.selectDate(date)
                         }
                     )
                 }
@@ -170,7 +170,7 @@ struct CalendarView: View {
                     .background(viewModel.isSameDay(date, viewModel.selectedDate) ? Color.accentColor.opacity(0.1) : Color.clear)
                     .cornerRadius(4)
                     .onTapGesture {
-                        viewModel.selectedDate = date
+                        viewModel.selectDate(date)
                     }
                 }
             }
@@ -187,7 +187,7 @@ struct CalendarView: View {
                         })
                     }
 
-                    if viewModel.weekEvents.isEmpty {
+                    if viewModel.weekEvents.isEmpty && !viewModel.isLoading {
                         Text("No events this week")
                             .foregroundColor(.secondary)
                             .padding()
@@ -206,19 +206,24 @@ struct CalendarView: View {
                     .font(.subheadline)
                     .fontWeight(.medium)
                 Spacer()
-                Text("\(viewModel.selectedDayEvents.count) events")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+
+                if viewModel.isLoading {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                } else {
+                    Text("\(viewModel.selectedDayEvents.count) events")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
             .padding(.horizontal)
             .padding(.top, 8)
 
-            if viewModel.isLoading {
-                ProgressView()
-                    .frame(maxWidth: .infinity)
-                    .padding()
-            } else if !viewModel.isConnected {
+            if !viewModel.isConnected {
                 VStack(spacing: 8) {
+                    Image(systemName: "calendar.badge.exclamationmark")
+                        .font(.title2)
+                        .foregroundColor(.secondary)
                     Text("Connect Google Calendar to see events")
                         .font(.caption)
                         .foregroundColor(.secondary)
@@ -226,6 +231,23 @@ struct CalendarView: View {
                         viewModel.connect()
                     }
                     .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+            } else if let error = viewModel.error {
+                VStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.title2)
+                        .foregroundColor(.orange)
+                    Text(error)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                    Button("Retry") {
+                        viewModel.refresh()
+                    }
+                    .buttonStyle(.bordered)
                     .controlSize(.small)
                 }
                 .frame(maxWidth: .infinity)
@@ -239,9 +261,10 @@ struct CalendarView: View {
                             })
                         }
 
-                        if viewModel.selectedDayEvents.isEmpty {
-                            Text("No events")
+                        if viewModel.selectedDayEvents.isEmpty && !viewModel.isLoading {
+                            Text("No events on this day")
                                 .foregroundColor(.secondary)
+                                .font(.caption)
                                 .padding()
                         }
                     }
@@ -259,7 +282,7 @@ struct DayCell: View {
     let isSelected: Bool
     let isToday: Bool
     let isCurrentMonth: Bool
-    let events: [CalendarEvent]
+    let eventCount: Int
     let onTap: () -> Void
 
     var body: some View {
@@ -270,9 +293,9 @@ struct DayCell: View {
 
             // Event indicators (max 3 dots)
             HStack(spacing: 2) {
-                ForEach(0..<min(events.count, 3), id: \.self) { _ in
+                ForEach(0..<min(eventCount, 3), id: \.self) { _ in
                     Circle()
-                        .fill(Color.accentColor)
+                        .fill(isSelected ? Color.white.opacity(0.8) : Color.accentColor)
                         .frame(width: 4, height: 4)
                 }
             }
@@ -333,9 +356,20 @@ struct EventRow: View {
                     .font(.subheadline)
                     .lineLimit(1)
 
-                Text(timeFormatter.string(from: event.startDate))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                HStack(spacing: 4) {
+                    Text(timeFormatter.string(from: event.startDate))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    if let location = event.location, !location.isEmpty {
+                        Text("•")
+                            .foregroundColor(.secondary)
+                        Text(location)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+                }
             }
 
             Spacer()
@@ -472,9 +506,16 @@ struct EventEditorView: View {
                 endDate = event.endDate
                 location = event.location ?? ""
                 notes = event.description ?? ""
+                isAllDay = event.isAllDay
             } else {
-                startDate = selectedDate
-                endDate = Calendar.current.date(byAdding: .hour, value: 1, to: selectedDate) ?? selectedDate
+                // Set start time to nearest hour
+                let calendar = Calendar.current
+                var components = calendar.dateComponents([.year, .month, .day, .hour], from: selectedDate)
+                components.hour = calendar.component(.hour, from: Date())
+                if let date = calendar.date(from: components) {
+                    startDate = date
+                    endDate = calendar.date(byAdding: .hour, value: 1, to: date) ?? date
+                }
             }
         }
     }
@@ -487,7 +528,8 @@ struct EventEditorView: View {
             endDate: endDate,
             calendarType: .google,
             description: notes.isEmpty ? nil : notes,
-            location: location.isEmpty ? nil : location
+            location: location.isEmpty ? nil : location,
+            isAllDay: isAllDay
         )
         onSave(newEvent)
     }
@@ -500,6 +542,8 @@ enum CalendarViewMode {
 }
 
 class CalendarViewModel: ObservableObject {
+    static let shared = CalendarViewModel()
+
     @Published var selectedDate: Date = Date()
     @Published var currentMonth: Date = Date()
     @Published var viewMode: CalendarViewMode = .month
@@ -509,9 +553,20 @@ class CalendarViewModel: ObservableObject {
     @Published var error: String?
 
     private let calendar = Calendar.current
+    private var hasLoadedOnce = false
+
+    // Cache for event counts per day
+    private var eventCountCache: [String: Int] = [:]
 
     init() {
         checkConnection()
+    }
+
+    func onAppear() {
+        checkConnection()
+        if isConnected && !hasLoadedOnce {
+            loadEvents()
+        }
     }
 
     func checkConnection() {
@@ -596,13 +651,46 @@ class CalendarViewModel: ObservableObject {
     }
 
     // MARK: - Helpers
+    func eventCountForDate(_ date: Date) -> Int {
+        let key = dateKey(date)
+        if let cached = eventCountCache[key] {
+            return cached
+        }
+        let count = eventsForDate(date).count
+        eventCountCache[key] = count
+        return count
+    }
+
+    private func dateKey(_ date: Date) -> String {
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
+        return "\(components.year!)-\(components.month!)-\(components.day!)"
+    }
+
     func eventsForDate(_ date: Date) -> [CalendarEvent] {
-        events.filter { isSameDay($0.startDate, date) }
-            .sorted { $0.startDate < $1.startDate }
+        let targetYear = calendar.component(.year, from: date)
+        let targetMonth = calendar.component(.month, from: date)
+        let targetDay = calendar.component(.day, from: date)
+
+        let matching = events.filter { event in
+            let eventYear = calendar.component(.year, from: event.startDate)
+            let eventMonth = calendar.component(.month, from: event.startDate)
+            let eventDay = calendar.component(.day, from: event.startDate)
+
+            return eventYear == targetYear && eventMonth == targetMonth && eventDay == targetDay
+        }
+        return matching.sorted { $0.startDate < $1.startDate }
     }
 
     func isSameDay(_ date1: Date, _ date2: Date) -> Bool {
-        calendar.isDate(date1, inSameDayAs: date2)
+        let year1 = calendar.component(.year, from: date1)
+        let month1 = calendar.component(.month, from: date1)
+        let day1 = calendar.component(.day, from: date1)
+
+        let year2 = calendar.component(.year, from: date2)
+        let month2 = calendar.component(.month, from: date2)
+        let day2 = calendar.component(.day, from: date2)
+
+        return year1 == year2 && month1 == month2 && day1 == day2
     }
 
     func isCurrentMonth(_ date: Date) -> Bool {
@@ -617,6 +705,10 @@ class CalendarViewModel: ObservableObject {
 
     func dayNumber(_ date: Date) -> String {
         "\(calendar.component(.day, from: date))"
+    }
+
+    func selectDate(_ date: Date) {
+        selectedDate = date
     }
 
     // MARK: - Navigation
@@ -648,23 +740,43 @@ class CalendarViewModel: ObservableObject {
 
     // MARK: - Data Operations
     func loadEvents() {
-        guard isConnected else { return }
+        guard isConnected else {
+            NSLog("CalendarViewModel: Not connected, skipping load")
+            return
+        }
 
         isLoading = true
+        error = nil
+        hasLoadedOnce = true
+
+        // Clear cache when reloading
+        eventCountCache.removeAll()
+
         Task {
             do {
-                // Load 2 months of events centered on current month
+                // Load 3 months of events centered on current month
                 let startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: currentMonth))!
                 let start = calendar.date(byAdding: .month, value: -1, to: startOfMonth)!
                 let end = calendar.date(byAdding: .month, value: 2, to: startOfMonth)!
 
+                NSLog("CalendarViewModel: Loading events from \(start) to \(end)")
+
                 let fetchedEvents = try await GoogleCalendarService.shared.listEvents(from: start, to: end)
+
+                NSLog("CalendarViewModel: Loaded \(fetchedEvents.count) events")
+
+                // Log first few events for debugging
+                for (index, event) in fetchedEvents.prefix(5).enumerated() {
+                    NSLog("CalendarViewModel: Event \(index): \(event.title) on \(event.startDate)")
+                }
 
                 await MainActor.run {
                     self.events = fetchedEvents
                     self.isLoading = false
+                    self.eventCountCache.removeAll() // Clear cache after loading new events
                 }
             } catch {
+                NSLog("CalendarViewModel: Error loading events: \(error)")
                 await MainActor.run {
                     self.error = error.localizedDescription
                     self.isLoading = false
@@ -675,7 +787,9 @@ class CalendarViewModel: ObservableObject {
 
     func refresh() {
         checkConnection()
-        loadEvents()
+        if isConnected {
+            loadEvents()
+        }
     }
 
     func createEvent(_ event: CalendarEvent) {

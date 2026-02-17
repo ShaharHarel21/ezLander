@@ -72,7 +72,7 @@ struct MainPopover: View {
         case .calendar:
             CalendarView()
         case .email:
-            EmailQuickView()
+            EmailView()
         case .settings:
             SettingsView()
         }

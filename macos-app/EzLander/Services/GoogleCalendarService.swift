@@ -37,87 +37,34 @@ class GoogleCalendarService {
         let accessToken = try await oauthService.getValidAccessToken()
         NSLog("GoogleCalendarService: Got access token: \(String(accessToken.prefix(20)))...")
 
-        // Use RFC3339 format which Google Calendar API expects
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        let timeMin = formatter.string(from: startDate)
-        let timeMax = formatter.string(from: endDate)
+        // Fetch all calendars first
+        let calendars = try await listCalendars(accessToken: accessToken)
+        NSLog("GoogleCalendarService: Found \(calendars.count) calendars")
 
-        NSLog("GoogleCalendarService: timeMin=\(timeMin), timeMax=\(timeMax)")
+        var allEvents: [GoogleEvent] = []
 
-        // Build URL with proper encoding
-        var components = URLComponents(string: "\(baseURL)/calendars/primary/events")!
-        components.queryItems = [
-            URLQueryItem(name: "timeMin", value: timeMin),
-            URLQueryItem(name: "timeMax", value: timeMax),
-            URLQueryItem(name: "singleEvents", value: "true"),
-            URLQueryItem(name: "orderBy", value: "startTime"),
-            URLQueryItem(name: "maxResults", value: "50")
-        ]
-
-        guard let url = components.url else {
-            throw GoogleCalendarError.invalidURL
-        }
-
-        NSLog("GoogleCalendarService: Request URL: \(url.absoluteString)")
-
-        var request = URLRequest(url: url)
-        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw GoogleCalendarError.invalidResponse
-        }
-
-        NSLog("GoogleCalendarService: Response status: \(httpResponse.statusCode)")
-
-        // Print raw response for debugging
-        if let responseString = String(data: data, encoding: .utf8) {
-            NSLog("GoogleCalendarService: Raw response (first 500 chars): \(String(responseString.prefix(500)))")
-        }
-
-        guard httpResponse.statusCode == 200 else {
-            let errorBody = String(data: data, encoding: .utf8) ?? "Unknown"
-            NSLog("GoogleCalendarService: Error response: \(errorBody)")
-            throw GoogleCalendarError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: errorBody)
-        }
-
-        let eventsResponse = try JSONDecoder().decode(GoogleEventsResponse.self, from: data)
-        NSLog("GoogleCalendarService: Found \(eventsResponse.eventItems.count) events from primary calendar")
-
-        // If no events from primary, try to list all calendars
-        if eventsResponse.eventItems.isEmpty {
-            NSLog("GoogleCalendarService: No events in primary, fetching calendar list...")
-            let calendars = try await listCalendars(accessToken: accessToken)
-            NSLog("GoogleCalendarService: Found \(calendars.count) calendars")
-
-            var allEvents: [GoogleEvent] = []
-            for calendar in calendars {
-                if calendar.id != "primary" {
-                    NSLog("GoogleCalendarService: Fetching events from calendar: \(calendar.summary ?? calendar.id)")
-                    let calEvents = try await fetchEventsFromCalendar(calendarId: calendar.id, accessToken: accessToken, from: startDate, to: endDate)
-                    allEvents.append(contentsOf: calEvents)
-                }
-            }
-
-            if !allEvents.isEmpty {
-                NSLog("GoogleCalendarService: Found \(allEvents.count) events from other calendars")
-                return allEvents.map { googleEvent in
-                    CalendarEvent(
-                        id: googleEvent.id,
-                        title: googleEvent.summary ?? "Untitled",
-                        startDate: parseGoogleDateTime(googleEvent.start),
-                        endDate: parseGoogleDateTime(googleEvent.end),
-                        calendarType: .google,
-                        description: googleEvent.description,
-                        location: googleEvent.location
-                    )
-                }
+        // Fetch events from ALL calendars
+        for calendar in calendars {
+            NSLog("GoogleCalendarService: Fetching events from calendar: \(calendar.summary ?? calendar.id)")
+            do {
+                let calEvents = try await fetchEventsFromCalendar(
+                    calendarId: calendar.id,
+                    accessToken: accessToken,
+                    from: startDate,
+                    to: endDate
+                )
+                NSLog("GoogleCalendarService: Found \(calEvents.count) events in \(calendar.summary ?? calendar.id)")
+                allEvents.append(contentsOf: calEvents)
+            } catch {
+                NSLog("GoogleCalendarService: Error fetching from \(calendar.summary ?? calendar.id): \(error)")
+                // Continue with other calendars
             }
         }
 
-        return eventsResponse.eventItems.map { googleEvent in
+        NSLog("GoogleCalendarService: Total events from all calendars: \(allEvents.count)")
+
+        // Convert to CalendarEvent and sort by start date
+        let events = allEvents.map { googleEvent in
             CalendarEvent(
                 id: googleEvent.id,
                 title: googleEvent.summary ?? "Untitled",
@@ -127,7 +74,19 @@ class GoogleCalendarService {
                 description: googleEvent.description,
                 location: googleEvent.location
             )
+        }.sorted { $0.startDate < $1.startDate }
+
+        // Log events by date for debugging
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        var eventsByDate: [String: Int] = [:]
+        for event in events {
+            let dateKey = dateFormatter.string(from: event.startDate)
+            eventsByDate[dateKey, default: 0] += 1
         }
+        NSLog("GoogleCalendarService: Events by date: \(eventsByDate)")
+
+        return events
     }
 
     // MARK: - Create Event
@@ -239,6 +198,7 @@ class GoogleCalendarService {
         let timeMin = formatter.string(from: startDate)
         let timeMax = formatter.string(from: endDate)
 
+        // Properly encode the calendar ID
         let encodedCalendarId = calendarId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? calendarId
 
         var components = URLComponents(string: "\(baseURL)/calendars/\(encodedCalendarId)/events")!
@@ -247,7 +207,7 @@ class GoogleCalendarService {
             URLQueryItem(name: "timeMax", value: timeMax),
             URLQueryItem(name: "singleEvents", value: "true"),
             URLQueryItem(name: "orderBy", value: "startTime"),
-            URLQueryItem(name: "maxResults", value: "50")
+            URLQueryItem(name: "maxResults", value: "250") // Increased from 50
         ]
 
         guard let url = components.url else { return [] }
@@ -257,7 +217,14 @@ class GoogleCalendarService {
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+        guard let httpResponse = response as? HTTPURLResponse else {
+            return []
+        }
+
+        if httpResponse.statusCode != 200 {
+            if let errorString = String(data: data, encoding: .utf8) {
+                NSLog("GoogleCalendarService: Error fetching calendar \(calendarId): \(errorString)")
+            }
             return []
         }
 

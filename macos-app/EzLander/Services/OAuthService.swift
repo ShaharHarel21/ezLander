@@ -16,6 +16,11 @@ class OAuthService: NSObject {
     // Apple Sign In
     private var appleSignInContinuation: CheckedContinuation<Void, Error>?
 
+    // User email from Google sign-in
+    var userEmail: String? {
+        UserDefaults.standard.string(forKey: "user_email")
+    }
+
     // MARK: - Handle URL Callback
     func handleCallback(url: URL) {
         print("OAuthService: Received callback URL: \(url)")
