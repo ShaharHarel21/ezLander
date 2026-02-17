@@ -381,7 +381,8 @@ struct IntegrationRow: View {
                     Button("Disconnect") {
                         onDisconnect()
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.borderedProminent)
+                    .tint(.red)
                     .controlSize(.small)
                 }
             } else {
@@ -389,6 +390,7 @@ struct IntegrationRow: View {
                     onConnect()
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(.blue)
                 .controlSize(.small)
             }
         }
