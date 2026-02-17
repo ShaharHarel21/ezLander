@@ -307,27 +307,22 @@ struct SettingsView: View {
                         .buttonStyle(.borderedProminent)
                     }
                 }
-            } else {
+            } else if updateService.checkedOnce && !updateService.updateAvailable {
+                // Already checked and up to date
                 HStack {
-                    Button("Check for Updates") {
-                        Task {
-                            await updateService.checkForUpdates()
-                        }
-                    }
-                    .buttonStyle(.bordered)
-
-                    if let latestVersion = updateService.latestVersion {
-                        Text("You're up to date (v\(latestVersion))")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                    Text("You have the latest version")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            } else {
+                Button("Check for Updates") {
+                    Task {
+                        await updateService.checkForUpdates()
                     }
                 }
-            }
-
-            if let error = updateService.error {
-                Text(error)
-                    .font(.caption)
-                    .foregroundColor(.red)
+                .buttonStyle(.bordered)
             }
 
             Divider()

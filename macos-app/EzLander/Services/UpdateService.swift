@@ -12,6 +12,7 @@ class UpdateService: ObservableObject {
     @Published var downloadProgress: Double = 0
     @Published var isDownloading = false
     @Published var error: String?
+    @Published var checkedOnce = false
 
     private let githubOwner = "ShaharHarel21"
     private let githubRepo = "ezLander"
@@ -34,6 +35,8 @@ class UpdateService: ObservableObject {
 
             await MainActor.run {
                 isCheckingForUpdates = false
+                checkedOnce = true
+                error = nil
 
                 if let tagName = release.tagName {
                     let remoteVersion = tagName.replacingOccurrences(of: "v", with: "")
@@ -53,10 +56,24 @@ class UpdateService: ObservableObject {
                     }
                 }
             }
+        } catch let updateError as UpdateError {
+            await MainActor.run {
+                isCheckingForUpdates = false
+                checkedOnce = true
+                // For "no releases found", treat as up-to-date (repo might be new)
+                if case .noReleasesFound = updateError {
+                    updateAvailable = false
+                    latestVersion = currentVersion
+                } else {
+                    self.error = updateError.localizedDescription
+                }
+            }
         } catch {
             await MainActor.run {
                 isCheckingForUpdates = false
-                self.error = "Failed to check for updates: \(error.localizedDescription)"
+                checkedOnce = true
+                updateAvailable = false
+                latestVersion = currentVersion
             }
         }
     }
