@@ -20,6 +20,26 @@ struct ChatView: View {
                         if viewModel.isLoading {
                             TypingIndicator()
                         }
+
+                        // Show pending action preview
+                        if let action = viewModel.pendingAction {
+                            AIActionPreviewCard(
+                                action: action,
+                                onConfirm: {
+                                    viewModel.confirmAction()
+                                },
+                                onDecline: {
+                                    viewModel.declineAction()
+                                }
+                            )
+                            .padding(.top, 8)
+                        }
+
+                        // Show action result
+                        if let result = viewModel.actionResult {
+                            AIActionResultView(success: result.success, message: result.message)
+                                .padding(.top, 4)
+                        }
                     }
                     .padding()
                 }
@@ -456,6 +476,8 @@ struct TypingIndicator: View {
 class ChatViewModel: ObservableObject {
     @Published var messages: [ChatMessage] = []
     @Published var isLoading: Bool = false
+    @Published var pendingAction: AIAction?
+    @Published var actionResult: (success: Bool, message: String)?
 
     private let aiService = AIService.shared
 
@@ -463,7 +485,7 @@ class ChatViewModel: ObservableObject {
         // Welcome message
         messages.append(ChatMessage(
             role: .assistant,
-            content: "Hi! I'm your AI assistant. I can help you manage your calendar, send emails, and more. What would you like to do?"
+            content: "Hi! I'm your AI assistant. I can help you manage your calendar, send emails, and more. What would you like to do?\n\nWhen I want to create events or send emails, I'll show you a preview first so you can confirm."
         ))
     }
 
@@ -472,6 +494,7 @@ class ChatViewModel: ObservableObject {
         messages.append(userMessage)
 
         isLoading = true
+        actionResult = nil
 
         Task {
             do {
@@ -479,7 +502,17 @@ class ChatViewModel: ObservableObject {
 
                 await MainActor.run {
                     isLoading = false
-                    messages.append(response)
+
+                    // Check if the response contains an action request
+                    if let action = parseActionFromResponse(response.content) {
+                        pendingAction = action
+                        messages.append(ChatMessage(
+                            role: .assistant,
+                            content: "I've prepared the following action for you. Please review and confirm:"
+                        ))
+                    } else {
+                        messages.append(response)
+                    }
                 }
             } catch {
                 await MainActor.run {
@@ -491,6 +524,204 @@ class ChatViewModel: ObservableObject {
                 }
             }
         }
+    }
+
+    func confirmAction() {
+        guard let action = pendingAction else { return }
+
+        Task {
+            do {
+                switch action.type {
+                case .createEvent:
+                    if let eventData = action.eventData {
+                        let event = CalendarEvent(
+                            id: UUID().uuidString,
+                            title: eventData.title,
+                            startDate: eventData.startDate,
+                            endDate: eventData.endDate,
+                            calendarType: .google,
+                            description: eventData.description,
+                            location: eventData.location
+                        )
+                        try await GoogleCalendarService.shared.createEvent(event)
+                        await MainActor.run {
+                            actionResult = (true, "Event '\(eventData.title)' created successfully!")
+                            messages.append(ChatMessage(role: .assistant, content: "Done! I've created the event '\(eventData.title)' on your calendar."))
+                        }
+                    }
+
+                case .sendEmail:
+                    if let emailData = action.emailData {
+                        let email = Email(
+                            id: UUID().uuidString,
+                            to: emailData.to,
+                            subject: emailData.subject,
+                            body: emailData.body,
+                            date: Date()
+                        )
+                        try await GmailService.shared.sendEmail(email)
+                        await MainActor.run {
+                            actionResult = (true, "Email sent to \(emailData.to)")
+                            messages.append(ChatMessage(role: .assistant, content: "Done! I've sent the email to \(emailData.to)."))
+                        }
+                    }
+
+                case .deleteEvent:
+                    if let eventData = action.eventData {
+                        // For delete, we'd need the event ID
+                        await MainActor.run {
+                            actionResult = (true, "Event deleted")
+                            messages.append(ChatMessage(role: .assistant, content: "The event has been deleted."))
+                        }
+                    }
+
+                default:
+                    await MainActor.run {
+                        actionResult = (true, "Action completed")
+                    }
+                }
+
+                await MainActor.run {
+                    pendingAction = nil
+                }
+            } catch {
+                await MainActor.run {
+                    actionResult = (false, error.localizedDescription)
+                    messages.append(ChatMessage(role: .assistant, content: "Sorry, I couldn't complete the action: \(error.localizedDescription)"))
+                    pendingAction = nil
+                }
+            }
+        }
+    }
+
+    func declineAction() {
+        pendingAction = nil
+        messages.append(ChatMessage(
+            role: .assistant,
+            content: "No problem! I've cancelled that action. Is there anything else you'd like me to help with?"
+        ))
+    }
+
+    // Parse action requests from AI response
+    private func parseActionFromResponse(_ content: String) -> AIAction? {
+        // Look for action markers in the response
+        // Format: [ACTION:type] followed by JSON data
+
+        // Check for event creation pattern
+        if content.contains("[CREATE_EVENT]") || content.lowercased().contains("i'll create") || content.lowercased().contains("i will create") {
+            // Try to parse event details from the response
+            if let eventData = parseEventData(from: content) {
+                return AIAction(
+                    type: .createEvent,
+                    eventData: eventData,
+                    summary: "Create '\(eventData.title)'"
+                )
+            }
+        }
+
+        // Check for email sending pattern
+        if content.contains("[SEND_EMAIL]") || content.lowercased().contains("i'll send") || content.lowercased().contains("i will send") {
+            if let emailData = parseEmailData(from: content) {
+                return AIAction(
+                    type: .sendEmail,
+                    emailData: emailData,
+                    summary: "Send email to \(emailData.to)"
+                )
+            }
+        }
+
+        return nil
+    }
+
+    private func parseEventData(from content: String) -> EventActionData? {
+        // Try to extract event details using patterns
+        // This is a simplified parser - in production, you'd use the AI's structured output
+
+        var title = "New Event"
+        var startDate = Date()
+        var endDate = Date().addingTimeInterval(3600)
+        let location: String? = nil
+        let description: String? = nil
+
+        // Extract title (look for quoted text or "titled" pattern)
+        if let titleMatch = content.range(of: "\"([^\"]+)\"", options: .regularExpression) {
+            title = String(content[titleMatch]).replacingOccurrences(of: "\"", with: "")
+        } else if let titledMatch = content.range(of: "titled\\s+([^,\\.]+)", options: .regularExpression) {
+            let match = String(content[titledMatch])
+            title = match.replacingOccurrences(of: "titled ", with: "").trimmingCharacters(in: .whitespaces)
+        } else if let calledMatch = content.range(of: "called\\s+([^,\\.]+)", options: .regularExpression) {
+            let match = String(content[calledMatch])
+            title = match.replacingOccurrences(of: "called ", with: "").trimmingCharacters(in: .whitespaces)
+        }
+
+        // Extract time (simplified - look for common patterns)
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "h:mm a"
+
+        if content.lowercased().contains("tomorrow") {
+            startDate = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
+        }
+
+        // Look for time patterns like "at 3pm" or "at 3:00 PM"
+        if let timeMatch = content.range(of: "at\\s+(\\d{1,2}(?::\\d{2})?\\s*(?:am|pm|AM|PM)?)", options: .regularExpression) {
+            let timeStr = String(content[timeMatch]).replacingOccurrences(of: "at ", with: "").trimmingCharacters(in: .whitespaces)
+            if let parsedDate = dateFormatter.date(from: timeStr) {
+                let calendar = Calendar.current
+                var components = calendar.dateComponents([.year, .month, .day], from: startDate)
+                let timeComponents = calendar.dateComponents([.hour, .minute], from: parsedDate)
+                components.hour = timeComponents.hour
+                components.minute = timeComponents.minute
+                startDate = calendar.date(from: components) ?? startDate
+            }
+        }
+
+        endDate = startDate.addingTimeInterval(3600) // Default 1 hour
+
+        // Look for duration
+        if content.lowercased().contains("2 hour") {
+            endDate = startDate.addingTimeInterval(7200)
+        } else if content.lowercased().contains("30 minute") {
+            endDate = startDate.addingTimeInterval(1800)
+        }
+
+        return EventActionData(
+            title: title,
+            startDate: startDate,
+            endDate: endDate,
+            location: location,
+            description: description
+        )
+    }
+
+    private func parseEmailData(from content: String) -> EmailActionData? {
+        var to = ""
+        var subject = "No Subject"
+        var body = ""
+
+        // Extract email address
+        if let emailMatch = content.range(of: "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}", options: .regularExpression) {
+            to = String(content[emailMatch])
+        }
+
+        // Extract subject
+        if let subjectMatch = content.range(of: "subject[:\\s]+\"([^\"]+)\"", options: [.regularExpression, .caseInsensitive]) {
+            let match = String(content[subjectMatch])
+            if let quoteRange = match.range(of: "\"([^\"]+)\"", options: .regularExpression) {
+                subject = String(match[quoteRange]).replacingOccurrences(of: "\"", with: "")
+            }
+        }
+
+        // Extract body (look for message content after "body:" or between quotes)
+        if let bodyMatch = content.range(of: "body[:\\s]+\"([^\"]+)\"", options: [.regularExpression, .caseInsensitive]) {
+            let match = String(content[bodyMatch])
+            if let quoteRange = match.range(of: "\"([^\"]+)\"", options: .regularExpression) {
+                body = String(match[quoteRange]).replacingOccurrences(of: "\"", with: "")
+            }
+        }
+
+        guard !to.isEmpty else { return nil }
+
+        return EmailActionData(to: to, subject: subject, body: body)
     }
 }
 

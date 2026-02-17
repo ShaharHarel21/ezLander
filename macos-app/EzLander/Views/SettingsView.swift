@@ -36,6 +36,11 @@ struct SettingsView: View {
                     preferencesView
                 }
 
+                // Keyboard Shortcuts Section
+                SettingsSection(title: "Keyboard Shortcuts") {
+                    keyboardShortcutsView
+                }
+
                 // About Section
                 SettingsSection(title: "About") {
                     aboutView
@@ -219,6 +224,11 @@ struct SettingsView: View {
 
             Toggle("Show Notifications", isOn: $viewModel.showNotifications)
         }
+    }
+
+    // MARK: - Keyboard Shortcuts View
+    private var keyboardShortcutsView: some View {
+        KeyboardShortcutsSettingsView()
     }
 
     // MARK: - About View

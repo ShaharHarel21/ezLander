@@ -29,6 +29,10 @@
 		1A0000000000000000000024 /* UpdateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000036 /* UpdateService.swift */; };
 		1A0000000000000000000025 /* OpenAIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000037 /* OpenAIService.swift */; };
 		1A0000000000000000000026 /* GeminiService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000038 /* GeminiService.swift */; };
+		1A0000000000000000000027 /* CalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000039 /* CalendarView.swift */; };
+		1A0000000000000000000028 /* AIActionPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A000000000000000000003A /* AIActionPreview.swift */; };
+		1A0000000000000000000029 /* KeyboardShortcutsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A000000000000000000003B /* KeyboardShortcutsView.swift */; };
+		1A000000000000000000002A /* KeyboardShortcutService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A000000000000000000003C /* KeyboardShortcutService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -57,6 +61,10 @@
 		1A0000000000000000000036 /* UpdateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateService.swift; sourceTree = "<group>"; };
 		1A0000000000000000000037 /* OpenAIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAIService.swift; sourceTree = "<group>"; };
 		1A0000000000000000000038 /* GeminiService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiService.swift; sourceTree = "<group>"; };
+		1A0000000000000000000039 /* CalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarView.swift; sourceTree = "<group>"; };
+		1A000000000000000000003A /* AIActionPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIActionPreview.swift; sourceTree = "<group>"; };
+		1A000000000000000000003B /* KeyboardShortcutsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardShortcutsView.swift; sourceTree = "<group>"; };
+		1A000000000000000000003C /* KeyboardShortcutService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardShortcutService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -108,6 +116,9 @@
 				1A0000000000000000000014 /* ChatView.swift */,
 				1A0000000000000000000015 /* SettingsView.swift */,
 				1A0000000000000000000016 /* OnboardingView.swift */,
+				1A0000000000000000000039 /* CalendarView.swift */,
+				1A000000000000000000003A /* AIActionPreview.swift */,
+				1A000000000000000000003B /* KeyboardShortcutsView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -127,6 +138,7 @@
 				1A0000000000000000000036 /* UpdateService.swift */,
 				1A0000000000000000000037 /* OpenAIService.swift */,
 				1A0000000000000000000038 /* GeminiService.swift */,
+				1A000000000000000000003C /* KeyboardShortcutService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -239,6 +251,10 @@
 				1A0000000000000000000024 /* UpdateService.swift in Sources */,
 				1A0000000000000000000025 /* OpenAIService.swift in Sources */,
 				1A0000000000000000000026 /* GeminiService.swift in Sources */,
+				1A0000000000000000000027 /* CalendarView.swift in Sources */,
+				1A0000000000000000000028 /* AIActionPreview.swift in Sources */,
+				1A0000000000000000000029 /* KeyboardShortcutsView.swift in Sources */,
+				1A000000000000000000002A /* KeyboardShortcutService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

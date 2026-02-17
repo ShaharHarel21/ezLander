@@ -5,12 +5,17 @@ class MenuBarController: NSObject {
     private var statusItem: NSStatusItem!
     private var popover: NSPopover!
     private var eventMonitor: EventMonitor?
+    private let shortcutService = KeyboardShortcutService.shared
+
+    // Notification for tab switching
+    static let switchTabNotification = Notification.Name("SwitchTabNotification")
 
     override init() {
         super.init()
         setupStatusItem()
         setupPopover()
         setupEventMonitor()
+        setupKeyboardShortcuts()
     }
 
     private func setupStatusItem() {
@@ -56,6 +61,48 @@ class MenuBarController: NSObject {
     private func closePopover() {
         popover.performClose(nil)
         eventMonitor?.stop()
+    }
+
+    private func setupKeyboardShortcuts() {
+        shortcutService.onShortcutTriggered = { [weak self] action in
+            DispatchQueue.main.async {
+                self?.handleShortcut(action)
+            }
+        }
+    }
+
+    private func handleShortcut(_ action: ShortcutAction) {
+        switch action {
+        case .toggleApp:
+            togglePopover()
+
+        case .openChat:
+            showPopover()
+            NotificationCenter.default.post(name: Self.switchTabNotification, object: "chat")
+
+        case .openCalendar:
+            showPopover()
+            NotificationCenter.default.post(name: Self.switchTabNotification, object: "calendar")
+
+        case .openSettings:
+            showPopover()
+            NotificationCenter.default.post(name: Self.switchTabNotification, object: "settings")
+
+        case .newEvent:
+            showPopover()
+            NotificationCenter.default.post(name: Self.switchTabNotification, object: "calendar")
+            // Post additional notification for new event
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                NotificationCenter.default.post(name: Notification.Name("NewEventRequested"), object: nil)
+            }
+
+        case .newEmail:
+            showPopover()
+            NotificationCenter.default.post(name: Self.switchTabNotification, object: "email")
+
+        case .refresh:
+            NotificationCenter.default.post(name: Notification.Name("RefreshRequested"), object: nil)
+        }
     }
 }
 

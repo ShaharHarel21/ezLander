@@ -4,7 +4,7 @@ struct MainPopover: View {
     @StateObject private var viewModel = MainPopoverViewModel()
     @State private var selectedTab: Tab = .chat
 
-    enum Tab {
+    enum Tab: String {
         case chat, calendar, email, settings
     }
 
@@ -25,6 +25,12 @@ struct MainPopover: View {
         }
         .frame(width: 400, height: 500)
         .background(Color(NSColor.windowBackgroundColor))
+        .onReceive(NotificationCenter.default.publisher(for: MenuBarController.switchTabNotification)) { notification in
+            if let tabName = notification.object as? String,
+               let tab = Tab(rawValue: tabName) {
+                selectedTab = tab
+            }
+        }
     }
 
     private var headerView: some View {
@@ -64,7 +70,7 @@ struct MainPopover: View {
         case .chat:
             ChatView()
         case .calendar:
-            CalendarQuickView()
+            CalendarView()
         case .email:
             EmailQuickView()
         case .settings:
