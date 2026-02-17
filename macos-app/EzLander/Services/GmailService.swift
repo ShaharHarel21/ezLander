@@ -297,7 +297,7 @@ class GmailService {
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        let rawMessage = buildReplyMessage(originalEmail: originalEmail, replyBody: replyBody, messageId: messageId)
+        let rawMessage = try buildReplyMessage(originalEmail: originalEmail, replyBody: replyBody, messageId: messageId)
         NSLog("GmailService: Built reply message, length: \(rawMessage.count)")
         NSLog("GmailService: Raw message preview:\n\(String(rawMessage.prefix(500)))")
 
@@ -354,14 +354,24 @@ class GmailService {
     }
 
     // MARK: - Helpers
-    private func buildReplyMessage(originalEmail: Email, replyBody: String, messageId: String?) -> String {
-        // Get user email from OAuth or UserDefaults
-        let userEmail = OAuthService.shared.userEmail ?? UserDefaults.standard.string(forKey: "user_email") ?? ""
-        let userName = UserDefaults.standard.string(forKey: "user_name") ?? ""
+    private func buildReplyMessage(originalEmail: Email, replyBody: String, messageId: String?) throws -> String {
+        // Get user email from OAuth or UserDefaults - MUST exist
+        guard let userEmail = OAuthService.shared.userEmail ?? UserDefaults.standard.string(forKey: "user_email"),
+              !userEmail.isEmpty else {
+            NSLog("GmailService: ERROR - No user email found, cannot send reply")
+            throw GmailError.notAuthorized
+        }
 
-        // Extract email address from "Name <email>" format
-        let replyToFull = originalEmail.from ?? originalEmail.to
+        // Get the sender's email - MUST exist to reply
+        guard let replyToFull = originalEmail.from, !replyToFull.isEmpty else {
+            NSLog("GmailService: ERROR - Original email has no 'from' field, cannot reply")
+            throw GmailError.invalidResponse
+        }
+
+        let userName = UserDefaults.standard.string(forKey: "user_name") ?? ""
         let replyToEmail = extractEmailAddress(from: replyToFull)
+
+        NSLog("GmailService: Building reply - From: \(userEmail), To: \(replyToEmail)")
 
         let subject = originalEmail.subject.hasPrefix("Re:") ? originalEmail.subject : "Re: \(originalEmail.subject)"
 
