@@ -56,3 +56,8 @@ Thumbs.db
 
 # TypeScript
 *.tsbuildinfo
+# Xcode user-specific data
+*.xcuserstate
+xcuserdata/
+*.xcworkspace/xcuserdata/
+

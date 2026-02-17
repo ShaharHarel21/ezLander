@@ -149,7 +149,7 @@ class ChatViewModel: ObservableObject {
     @Published var messages: [ChatMessage] = []
     @Published var isLoading: Bool = false
 
-    private let claudeService = ClaudeService.shared
+    private let aiService = AIService.shared
 
     init() {
         // Welcome message
@@ -167,7 +167,7 @@ class ChatViewModel: ObservableObject {
 
         Task {
             do {
-                let response = try await claudeService.sendMessage(text, conversationHistory: messages)
+                let response = try await aiService.sendMessage(text, conversationHistory: messages)
 
                 await MainActor.run {
                     isLoading = false

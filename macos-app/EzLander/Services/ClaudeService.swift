@@ -3,13 +3,35 @@ import Foundation
 class ClaudeService {
     static let shared = ClaudeService()
 
-    private let apiKey: String
+    private var apiKey: String
     private let baseURL = "https://api.anthropic.com/v1/messages"
     private let model = "claude-sonnet-4-20250514"
 
     private init() {
-        // Load API key from Keychain or environment
-        apiKey = KeychainService.shared.get(key: "anthropic_api_key") ?? ""
+        // Load API key from: 1) Keychain, 2) Environment variable, 3) Empty (will fail gracefully)
+        if let keychainKey = KeychainService.shared.get(key: "anthropic_api_key"), !keychainKey.isEmpty {
+            apiKey = keychainKey
+        } else if let envKey = ProcessInfo.processInfo.environment["ANTHROPIC_API_KEY"], !envKey.isEmpty {
+            apiKey = envKey
+        } else {
+            // TODO: Replace with your API key for testing, or set ANTHROPIC_API_KEY environment variable
+            apiKey = ""
+        }
+    }
+
+    // Reload API key (called after saving new key)
+    func reloadAPIKey() {
+        if let keychainKey = KeychainService.shared.get(key: "anthropic_api_key"), !keychainKey.isEmpty {
+            apiKey = keychainKey
+        } else if let envKey = ProcessInfo.processInfo.environment["ANTHROPIC_API_KEY"], !envKey.isEmpty {
+            apiKey = envKey
+        }
+    }
+
+    // MARK: - Check if configured
+    var isConfigured: Bool {
+        reloadAPIKey()
+        return !apiKey.isEmpty
     }
 
     // MARK: - Tools Definition

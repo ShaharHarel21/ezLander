@@ -5,12 +5,17 @@ class KeychainService {
     static let shared = KeychainService()
 
     private let service = "com.ezlander.app"
+    private let useUserDefaultsFallback = true  // Enable fallback for unsigned builds
 
     private init() {}
 
     // MARK: - Save
-    func save(key: String, value: String) {
-        guard let data = value.data(using: .utf8) else { return }
+    @discardableResult
+    func save(key: String, value: String) -> Bool {
+        guard let data = value.data(using: .utf8) else {
+            print("KeychainService: Failed to convert value to data for key: \(key)")
+            return false
+        }
 
         // Delete existing item first
         delete(key: key)
@@ -23,7 +28,20 @@ class KeychainService {
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
         ]
 
-        SecItemAdd(query as CFDictionary, nil)
+        let status = SecItemAdd(query as CFDictionary, nil)
+        if status == errSecSuccess {
+            print("KeychainService: Successfully saved key to Keychain: \(key)")
+            return true
+        } else {
+            print("KeychainService: Failed to save key to Keychain: \(key), status: \(status)")
+            // Fallback to UserDefaults for development/unsigned builds
+            if useUserDefaultsFallback {
+                UserDefaults.standard.set(value, forKey: "secure_\(key)")
+                print("KeychainService: Saved to UserDefaults fallback: \(key)")
+                return true
+            }
+            return false
+        }
     }
 
     // MARK: - Get
@@ -39,13 +57,23 @@ class KeychainService {
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
 
-        guard status == errSecSuccess,
-              let data = result as? Data,
-              let string = String(data: data, encoding: .utf8) else {
-            return nil
+        if status == errSecSuccess,
+           let data = result as? Data,
+           let string = String(data: data, encoding: .utf8) {
+            print("KeychainService: Retrieved key from Keychain: \(key)")
+            return string
         }
 
-        return string
+        // Fallback to UserDefaults for development/unsigned builds
+        if useUserDefaultsFallback {
+            if let fallbackValue = UserDefaults.standard.string(forKey: "secure_\(key)") {
+                print("KeychainService: Retrieved key from UserDefaults fallback: \(key)")
+                return fallbackValue
+            }
+        }
+
+        print("KeychainService: Key not found: \(key)")
+        return nil
     }
 
     // MARK: - Delete
@@ -57,6 +85,11 @@ class KeychainService {
         ]
 
         SecItemDelete(query as CFDictionary)
+
+        // Also delete from UserDefaults fallback
+        if useUserDefaultsFallback {
+            UserDefaults.standard.removeObject(forKey: "secure_\(key)")
+        }
     }
 
     // MARK: - Clear All

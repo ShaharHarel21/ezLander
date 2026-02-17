@@ -25,6 +25,11 @@ struct SettingsView: View {
                     integrationsView
                 }
 
+                // AI Provider Section
+                SettingsSection(title: "AI Provider") {
+                    aiProviderView
+                }
+
                 // Preferences Section
                 SettingsSection(title: "Preferences") {
                     preferencesView
@@ -42,10 +47,20 @@ struct SettingsView: View {
     // MARK: - Signed In View
     private var signedInView: some View {
         HStack {
-            VStack(alignment: .leading) {
-                Text(viewModel.userEmail)
+            // Profile picture placeholder
+            Circle()
+                .fill(Color.accentColor.opacity(0.2))
+                .frame(width: 40, height: 40)
+                .overlay(
+                    Text(String(viewModel.userName.prefix(1)).uppercased())
+                        .font(.headline)
+                        .foregroundColor(.accentColor)
+                )
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Hi, \(viewModel.userName)!")
                     .font(.headline)
-                Text("Signed in")
+                Text(viewModel.userEmail)
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -144,6 +159,93 @@ struct SettingsView: View {
                 onConnect: viewModel.connectGmail,
                 onDisconnect: viewModel.disconnectGmail
             )
+        }
+    }
+
+    // MARK: - AI Provider View
+    private var aiProviderView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Picker("AI Model", selection: $viewModel.selectedAIProvider) {
+                ForEach(AIProvider.allCases, id: \.self) { provider in
+                    HStack {
+                        Image(systemName: provider.icon)
+                        Text(provider.displayName)
+                    }
+                    .tag(provider)
+                }
+            }
+
+            Divider()
+
+            // Claude API Key
+            HStack {
+                Image(systemName: "brain.head.profile")
+                    .frame(width: 24)
+                Text("Claude API Key")
+                Spacer()
+                if viewModel.claudeConfigured {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                    Button("Remove") {
+                        viewModel.removeClaudeKey()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                } else {
+                    Button("Add Key") {
+                        viewModel.showClaudeKeyInput = true
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                }
+            }
+
+            if viewModel.showClaudeKeyInput {
+                HStack {
+                    SecureField("sk-ant-...", text: $viewModel.claudeKeyInput)
+                        .textFieldStyle(.roundedBorder)
+                    Button("Save") {
+                        viewModel.saveClaudeKey()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                }
+            }
+
+            // Kimi API Key
+            HStack {
+                Image(systemName: "sparkles")
+                    .frame(width: 24)
+                Text("Kimi API Key")
+                Spacer()
+                if viewModel.kimiConfigured {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                    Button("Remove") {
+                        viewModel.removeKimiKey()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                } else {
+                    Button("Add Key") {
+                        viewModel.showKimiKeyInput = true
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                }
+            }
+
+            if viewModel.showKimiKeyInput {
+                HStack {
+                    SecureField("sk-...", text: $viewModel.kimiKeyInput)
+                        .textFieldStyle(.roundedBorder)
+                    Button("Save") {
+                        viewModel.saveKimiKey()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                }
+            }
         }
     }
 
@@ -248,6 +350,7 @@ struct IntegrationRow: View {
 class SettingsViewModel: ObservableObject {
     @Published var isSignedIn: Bool = false
     @Published var userEmail: String = ""
+    @Published var userName: String = ""
     @Published var subscriptionStatus: SubscriptionStatus = .none
     @Published var googleCalendarConnected: Bool = false
     @Published var appleCalendarConnected: Bool = false
@@ -255,6 +358,19 @@ class SettingsViewModel: ObservableObject {
     @Published var defaultCalendar: CalendarType = .google
     @Published var launchAtLogin: Bool = false
     @Published var showNotifications: Bool = true
+
+    // AI Provider settings
+    @Published var selectedAIProvider: AIProvider = .claude {
+        didSet {
+            AIService.shared.currentProvider = selectedAIProvider
+        }
+    }
+    @Published var claudeConfigured: Bool = false
+    @Published var kimiConfigured: Bool = false
+    @Published var showClaudeKeyInput: Bool = false
+    @Published var showKimiKeyInput: Bool = false
+    @Published var claudeKeyInput: String = ""
+    @Published var kimiKeyInput: String = ""
 
     var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
@@ -265,7 +381,55 @@ class SettingsViewModel: ObservableObject {
     }
 
     func loadSettings() {
-        // Load from UserDefaults/Keychain
+        // Load user info from UserDefaults
+        userEmail = UserDefaults.standard.string(forKey: "user_email") ?? ""
+        userName = UserDefaults.standard.string(forKey: "user_name") ?? ""
+        isSignedIn = !userEmail.isEmpty
+
+        // Check integration status
+        googleCalendarConnected = OAuthService.shared.isSignedIn
+        gmailConnected = OAuthService.shared.isSignedIn
+
+        // Load AI provider settings
+        selectedAIProvider = AIService.shared.currentProvider
+        claudeConfigured = ClaudeService.shared.isConfigured
+        kimiConfigured = KimiService.shared.isConfigured
+    }
+
+    // MARK: - AI Key Management
+    func saveClaudeKey() {
+        guard !claudeKeyInput.isEmpty else { return }
+        let saved = KeychainService.shared.save(key: "anthropic_api_key", value: claudeKeyInput)
+        print("SettingsViewModel: Claude key save result: \(saved)")
+        claudeKeyInput = ""
+        showClaudeKeyInput = false
+        claudeConfigured = saved
+        // Reload the key in the service
+        ClaudeService.shared.reloadAPIKey()
+        print("SettingsViewModel: Claude configured: \(ClaudeService.shared.isConfigured)")
+    }
+
+    func removeClaudeKey() {
+        KeychainService.shared.delete(key: "anthropic_api_key")
+        claudeConfigured = false
+    }
+
+    func saveKimiKey() {
+        let trimmedKey = kimiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedKey.isEmpty else { return }
+        let saved = KeychainService.shared.save(key: "kimi_api_key", value: trimmedKey)
+        print("SettingsViewModel: Kimi key save result: \(saved), key length: \(trimmedKey.count)")
+        kimiKeyInput = ""
+        showKimiKeyInput = false
+        kimiConfigured = saved
+        // Reload the key in the service
+        KimiService.shared.reloadAPIKey()
+        print("SettingsViewModel: Kimi configured: \(KimiService.shared.isConfigured)")
+    }
+
+    func removeKimiKey() {
+        KeychainService.shared.delete(key: "kimi_api_key")
+        kimiConfigured = false
     }
 
     func signInWithGoogle() {
@@ -273,7 +437,7 @@ class SettingsViewModel: ObservableObject {
             do {
                 try await OAuthService.shared.signInWithGoogle()
                 await MainActor.run {
-                    isSignedIn = true
+                    loadSettings()
                 }
             } catch {
                 print("Google sign in error: \(error)")
@@ -306,7 +470,7 @@ class SettingsViewModel: ObservableObject {
             do {
                 try await GoogleCalendarService.shared.authorize()
                 await MainActor.run {
-                    googleCalendarConnected = true
+                    loadSettings()
                 }
             } catch {
                 print("Google Calendar connection error: \(error)")
@@ -336,7 +500,7 @@ class SettingsViewModel: ObservableObject {
             do {
                 try await GmailService.shared.authorize()
                 await MainActor.run {
-                    gmailConnected = true
+                    loadSettings()
                 }
             } catch {
                 print("Gmail connection error: \(error)")

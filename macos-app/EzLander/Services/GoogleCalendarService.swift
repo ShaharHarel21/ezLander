@@ -1,4 +1,7 @@
 import Foundation
+import os.log
+
+private let logger = Logger(subsystem: "com.ezlander.app", category: "GoogleCalendar")
 
 class GoogleCalendarService {
     static let shared = GoogleCalendarService()
@@ -23,16 +26,34 @@ class GoogleCalendarService {
 
     // MARK: - List Events
     func listEvents(from startDate: Date, to endDate: Date) async throws -> [CalendarEvent] {
-        let accessToken = try await oauthService.getValidAccessToken()
+        NSLog("GoogleCalendarService: Fetching events from \(startDate) to \(endDate)")
 
+        let accessToken = try await oauthService.getValidAccessToken()
+        NSLog("GoogleCalendarService: Got access token: \(String(accessToken.prefix(20)))...")
+
+        // Use RFC3339 format which Google Calendar API expects
         let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
         let timeMin = formatter.string(from: startDate)
         let timeMax = formatter.string(from: endDate)
 
-        let urlString = "\(baseURL)/calendars/primary/events?timeMin=\(timeMin)&timeMax=\(timeMax)&singleEvents=true&orderBy=startTime"
-        guard let url = URL(string: urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!) else {
+        NSLog("GoogleCalendarService: timeMin=\(timeMin), timeMax=\(timeMax)")
+
+        // Build URL with proper encoding
+        var components = URLComponents(string: "\(baseURL)/calendars/primary/events")!
+        components.queryItems = [
+            URLQueryItem(name: "timeMin", value: timeMin),
+            URLQueryItem(name: "timeMax", value: timeMax),
+            URLQueryItem(name: "singleEvents", value: "true"),
+            URLQueryItem(name: "orderBy", value: "startTime"),
+            URLQueryItem(name: "maxResults", value: "50")
+        ]
+
+        guard let url = components.url else {
             throw GoogleCalendarError.invalidURL
         }
+
+        NSLog("GoogleCalendarService: Request URL: \(url.absoluteString)")
 
         var request = URLRequest(url: url)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
@@ -43,13 +64,23 @@ class GoogleCalendarService {
             throw GoogleCalendarError.invalidResponse
         }
 
+        NSLog("GoogleCalendarService: Response status: \(httpResponse.statusCode)")
+
+        // Print raw response for debugging
+        if let responseString = String(data: data, encoding: .utf8) {
+            NSLog("GoogleCalendarService: Raw response (first 500 chars): \(String(responseString.prefix(500)))")
+        }
+
         guard httpResponse.statusCode == 200 else {
-            throw GoogleCalendarError.apiError(statusCode: httpResponse.statusCode)
+            let errorBody = String(data: data, encoding: .utf8) ?? "Unknown"
+            NSLog("GoogleCalendarService: Error response: \(errorBody)")
+            throw GoogleCalendarError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: errorBody)
         }
 
         let eventsResponse = try JSONDecoder().decode(GoogleEventsResponse.self, from: data)
+        NSLog("GoogleCalendarService: Found \(eventsResponse.eventItems.count) events")
 
-        return eventsResponse.items.map { googleEvent in
+        return eventsResponse.eventItems.map { googleEvent in
             CalendarEvent(
                 id: googleEvent.id,
                 title: googleEvent.summary ?? "Untitled",
@@ -170,7 +201,12 @@ class GoogleCalendarService {
 
 // MARK: - API Models
 struct GoogleEventsResponse: Codable {
-    let items: [GoogleEvent]
+    let items: [GoogleEvent]?
+
+    // Handle missing items key
+    var eventItems: [GoogleEvent] {
+        items ?? []
+    }
 }
 
 struct GoogleEvent: Codable {
@@ -206,6 +242,7 @@ enum GoogleCalendarError: Error, LocalizedError {
     case invalidURL
     case invalidResponse
     case apiError(statusCode: Int)
+    case apiErrorWithMessage(statusCode: Int, message: String)
 
     var errorDescription: String? {
         switch self {
@@ -215,6 +252,15 @@ enum GoogleCalendarError: Error, LocalizedError {
             return "Invalid response from Google Calendar API"
         case .apiError(let code):
             return "Google Calendar API error: \(code)"
+        case .apiErrorWithMessage(let code, let message):
+            // Try to extract a readable error
+            if let data = message.data(using: .utf8),
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let error = json["error"] as? [String: Any],
+               let errorMessage = error["message"] as? String {
+                return "Error \(code): \(errorMessage)"
+            }
+            return "Error \(code): \(message)"
         }
     }
 }

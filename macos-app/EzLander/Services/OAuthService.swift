@@ -1,16 +1,57 @@
 import Foundation
 import AuthenticationServices
+import CommonCrypto
 
 class OAuthService: NSObject {
     static let shared = OAuthService()
 
-    private let googleClientId = "YOUR_GOOGLE_CLIENT_ID"
+    private let googleClientId = "224322597988-josm6rg0hukmuv12ip4qfdbo1f0mkmni.apps.googleusercontent.com"
     private let googleRedirectURI = "com.ezlander.app:/oauth2callback"
 
     private var authSession: ASWebAuthenticationSession?
 
+    // PKCE parameters
+    private var codeVerifier: String?
+
+    // MARK: - Handle URL Callback
+    func handleCallback(url: URL) {
+        print("OAuthService: Received callback URL: \(url)")
+        authContinuation?.resume(returning: url)
+        authContinuation = nil
+    }
+
+    // Continuation for handling OAuth callback
+    private var authContinuation: CheckedContinuation<URL, Error>?
+
+    // MARK: - PKCE Helpers
+    private func generateCodeVerifier() -> String {
+        var buffer = [UInt8](repeating: 0, count: 32)
+        _ = SecRandomCopyBytes(kSecRandomDefault, buffer.count, &buffer)
+        return Data(buffer).base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+    }
+
+    private func generateCodeChallenge(from verifier: String) -> String {
+        guard let data = verifier.data(using: .utf8) else { return "" }
+        var hash = [UInt8](repeating: 0, count: Int(CC_SHA256_DIGEST_LENGTH))
+        data.withUnsafeBytes {
+            _ = CC_SHA256($0.baseAddress, CC_LONG(data.count), &hash)
+        }
+        return Data(hash).base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+    }
+
     // MARK: - Google Sign In
     func signInWithGoogle() async throws {
+        // Generate PKCE code verifier and challenge
+        let verifier = generateCodeVerifier()
+        codeVerifier = verifier
+        let challenge = generateCodeChallenge(from: verifier)
+
         let scopes = [
             "https://www.googleapis.com/auth/calendar",
             "https://www.googleapis.com/auth/gmail.send",
@@ -19,35 +60,28 @@ class OAuthService: NSObject {
             "profile"
         ].joined(separator: " ")
 
-        let authURL = URL(string: """
-            https://accounts.google.com/o/oauth2/v2/auth?\
-            client_id=\(googleClientId)&\
-            redirect_uri=\(googleRedirectURI)&\
-            response_type=code&\
-            scope=\(scopes.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!)&\
-            access_type=offline&\
-            prompt=consent
-            """.replacingOccurrences(of: "\n", with: ""))!
+        let authURLString = "https://accounts.google.com/o/oauth2/v2/auth?" +
+            "client_id=\(googleClientId)&" +
+            "redirect_uri=\(googleRedirectURI.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!)&" +
+            "response_type=code&" +
+            "scope=\(scopes.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!)&" +
+            "access_type=offline&" +
+            "prompt=consent&" +
+            "code_challenge=\(challenge)&" +
+            "code_challenge_method=S256"
+
+        guard let authURL = URL(string: authURLString) else {
+            throw OAuthError.unknownError
+        }
+
+        print("OAuthService: Opening Google OAuth URL in browser...")
 
         let callbackURL = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<URL, Error>) in
-            authSession = ASWebAuthenticationSession(
-                url: authURL,
-                callbackURLScheme: "com.ezlander.app"
-            ) { callbackURL, error in
-                if let error = error {
-                    continuation.resume(throwing: error)
-                } else if let callbackURL = callbackURL {
-                    continuation.resume(returning: callbackURL)
-                } else {
-                    continuation.resume(throwing: OAuthError.unknownError)
-                }
-            }
+            self.authContinuation = continuation
 
-            authSession?.presentationContextProvider = self
-            authSession?.prefersEphemeralWebBrowserSession = false
-
+            // Open in default browser
             DispatchQueue.main.async {
-                self.authSession?.start()
+                NSWorkspace.shared.open(authURL)
             }
         }
 
@@ -56,6 +90,8 @@ class OAuthService: NSObject {
               let code = components.queryItems?.first(where: { $0.name == "code" })?.value else {
             throw OAuthError.noAuthorizationCode
         }
+
+        print("OAuthService: Got authorization code, exchanging for tokens...")
 
         // Exchange code for tokens
         let tokens = try await exchangeCodeForTokens(code: code)
@@ -66,8 +102,12 @@ class OAuthService: NSObject {
             KeychainService.shared.save(key: "google_refresh_token", value: refreshToken)
         }
 
+        print("OAuthService: Tokens saved, fetching user info...")
+
         // Fetch user info
         try await fetchUserInfo(accessToken: tokens.accessToken)
+
+        print("OAuthService: Sign in complete!")
     }
 
     // MARK: - Exchange Code for Tokens
@@ -78,19 +118,30 @@ class OAuthService: NSObject {
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
 
-        let body = [
+        var bodyParams = [
             "client_id": googleClientId,
             "code": code,
             "grant_type": "authorization_code",
             "redirect_uri": googleRedirectURI
-        ].map { "\($0.key)=\($0.value)" }.joined(separator: "&")
+        ]
 
+        // Include PKCE code verifier
+        if let verifier = codeVerifier {
+            bodyParams["code_verifier"] = verifier
+        }
+
+        let body = bodyParams.map { "\($0.key)=\($0.value)" }.joined(separator: "&")
         request.httpBody = body.data(using: .utf8)
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else {
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw OAuthError.tokenExchangeFailed
+        }
+
+        if httpResponse.statusCode != 200 {
+            let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
+            print("OAuthService: Token exchange failed: \(errorBody)")
             throw OAuthError.tokenExchangeFailed
         }
 
@@ -179,7 +230,22 @@ class OAuthService: NSObject {
 // MARK: - ASWebAuthenticationPresentationContextProviding
 extension OAuthService: ASWebAuthenticationPresentationContextProviding {
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-        NSApplication.shared.windows.first ?? ASPresentationAnchor()
+        // For menu bar apps, we need to find any available window or create one
+        if let window = NSApplication.shared.keyWindow {
+            return window
+        }
+        if let window = NSApplication.shared.windows.first(where: { $0.isVisible }) {
+            return window
+        }
+        // Create a temporary window for authentication
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1, height: 1),
+            styleMask: [],
+            backing: .buffered,
+            defer: false
+        )
+        window.center()
+        return window
     }
 }
 

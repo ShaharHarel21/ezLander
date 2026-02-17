@@ -21,9 +21,31 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Initialize menu bar controller
         menuBarController = MenuBarController()
+
+        // Register for URL events
+        NSAppleEventManager.shared().setEventHandler(
+            self,
+            andSelector: #selector(handleURLEvent(_:withReplyEvent:)),
+            forEventClass: AEEventClass(kInternetEventClass),
+            andEventID: AEEventID(kAEGetURL)
+        )
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         // Cleanup
+    }
+
+    @objc func handleURLEvent(_ event: NSAppleEventDescriptor, withReplyEvent replyEvent: NSAppleEventDescriptor) {
+        guard let urlString = event.paramDescriptor(forKeyword: AEKeyword(keyDirectObject))?.stringValue,
+              let url = URL(string: urlString) else {
+            return
+        }
+
+        print("App received URL: \(url)")
+
+        // Handle OAuth callback
+        if url.scheme == "com.ezlander.app" {
+            OAuthService.shared.handleCallback(url: url)
+        }
     }
 }
