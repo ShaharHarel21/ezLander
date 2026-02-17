@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @StateObject private var viewModel = SettingsViewModel()
+    @StateObject private var updateService = UpdateService.shared
 
     var body: some View {
         ScrollView {
@@ -265,7 +266,7 @@ struct SettingsView: View {
 
     // MARK: - About View
     private var aboutView: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("Version")
                 Spacer()
@@ -273,10 +274,63 @@ struct SettingsView: View {
                     .foregroundColor(.secondary)
             }
 
-            Button("Check for Updates") {
-                viewModel.checkForUpdates()
+            // Update section
+            if updateService.isCheckingForUpdates {
+                HStack {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                    Text("Checking for updates...")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            } else if updateService.updateAvailable {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: "arrow.down.circle.fill")
+                            .foregroundColor(.green)
+                        Text("Version \(updateService.latestVersion ?? "") available!")
+                            .font(.caption)
+                            .foregroundColor(.green)
+                    }
+
+                    if updateService.isDownloading {
+                        ProgressView(value: updateService.downloadProgress)
+                        Text("Downloading...")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    } else {
+                        Button("Download Update") {
+                            Task {
+                                await updateService.downloadAndInstall()
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                }
+            } else {
+                HStack {
+                    Button("Check for Updates") {
+                        Task {
+                            await updateService.checkForUpdates()
+                        }
+                    }
+                    .buttonStyle(.bordered)
+
+                    if let latestVersion = updateService.latestVersion {
+                        Text("You're up to date (v\(latestVersion))")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
             }
-            .buttonStyle(.bordered)
+
+            if let error = updateService.error {
+                Text(error)
+                    .font(.caption)
+                    .foregroundColor(.red)
+            }
+
+            Divider()
 
             HStack(spacing: 16) {
                 Link("Website", destination: URL(string: "https://ezlander.app")!)
@@ -513,9 +567,6 @@ class SettingsViewModel: ObservableObject {
         gmailConnected = false
     }
 
-    func checkForUpdates() {
-        // Sparkle update check
-    }
 }
 
 // MARK: - Types

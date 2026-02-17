@@ -26,6 +26,7 @@
 		1A0000000000000000000021 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000031 /* Assets.xcassets */; };
 		1A0000000000000000000022 /* AIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000034 /* AIService.swift */; };
 		1A0000000000000000000023 /* KimiService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000035 /* KimiService.swift */; };
+		1A0000000000000000000024 /* UpdateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000036 /* UpdateService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -51,6 +52,7 @@
 		1A0000000000000000000033 /* EzLander.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = EzLander.entitlements; sourceTree = "<group>"; };
 		1A0000000000000000000034 /* AIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIService.swift; sourceTree = "<group>"; };
 		1A0000000000000000000035 /* KimiService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KimiService.swift; sourceTree = "<group>"; };
+		1A0000000000000000000036 /* UpdateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -118,6 +120,7 @@
 				1A000000000000000000001B /* GmailService.swift */,
 				1A000000000000000000001C /* SubscriptionService.swift */,
 				1A000000000000000000001D /* KeychainService.swift */,
+				1A0000000000000000000036 /* UpdateService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -227,6 +230,7 @@
 				1A000000000000000000000E /* CalendarEvent.swift in Sources */,
 				1A000000000000000000000F /* Email.swift in Sources */,
 				1A0000000000000000000010 /* User.swift in Sources */,
+				1A0000000000000000000024 /* UpdateService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
