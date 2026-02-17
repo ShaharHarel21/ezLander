@@ -34,7 +34,14 @@ class KimiService {
         // Reload key in case it was just added
         reloadAPIKey()
 
+        // Debug: Print what we got
+        NSLog("KimiService: API key length: %d, empty: %@", apiKey.count, apiKey.isEmpty ? "YES" : "NO")
+        if !apiKey.isEmpty {
+            NSLog("KimiService: API key starts with: %@", String(apiKey.prefix(10)))
+        }
+
         guard !apiKey.isEmpty else {
+            NSLog("KimiService: No API key configured!")
             throw KimiError.noAPIKey
         }
 
@@ -64,8 +71,12 @@ class KimiService {
         var request = URLRequest(url: URL(string: baseURL)!)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+
+        NSLog("KimiService: Sending request to %@", baseURL)
+        NSLog("KimiService: Authorization header set with Bearer token")
 
         print("KimiService: Request URL: \(baseURL)")
         print("KimiService: API Key empty: \(apiKey.isEmpty)")
@@ -84,8 +95,21 @@ class KimiService {
 
         guard httpResponse.statusCode == 200 else {
             let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
-            print("Kimi API Error: \(errorBody)")
-            throw KimiError.apiError(statusCode: httpResponse.statusCode, message: errorBody)
+            NSLog("KimiService: API Error %d: %@", httpResponse.statusCode, errorBody)
+
+            // Parse error for better message
+            var errorMessage = "Status \(httpResponse.statusCode)"
+            if let errorData = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                if let detail = errorData["detail"] as? String {
+                    errorMessage = detail
+                } else if let message = errorData["message"] as? String {
+                    errorMessage = message
+                } else if let title = errorData["title"] as? String {
+                    errorMessage = title
+                }
+            }
+
+            throw KimiError.apiError(statusCode: httpResponse.statusCode, message: errorMessage)
         }
 
         let responseJSON = try JSONSerialization.jsonObject(with: data) as! [String: Any]

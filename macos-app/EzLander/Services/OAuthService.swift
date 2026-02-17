@@ -13,6 +13,9 @@ class OAuthService: NSObject {
     // PKCE parameters
     private var codeVerifier: String?
 
+    // Apple Sign In
+    private var appleSignInContinuation: CheckedContinuation<ASAuthorization, Error>?
+
     // MARK: - Handle URL Callback
     func handleCallback(url: URL) {
         print("OAuthService: Received callback URL: \(url)")
@@ -215,15 +218,71 @@ class OAuthService: NSObject {
 
     // MARK: - Sign Out
     func signOut() {
+        // Clear Google tokens
         KeychainService.shared.delete(key: "google_access_token")
         KeychainService.shared.delete(key: "google_refresh_token")
+        // Clear Apple Sign In
+        KeychainService.shared.delete(key: "apple_user_id")
+        // Clear user info
         UserDefaults.standard.removeObject(forKey: "user_email")
         UserDefaults.standard.removeObject(forKey: "user_name")
     }
 
+    // MARK: - Verify Apple Sign In Status
+    func verifyAppleSignInStatus() async -> Bool {
+        guard let userID = KeychainService.shared.get(key: "apple_user_id") else {
+            return false
+        }
+
+        let provider = ASAuthorizationAppleIDProvider()
+        do {
+            let state = try await provider.credentialState(forUserID: userID)
+            switch state {
+            case .authorized:
+                return true
+            case .revoked, .notFound:
+                // User revoked access or not found, clear the stored ID
+                KeychainService.shared.delete(key: "apple_user_id")
+                return false
+            case .transferred:
+                return false
+            @unknown default:
+                return false
+            }
+        } catch {
+            print("OAuthService: Error checking Apple Sign In status: \(error)")
+            return false
+        }
+    }
+
     // MARK: - Check Sign In Status
     var isSignedIn: Bool {
+        KeychainService.shared.get(key: "google_access_token") != nil ||
+        KeychainService.shared.get(key: "apple_user_id") != nil
+    }
+
+    var isSignedInWithGoogle: Bool {
         KeychainService.shared.get(key: "google_access_token") != nil
+    }
+
+    var isSignedInWithApple: Bool {
+        KeychainService.shared.get(key: "apple_user_id") != nil
+    }
+
+    // MARK: - Sign in with Apple
+    func signInWithApple() async throws {
+        let provider = ASAuthorizationAppleIDProvider()
+        let request = provider.createRequest()
+        request.requestedScopes = [.fullName, .email]
+
+        let controller = ASAuthorizationController(authorizationRequests: [request])
+        controller.delegate = self
+        controller.presentationContextProvider = self
+
+        return try await withCheckedThrowingContinuation { continuation in
+            self.appleSignInContinuation = continuation
+            controller.performRequests()
+        }
     }
 }
 
@@ -245,6 +304,65 @@ extension OAuthService: ASWebAuthenticationPresentationContextProviding {
             defer: false
         )
         window.center()
+        return window
+    }
+}
+
+// MARK: - ASAuthorizationControllerDelegate
+extension OAuthService: ASAuthorizationControllerDelegate {
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
+        if let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential {
+            // Extract user information
+            let userIdentifier = appleIDCredential.user
+            let fullName = appleIDCredential.fullName
+            let email = appleIDCredential.email
+
+            // Save user identifier for future verification
+            KeychainService.shared.save(key: "apple_user_id", value: userIdentifier)
+
+            // Save user info if available (only provided on first sign in)
+            if let email = email {
+                UserDefaults.standard.set(email, forKey: "user_email")
+            }
+
+            if let givenName = fullName?.givenName {
+                let name = [fullName?.givenName, fullName?.familyName]
+                    .compactMap { $0 }
+                    .joined(separator: " ")
+                UserDefaults.standard.set(name.isEmpty ? "Apple User" : name, forKey: "user_name")
+            }
+
+            print("OAuthService: Apple Sign In successful for user: \(userIdentifier)")
+            appleSignInContinuation?.resume(returning: authorization)
+            appleSignInContinuation = nil
+        }
+    }
+
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
+        print("OAuthService: Apple Sign In failed: \(error.localizedDescription)")
+        appleSignInContinuation?.resume(throwing: error)
+        appleSignInContinuation = nil
+    }
+}
+
+// MARK: - ASAuthorizationControllerPresentationContextProviding
+extension OAuthService: ASAuthorizationControllerPresentationContextProviding {
+    func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+        if let window = NSApplication.shared.keyWindow {
+            return window
+        }
+        if let window = NSApplication.shared.windows.first(where: { $0.isVisible }) {
+            return window
+        }
+        // Create a temporary window for authentication
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 400, height: 300),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        window.center()
+        window.makeKeyAndOrderFront(nil)
         return window
     }
 }

@@ -27,6 +27,8 @@
 		1A0000000000000000000022 /* AIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000034 /* AIService.swift */; };
 		1A0000000000000000000023 /* KimiService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000035 /* KimiService.swift */; };
 		1A0000000000000000000024 /* UpdateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000036 /* UpdateService.swift */; };
+		1A0000000000000000000025 /* OpenAIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000037 /* OpenAIService.swift */; };
+		1A0000000000000000000026 /* GeminiService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000038 /* GeminiService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -53,6 +55,8 @@
 		1A0000000000000000000034 /* AIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIService.swift; sourceTree = "<group>"; };
 		1A0000000000000000000035 /* KimiService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KimiService.swift; sourceTree = "<group>"; };
 		1A0000000000000000000036 /* UpdateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateService.swift; sourceTree = "<group>"; };
+		1A0000000000000000000037 /* OpenAIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAIService.swift; sourceTree = "<group>"; };
+		1A0000000000000000000038 /* GeminiService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -121,6 +125,8 @@
 				1A000000000000000000001C /* SubscriptionService.swift */,
 				1A000000000000000000001D /* KeychainService.swift */,
 				1A0000000000000000000036 /* UpdateService.swift */,
+				1A0000000000000000000037 /* OpenAIService.swift */,
+				1A0000000000000000000038 /* GeminiService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -231,6 +237,8 @@
 				1A000000000000000000000F /* Email.swift in Sources */,
 				1A0000000000000000000010 /* User.swift in Sources */,
 				1A0000000000000000000024 /* UpdateService.swift in Sources */,
+				1A0000000000000000000025 /* OpenAIService.swift in Sources */,
+				1A0000000000000000000026 /* GeminiService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

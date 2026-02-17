@@ -166,86 +166,43 @@ struct SettingsView: View {
     // MARK: - AI Provider View
     private var aiProviderView: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Picker("AI Model", selection: $viewModel.selectedAIProvider) {
-                ForEach(AIProvider.allCases, id: \.self) { provider in
+            // Provider selector
+            Picker("Active Provider", selection: $viewModel.selectedAIProvider) {
+                ForEach(AIProvider.allCases) { provider in
                     HStack {
                         Image(systemName: provider.icon)
                         Text(provider.displayName)
+                        if provider.isConfigured {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                                .font(.caption)
+                        }
                     }
                     .tag(provider)
                 }
             }
 
+            Text("Configure your API keys below. You can switch between providers anytime.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
             Divider()
 
-            // Claude API Key
-            HStack {
-                Image(systemName: "brain.head.profile")
-                    .frame(width: 24)
-                Text("Claude API Key")
-                Spacer()
-                if viewModel.claudeConfigured {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.green)
-                    Button("Remove") {
-                        viewModel.removeClaudeKey()
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                } else {
-                    Button("Add Key") {
-                        viewModel.showClaudeKeyInput = true
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                }
-            }
-
-            if viewModel.showClaudeKeyInput {
-                HStack {
-                    SecureField("sk-ant-...", text: $viewModel.claudeKeyInput)
-                        .textFieldStyle(.roundedBorder)
-                    Button("Save") {
-                        viewModel.saveClaudeKey()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                }
-            }
-
-            // Kimi API Key
-            HStack {
-                Image(systemName: "sparkles")
-                    .frame(width: 24)
-                Text("Kimi API Key")
-                Spacer()
-                if viewModel.kimiConfigured {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.green)
-                    Button("Remove") {
-                        viewModel.removeKimiKey()
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                } else {
-                    Button("Add Key") {
-                        viewModel.showKimiKeyInput = true
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                }
-            }
-
-            if viewModel.showKimiKeyInput {
-                HStack {
-                    SecureField("sk-...", text: $viewModel.kimiKeyInput)
-                        .textFieldStyle(.roundedBorder)
-                    Button("Save") {
-                        viewModel.saveKimiKey()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                }
+            // API Keys for each provider
+            ForEach(AIProvider.allCases) { provider in
+                APIKeyRow(
+                    provider: provider,
+                    isConfigured: provider.isConfigured,
+                    showInput: viewModel.showKeyInput[provider] ?? false,
+                    keyInput: Binding(
+                        get: { viewModel.keyInputs[provider] ?? "" },
+                        set: { viewModel.keyInputs[provider] = $0 }
+                    ),
+                    onAddKey: { viewModel.showKeyInput[provider] = true },
+                    onSaveKey: { viewModel.saveAPIKey(for: provider) },
+                    onRemoveKey: { viewModel.removeAPIKey(for: provider) },
+                    onGetKey: { viewModel.openKeyURL(for: provider) }
+                )
             }
         }
     }
@@ -397,6 +354,71 @@ struct IntegrationRow: View {
     }
 }
 
+// MARK: - API Key Row
+struct APIKeyRow: View {
+    let provider: AIProvider
+    let isConfigured: Bool
+    let showInput: Bool
+    @Binding var keyInput: String
+    let onAddKey: () -> Void
+    let onSaveKey: () -> Void
+    let onRemoveKey: () -> Void
+    let onGetKey: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: provider.icon)
+                    .frame(width: 24)
+                    .foregroundColor(.accentColor)
+
+                Text(provider.displayName)
+                    .fontWeight(.medium)
+
+                Spacer()
+
+                if isConfigured {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                    Button("Remove") {
+                        onRemoveKey()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.red)
+                    .controlSize(.small)
+                } else {
+                    Button("Get Key") {
+                        onGetKey()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+
+                    Button("Add Key") {
+                        onAddKey()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.blue)
+                    .controlSize(.small)
+                }
+            }
+
+            if showInput {
+                HStack {
+                    SecureField(provider.keyPlaceholder, text: $keyInput)
+                        .textFieldStyle(.roundedBorder)
+                    Button("Save") {
+                        onSaveKey()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(keyInput.isEmpty)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
 // MARK: - View Model
 class SettingsViewModel: ObservableObject {
     @Published var isSignedIn: Bool = false
@@ -416,12 +438,10 @@ class SettingsViewModel: ObservableObject {
             AIService.shared.currentProvider = selectedAIProvider
         }
     }
-    @Published var claudeConfigured: Bool = false
-    @Published var kimiConfigured: Bool = false
-    @Published var showClaudeKeyInput: Bool = false
-    @Published var showKimiKeyInput: Bool = false
-    @Published var claudeKeyInput: String = ""
-    @Published var kimiKeyInput: String = ""
+
+    // Dynamic key management for all providers
+    @Published var showKeyInput: [AIProvider: Bool] = [:]
+    @Published var keyInputs: [AIProvider: String] = [:]
 
     var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
@@ -435,52 +455,41 @@ class SettingsViewModel: ObservableObject {
         // Load user info from UserDefaults
         userEmail = UserDefaults.standard.string(forKey: "user_email") ?? ""
         userName = UserDefaults.standard.string(forKey: "user_name") ?? ""
-        isSignedIn = !userEmail.isEmpty
 
-        // Check integration status
-        googleCalendarConnected = OAuthService.shared.isSignedIn
-        gmailConnected = OAuthService.shared.isSignedIn
+        // Check if signed in via Google or Apple
+        isSignedIn = OAuthService.shared.isSignedIn
+
+        // If signed in but no name, set a default
+        if isSignedIn && userName.isEmpty {
+            userName = "User"
+        }
+
+        // Check integration status (Google services require Google sign in)
+        googleCalendarConnected = OAuthService.shared.isSignedInWithGoogle
+        gmailConnected = OAuthService.shared.isSignedInWithGoogle
 
         // Load AI provider settings
         selectedAIProvider = AIService.shared.currentProvider
-        claudeConfigured = ClaudeService.shared.isConfigured
-        kimiConfigured = KimiService.shared.isConfigured
     }
 
     // MARK: - AI Key Management
-    func saveClaudeKey() {
-        guard !claudeKeyInput.isEmpty else { return }
-        let saved = KeychainService.shared.save(key: "anthropic_api_key", value: claudeKeyInput)
-        print("SettingsViewModel: Claude key save result: \(saved)")
-        claudeKeyInput = ""
-        showClaudeKeyInput = false
-        claudeConfigured = saved
-        // Reload the key in the service
-        ClaudeService.shared.reloadAPIKey()
-        print("SettingsViewModel: Claude configured: \(ClaudeService.shared.isConfigured)")
+    func saveAPIKey(for provider: AIProvider) {
+        guard let key = keyInputs[provider], !key.isEmpty else { return }
+        AIService.shared.saveAPIKey(key, for: provider)
+        keyInputs[provider] = ""
+        showKeyInput[provider] = false
+        objectWillChange.send()
     }
 
-    func removeClaudeKey() {
-        KeychainService.shared.delete(key: "anthropic_api_key")
-        claudeConfigured = false
+    func removeAPIKey(for provider: AIProvider) {
+        AIService.shared.removeAPIKey(for: provider)
+        objectWillChange.send()
     }
 
-    func saveKimiKey() {
-        let trimmedKey = kimiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedKey.isEmpty else { return }
-        let saved = KeychainService.shared.save(key: "kimi_api_key", value: trimmedKey)
-        print("SettingsViewModel: Kimi key save result: \(saved), key length: \(trimmedKey.count)")
-        kimiKeyInput = ""
-        showKimiKeyInput = false
-        kimiConfigured = saved
-        // Reload the key in the service
-        KimiService.shared.reloadAPIKey()
-        print("SettingsViewModel: Kimi configured: \(KimiService.shared.isConfigured)")
-    }
-
-    func removeKimiKey() {
-        KeychainService.shared.delete(key: "kimi_api_key")
-        kimiConfigured = false
+    func openKeyURL(for provider: AIProvider) {
+        if let url = URL(string: provider.helpURL) {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     func signInWithGoogle() {
@@ -497,7 +506,16 @@ class SettingsViewModel: ObservableObject {
     }
 
     func signInWithApple() {
-        // Sign in with Apple flow
+        Task {
+            do {
+                try await OAuthService.shared.signInWithApple()
+                await MainActor.run {
+                    loadSettings()
+                }
+            } catch {
+                print("Apple sign in error: \(error)")
+            }
+        }
     }
 
     func signOut() {
