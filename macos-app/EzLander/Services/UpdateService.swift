@@ -49,7 +49,7 @@ class UpdateService: ObservableObject {
                         if let asset = release.assets?.first(where: {
                             $0.name?.hasSuffix(".zip") == true || $0.name?.hasSuffix(".dmg") == true
                         }) {
-                            downloadURL = URL(string: asset.browserDownloadURL ?? "")
+                            downloadURL = URL(string: asset.browserDownloadUrl ?? "")
                         }
                     } else {
                         updateAvailable = false
@@ -211,7 +211,7 @@ struct GitHubRelease: Codable {
 
 struct GitHubAsset: Codable {
     let name: String?
-    let browserDownloadURL: String?
+    let browserDownloadUrl: String?
     let size: Int?
 }
 
