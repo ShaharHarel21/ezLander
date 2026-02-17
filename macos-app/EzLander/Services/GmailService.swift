@@ -303,6 +303,69 @@ class GmailService {
         }
     }
 
+    // MARK: - List Labels
+    func listLabels() async throws -> [GmailLabel] {
+        let accessToken = try await oauthService.getValidAccessToken()
+
+        let url = URL(string: "\(baseURL)/users/me/labels")!
+
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw GmailError.invalidResponse
+        }
+
+        guard httpResponse.statusCode == 200 else {
+            throw GmailError.apiError(statusCode: httpResponse.statusCode)
+        }
+
+        let labelsResponse = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        guard let labels = labelsResponse["labels"] as? [[String: Any]] else {
+            return []
+        }
+
+        return labels.compactMap { label in
+            guard let id = label["id"] as? String,
+                  let name = label["name"] as? String,
+                  let type = label["type"] as? String else { return nil }
+            return GmailLabel(id: id, name: name, type: type)
+        }
+    }
+
+    // MARK: - Move Email to Label
+    func moveEmail(id: String, addLabelIds: [String], removeLabelIds: [String]) async throws {
+        let accessToken = try await oauthService.getValidAccessToken()
+
+        let url = URL(string: "\(baseURL)/users/me/messages/\(id)/modify")!
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        var body: [String: Any] = [:]
+        if !addLabelIds.isEmpty {
+            body["addLabelIds"] = addLabelIds
+        }
+        if !removeLabelIds.isEmpty {
+            body["removeLabelIds"] = removeLabelIds
+        }
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw GmailError.invalidResponse
+        }
+
+        guard httpResponse.statusCode == 200 else {
+            throw GmailError.apiError(statusCode: httpResponse.statusCode)
+        }
+    }
+
     // MARK: - Reply to Email
     func replyToEmail(originalEmail: Email, replyBody: String) async throws {
         let accessToken = try await oauthService.getValidAccessToken()
@@ -697,6 +760,55 @@ class GmailService {
         let formatter = DateFormatter()
         formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss Z"
         return formatter.date(from: dateString) ?? Date()
+    }
+}
+
+// MARK: - Gmail Label
+struct GmailLabel: Identifiable, Hashable {
+    let id: String
+    let name: String
+    let type: String
+
+    var displayName: String {
+        // Clean up system label names
+        switch id {
+        case "INBOX": return "Inbox"
+        case "STARRED": return "Starred"
+        case "IMPORTANT": return "Important"
+        case "SENT": return "Sent"
+        case "DRAFT": return "Drafts"
+        case "SPAM": return "Spam"
+        case "TRASH": return "Trash"
+        case "UNREAD": return "Unread"
+        case "CATEGORY_PERSONAL": return "Personal"
+        case "CATEGORY_SOCIAL": return "Social"
+        case "CATEGORY_PROMOTIONS": return "Promotions"
+        case "CATEGORY_UPDATES": return "Updates"
+        case "CATEGORY_FORUMS": return "Forums"
+        default: return name
+        }
+    }
+
+    var icon: String {
+        switch id {
+        case "INBOX": return "tray"
+        case "STARRED": return "star"
+        case "IMPORTANT": return "exclamationmark.circle"
+        case "SENT": return "paperplane"
+        case "DRAFT": return "doc.text"
+        case "SPAM": return "xmark.bin"
+        case "TRASH": return "trash"
+        default: return "folder"
+        }
+    }
+
+    /// Labels that make sense as move targets
+    var isMoveTarget: Bool {
+        // Exclude non-movable system labels
+        let excluded = ["UNREAD", "SENT", "DRAFT", "CATEGORY_PERSONAL",
+                        "CATEGORY_SOCIAL", "CATEGORY_PROMOTIONS",
+                        "CATEGORY_UPDATES", "CATEGORY_FORUMS"]
+        return !excluded.contains(id)
     }
 }
 

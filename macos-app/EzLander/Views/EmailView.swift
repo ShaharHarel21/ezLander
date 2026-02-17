@@ -5,7 +5,6 @@ struct EmailView: View {
     @StateObject private var viewModel = EmailViewModel.shared
     @State private var selectedEmail: Email?
     @State private var showingCompose = false
-    @State private var showingReply = false
     @State private var replyToEmail: Email?
     @State private var showingError = false
     @State private var showingSuccess = false
@@ -85,26 +84,22 @@ struct EmailView: View {
                 }
             )
         }
-        .sheet(isPresented: $showingReply) {
-            if let email = replyToEmail {
-                ReplyEmailView(
-                    originalEmail: email,
-                    onSend: { replyBody in
-                        viewModel.replyToEmail(email, body: replyBody) { success in
-                            if success {
-                                successMessage = "Reply sent successfully"
-                                showingSuccess = true
-                            }
+        .sheet(item: $replyToEmail) { email in
+            ReplyEmailView(
+                originalEmail: email,
+                onSend: { replyBody in
+                    viewModel.replyToEmail(email, body: replyBody) { success in
+                        if success {
+                            successMessage = "Reply sent successfully"
+                            showingSuccess = true
                         }
-                        showingReply = false
-                        replyToEmail = nil
-                    },
-                    onCancel: {
-                        showingReply = false
-                        replyToEmail = nil
                     }
-                )
-            }
+                    replyToEmail = nil
+                },
+                onCancel: {
+                    replyToEmail = nil
+                }
+            )
         }
         .onAppear {
             viewModel.onAppear()
@@ -190,13 +185,13 @@ struct EmailView: View {
                 ForEach(viewModel.emails) { email in
                     EmailListRow(
                         email: email,
+                        isSelected: selectedEmail?.id == email.id,
                         onTap: {
                             selectedEmail = email
                             viewModel.markAsRead(email)
                         },
                         onReply: {
                             replyToEmail = email
-                            showingReply = true
                         },
                         onArchive: {
                             viewModel.archiveEmail(email)
@@ -210,7 +205,11 @@ struct EmailView: View {
                             } else {
                                 viewModel.markAsRead(email)
                             }
-                        }
+                        },
+                        onMove: { label in
+                            viewModel.moveEmail(email, to: label)
+                        },
+                        availableLabels: viewModel.availableLabels
                     )
                     Divider()
                         .padding(.leading, 50)
@@ -289,7 +288,6 @@ struct EmailView: View {
             HStack(spacing: 16) {
                 Button(action: {
                     replyToEmail = email
-                    showingReply = true
                 }) {
                     Label("Reply", systemImage: "arrowshape.turn.up.left")
                 }
@@ -311,6 +309,22 @@ struct EmailView: View {
                 }
                 .buttonStyle(.bordered)
 
+                if !viewModel.availableLabels.isEmpty {
+                    Menu {
+                        ForEach(viewModel.availableLabels) { label in
+                            Button(action: {
+                                viewModel.moveEmail(email, to: label)
+                                selectedEmail = nil
+                            }) {
+                                Label(label.displayName, systemImage: label.icon)
+                            }
+                        }
+                    } label: {
+                        Label("Move to", systemImage: "folder")
+                    }
+                    .menuStyle(.borderlessButton)
+                }
+
                 Spacer()
             }
             .padding()
@@ -325,78 +339,174 @@ struct EmailView: View {
 // MARK: - Email List Row
 struct EmailListRow: View {
     let email: Email
+    var isSelected: Bool = false
     let onTap: () -> Void
     let onReply: () -> Void
     let onArchive: () -> Void
     let onDelete: () -> Void
     let onMarkRead: () -> Void
+    var onMove: ((GmailLabel) -> Void)?
+    var availableLabels: [GmailLabel] = []
 
     @State private var isHovered = false
+    @State private var swipeOffset: CGFloat = 0
+
+    private let swipeThreshold: CGFloat = 80
 
     var body: some View {
-        HStack(spacing: 12) {
-            // Sender avatar
-            Circle()
-                .fill(email.isRead ? Color.secondary.opacity(0.2) : Color.accentColor.opacity(0.2))
-                .frame(width: 40, height: 40)
-                .overlay(
-                    Text(String(email.senderName.prefix(1)).uppercased())
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(email.isRead ? .secondary : .accentColor)
-                )
-
-            // Email content
-            VStack(alignment: .leading, spacing: 4) {
+        ZStack {
+            // Background actions revealed by swipe
+            HStack(spacing: 0) {
+                // Right swipe background (Archive)
                 HStack {
-                    Text(email.senderName)
+                    Image(systemName: "archivebox.fill")
+                        .font(.system(size: 18))
+                        .foregroundColor(.white)
+                    if swipeOffset > swipeThreshold {
+                        Text("Archive")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(.white)
+                    }
+                }
+                .frame(width: max(swipeOffset, 0))
+                .frame(maxHeight: .infinity)
+                .background(Color.blue)
+                .clipped()
+
+                Spacer()
+
+                // Left swipe background (Delete)
+                HStack {
+                    if swipeOffset < -swipeThreshold {
+                        Text("Delete")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(.white)
+                    }
+                    Image(systemName: "trash.fill")
+                        .font(.system(size: 18))
+                        .foregroundColor(.white)
+                }
+                .frame(width: max(-swipeOffset, 0))
+                .frame(maxHeight: .infinity)
+                .background(Color.red)
+                .clipped()
+            }
+
+            // Main row content
+            HStack(spacing: 12) {
+                // Sender avatar
+                Circle()
+                    .fill(email.isRead ? Color.secondary.opacity(0.2) : Color.accentColor.opacity(0.2))
+                    .frame(width: 40, height: 40)
+                    .overlay(
+                        Text(String(email.senderName.prefix(1)).uppercased())
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(email.isRead ? .secondary : .accentColor)
+                    )
+
+                // Email content
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(email.senderName)
+                            .font(.subheadline)
+                            .fontWeight(email.isRead ? .regular : .semibold)
+                            .lineLimit(1)
+
+                        Spacer()
+
+                        Text(email.formattedDate)
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+
+                    Text(email.subject)
                         .font(.subheadline)
-                        .fontWeight(email.isRead ? .regular : .semibold)
+                        .foregroundColor(email.isRead ? .secondary : .primary)
                         .lineLimit(1)
 
-                    Spacer()
-
-                    Text(email.formattedDate)
-                        .font(.caption2)
+                    Text(email.snippet)
+                        .font(.caption)
                         .foregroundColor(.secondary)
+                        .lineLimit(1)
                 }
 
-                Text(email.subject)
-                    .font(.subheadline)
-                    .foregroundColor(email.isRead ? .secondary : .primary)
-                    .lineLimit(1)
+                // Quick actions on hover
+                if isHovered && swipeOffset == 0 {
+                    HStack(spacing: 8) {
+                        Button(action: onArchive) {
+                            Image(systemName: "archivebox")
+                                .font(.caption)
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Archive")
 
-                Text(email.snippet)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
-            }
-
-            // Quick actions on hover
-            if isHovered {
-                HStack(spacing: 8) {
-                    Button(action: onArchive) {
-                        Image(systemName: "archivebox")
-                            .font(.caption)
+                        Button(action: onDelete) {
+                            Image(systemName: "trash")
+                                .font(.caption)
+                        }
+                        .buttonStyle(.borderless)
+                        .foregroundColor(.red)
+                        .help("Delete")
                     }
-                    .buttonStyle(.borderless)
-                    .help("Archive")
-
-                    Button(action: onDelete) {
-                        Image(systemName: "trash")
-                            .font(.caption)
-                    }
-                    .buttonStyle(.borderless)
-                    .foregroundColor(.red)
-                    .help("Delete")
                 }
             }
+            .padding(.horizontal)
+            .padding(.vertical, 10)
+            .background(
+                isSelected
+                    ? Color.accentColor.opacity(0.15)
+                    : (isHovered && swipeOffset == 0 ? Color(NSColor.controlBackgroundColor) : Color(NSColor.windowBackgroundColor))
+            )
+            .offset(x: swipeOffset)
+            .gesture(
+                DragGesture(minimumDistance: 15)
+                    .onChanged { value in
+                        // Only allow horizontal swipe
+                        if abs(value.translation.width) > abs(value.translation.height) {
+                            withAnimation(.interactiveSpring()) {
+                                swipeOffset = value.translation.width
+                            }
+                        }
+                    }
+                    .onEnded { value in
+                        let velocity = value.predictedEndTranslation.width - value.translation.width
+                        if swipeOffset > swipeThreshold || velocity > 200 {
+                            // Swipe right — Archive
+                            withAnimation(.easeOut(duration: 0.2)) {
+                                swipeOffset = 400
+                            }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                onArchive()
+                            }
+                        } else if swipeOffset < -swipeThreshold || velocity < -200 {
+                            // Swipe left — Delete
+                            withAnimation(.easeOut(duration: 0.2)) {
+                                swipeOffset = -400
+                            }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                onDelete()
+                            }
+                        } else {
+                            // Snap back
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                swipeOffset = 0
+                            }
+                        }
+                    }
+            )
         }
-        .padding(.horizontal)
-        .padding(.vertical, 10)
-        .background(isHovered ? Color(NSColor.controlBackgroundColor) : Color.clear)
+        .clipped()
         .contentShape(Rectangle())
         .onTapGesture {
-            onTap()
+            if swipeOffset != 0 {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    swipeOffset = 0
+                }
+            } else {
+                onTap()
+            }
         }
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.15)) {
@@ -417,6 +527,18 @@ struct EmailListRow: View {
             Button(action: onMarkRead) {
                 Label(email.isRead ? "Mark as Unread" : "Mark as Read",
                       systemImage: email.isRead ? "envelope.badge" : "envelope.open")
+            }
+
+            if !availableLabels.isEmpty, let onMove = onMove {
+                Menu {
+                    ForEach(availableLabels) { label in
+                        Button(action: { onMove(label) }) {
+                            Label(label.displayName, systemImage: label.icon)
+                        }
+                    }
+                } label: {
+                    Label("Move to...", systemImage: "folder")
+                }
             }
 
             Divider()
@@ -741,6 +863,7 @@ class EmailViewModel: ObservableObject {
     @Published var loadingEmailId: String?
     @Published var fullEmailBody: String?
     @Published var fullEmailHtml: String?
+    @Published var availableLabels: [GmailLabel] = []
 
     private var hasLoadedOnce = false
 
@@ -752,6 +875,7 @@ class EmailViewModel: ObservableObject {
         checkConnection()
         if isConnected && !hasLoadedOnce {
             loadEmails()
+            loadLabels()
         }
     }
 
@@ -766,6 +890,7 @@ class EmailViewModel: ObservableObject {
                 await MainActor.run {
                     isConnected = true
                     loadEmails()
+                    loadLabels()
                 }
             } catch {
                 await MainActor.run {
@@ -897,6 +1022,39 @@ class EmailViewModel: ObservableObject {
                 try await GmailService.shared.sendEmail(email)
                 await MainActor.run {
                     // Could show success message
+                }
+            } catch {
+                await MainActor.run {
+                    self.error = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    func loadLabels() {
+        Task {
+            do {
+                let labels = try await GmailService.shared.listLabels()
+                await MainActor.run {
+                    self.availableLabels = labels.filter { $0.isMoveTarget }
+                        .sorted { $0.displayName < $1.displayName }
+                }
+            } catch {
+                // Silently fail — labels are a nice-to-have
+            }
+        }
+    }
+
+    func moveEmail(_ email: Email, to label: GmailLabel) {
+        Task {
+            do {
+                try await GmailService.shared.moveEmail(
+                    id: email.id,
+                    addLabelIds: [label.id],
+                    removeLabelIds: ["INBOX"]
+                )
+                await MainActor.run {
+                    self.emails.removeAll { $0.id == email.id }
                 }
             } catch {
                 await MainActor.run {
