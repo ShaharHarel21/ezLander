@@ -21,9 +21,9 @@ const installSteps = [
   'Start using ezLander from your menu bar!',
 ]
 
-// GitHub releases URL
-const DOWNLOAD_URL = 'https://github.com/ShaharHarel21/ezLander/releases/latest/download/EzLander-v1.2.0.zip'
-const RELEASES_PAGE = 'https://github.com/ShaharHarel21/ezLander/releases/latest'
+// GitHub releases URL - direct link to v1.2.0
+const DOWNLOAD_URL = 'https://github.com/ShaharHarel21/ezLander/releases/download/v1.2.0/EzLander-v1.2.0.zip'
+const RELEASES_PAGE = 'https://github.com/ShaharHarel21/ezLander/releases'
 
 export default function DownloadPage() {
   const [isDownloading, setIsDownloading] = useState(false)
