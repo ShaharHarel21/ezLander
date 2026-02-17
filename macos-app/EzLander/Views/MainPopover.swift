@@ -217,8 +217,9 @@ class CalendarQuickViewModel: ObservableObject {
     }
 
     func checkConnection() {
-        let signedIn = OAuthService.shared.isSignedIn
-        logToFile("checkConnection: OAuthService.isSignedIn = \(signedIn)")
+        // Must be signed in with Google specifically for Google Calendar
+        let signedIn = OAuthService.shared.isSignedInWithGoogle
+        logToFile("checkConnection: OAuthService.isSignedInWithGoogle = \(signedIn)")
         isConnected = signedIn
     }
 
@@ -386,7 +387,8 @@ class EmailQuickViewModel: ObservableObject {
     }
 
     func checkConnection() {
-        isConnected = OAuthService.shared.isSignedIn
+        // Must be signed in with Google specifically for Gmail
+        isConnected = OAuthService.shared.isSignedInWithGoogle
     }
 
     func connect() {
