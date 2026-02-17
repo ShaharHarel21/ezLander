@@ -278,6 +278,31 @@ class GmailService {
         }
     }
 
+    // MARK: - Mark as Unread
+    func markAsUnread(id: String) async throws {
+        let accessToken = try await oauthService.getValidAccessToken()
+
+        let url = URL(string: "\(baseURL)/users/me/messages/\(id)/modify")!
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let body: [String: Any] = ["addLabelIds": ["UNREAD"]]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw GmailError.invalidResponse
+        }
+
+        guard httpResponse.statusCode == 200 else {
+            throw GmailError.apiError(statusCode: httpResponse.statusCode)
+        }
+    }
+
     // MARK: - Reply to Email
     func replyToEmail(originalEmail: Email, replyBody: String) async throws {
         let accessToken = try await oauthService.getValidAccessToken()

@@ -194,11 +194,22 @@ struct EmailView: View {
                             selectedEmail = email
                             viewModel.markAsRead(email)
                         },
+                        onReply: {
+                            replyToEmail = email
+                            showingReply = true
+                        },
                         onArchive: {
                             viewModel.archiveEmail(email)
                         },
                         onDelete: {
                             viewModel.deleteEmail(email)
+                        },
+                        onMarkRead: {
+                            if email.isRead {
+                                viewModel.markAsUnread(email)
+                            } else {
+                                viewModel.markAsRead(email)
+                            }
                         }
                     )
                     Divider()
@@ -315,8 +326,10 @@ struct EmailView: View {
 struct EmailListRow: View {
     let email: Email
     let onTap: () -> Void
+    let onReply: () -> Void
     let onArchive: () -> Void
     let onDelete: () -> Void
+    let onMarkRead: () -> Void
 
     @State private var isHovered = false
 
@@ -388,6 +401,28 @@ struct EmailListRow: View {
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.15)) {
                 isHovered = hovering
+            }
+        }
+        .contextMenu {
+            Button(action: onReply) {
+                Label("Reply", systemImage: "arrowshape.turn.up.left")
+            }
+
+            Divider()
+
+            Button(action: onArchive) {
+                Label("Archive", systemImage: "archivebox")
+            }
+
+            Button(action: onMarkRead) {
+                Label(email.isRead ? "Mark as Unread" : "Mark as Read",
+                      systemImage: email.isRead ? "envelope.badge" : "envelope.open")
+            }
+
+            Divider()
+
+            Button(role: .destructive, action: onDelete) {
+                Label("Delete", systemImage: "trash")
             }
         }
     }
@@ -835,6 +870,23 @@ class EmailViewModel: ObservableObject {
                 }
             } catch {
                 // Silently fail for mark as read
+            }
+        }
+    }
+
+    func markAsUnread(_ email: Email) {
+        guard email.isRead else { return }
+
+        Task {
+            do {
+                try await GmailService.shared.markAsUnread(id: email.id)
+                await MainActor.run {
+                    if let index = self.emails.firstIndex(where: { $0.id == email.id }) {
+                        self.emails[index].isRead = false
+                    }
+                }
+            } catch {
+                // Silently fail for mark as unread
             }
         }
     }

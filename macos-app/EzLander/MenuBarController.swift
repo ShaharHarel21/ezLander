@@ -6,6 +6,7 @@ class MenuBarController: NSObject {
     private var popover: NSPopover!
     private var eventMonitor: EventMonitor?
     private let shortcutService = KeyboardShortcutService.shared
+    private var statusMenu: NSMenu!
 
     // Notification for tab switching
     static let switchTabNotification = Notification.Name("SwitchTabNotification")
@@ -14,6 +15,7 @@ class MenuBarController: NSObject {
         super.init()
         setupStatusItem()
         setupPopover()
+        setupMenu()
         setupEventMonitor()
         setupKeyboardShortcuts()
     }
@@ -23,9 +25,88 @@ class MenuBarController: NSObject {
 
         if let button = statusItem.button {
             button.image = NSImage(systemSymbolName: "brain.head.profile", accessibilityDescription: "ezLander")
-            button.action = #selector(togglePopover)
+            button.action = #selector(handleClick)
             button.target = self
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
+    }
+
+    private func setupMenu() {
+        statusMenu = NSMenu()
+
+        // App name header
+        let appNameItem = NSMenuItem(title: "ezLander", action: nil, keyEquivalent: "")
+        appNameItem.isEnabled = false
+        statusMenu.addItem(appNameItem)
+
+        // Version
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+        let versionItem = NSMenuItem(title: "Version \(version)", action: nil, keyEquivalent: "")
+        versionItem.isEnabled = false
+        statusMenu.addItem(versionItem)
+
+        statusMenu.addItem(NSMenuItem.separator())
+
+        // Check for Updates
+        let updateItem = NSMenuItem(title: "Check for Updates...", action: #selector(checkForUpdates), keyEquivalent: "")
+        updateItem.target = self
+        statusMenu.addItem(updateItem)
+
+        // Open Settings
+        let settingsItem = NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ",")
+        settingsItem.target = self
+        statusMenu.addItem(settingsItem)
+
+        statusMenu.addItem(NSMenuItem.separator())
+
+        // Quit
+        let quitItem = NSMenuItem(title: "Quit ezLander", action: #selector(quitApp), keyEquivalent: "q")
+        quitItem.target = self
+        statusMenu.addItem(quitItem)
+    }
+
+    @objc private func handleClick() {
+        guard let event = NSApp.currentEvent else { return }
+
+        if event.type == .rightMouseUp {
+            // Right click - show menu
+            statusItem.menu = statusMenu
+            statusItem.button?.performClick(nil)
+            // Reset menu so left click works normally
+            DispatchQueue.main.async {
+                self.statusItem.menu = nil
+            }
+        } else {
+            // Left click - toggle popover
+            togglePopover()
+        }
+    }
+
+    @objc private func checkForUpdates() {
+        Task {
+            await UpdateService.shared.checkForUpdates()
+            if UpdateService.shared.updateAvailable {
+                await UpdateService.shared.downloadAndInstall()
+            } else {
+                await MainActor.run {
+                    let alert = NSAlert()
+                    alert.messageText = "You're up to date!"
+                    alert.informativeText = "ezLander \(UpdateService.shared.currentVersion) is the latest version."
+                    alert.alertStyle = .informational
+                    alert.addButton(withTitle: "OK")
+                    alert.runModal()
+                }
+            }
+        }
+    }
+
+    @objc private func openSettings() {
+        showPopover()
+        NotificationCenter.default.post(name: Self.switchTabNotification, object: "settings")
+    }
+
+    @objc private func quitApp() {
+        NSApplication.shared.terminate(nil)
     }
 
     private func setupPopover() {
