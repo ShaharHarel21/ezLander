@@ -306,16 +306,28 @@ class GmailService {
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "=", with: "")
 
+        // Try with threadId first, then without if it fails
         var body: [String: Any] = ["raw": encodedMessage]
+        let hasThreadId = originalEmail.threadId != nil
         if let threadId = originalEmail.threadId {
             body["threadId"] = threadId
+            NSLog("GmailService: Including threadId: \(threadId)")
         }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        var (data, response) = try await URLSession.shared.data(for: request)
 
-        guard let httpResponse = response as? HTTPURLResponse else {
+        guard var httpResponse = response as? HTTPURLResponse else {
             throw GmailError.invalidResponse
+        }
+
+        // If 404 with threadId, retry without it (thread may have been deleted)
+        if httpResponse.statusCode == 404 && hasThreadId {
+            NSLog("GmailService: Got 404 with threadId, retrying without threadId...")
+            body.removeValue(forKey: "threadId")
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+            (data, response) = try await URLSession.shared.data(for: request)
+            httpResponse = response as! HTTPURLResponse
         }
 
         if httpResponse.statusCode != 200 {
