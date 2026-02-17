@@ -25,6 +25,7 @@ class KimiService {
             apiKey = keychainKey
             print("KimiService: Reloaded API key, length: \(apiKey.count), prefix: \(String(apiKey.prefix(15)))...")
         } else {
+            apiKey = ""
             print("KimiService: No API key found in Keychain")
         }
     }

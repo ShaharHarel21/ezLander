@@ -25,6 +25,8 @@ class ClaudeService {
             apiKey = keychainKey
         } else if let envKey = ProcessInfo.processInfo.environment["ANTHROPIC_API_KEY"], !envKey.isEmpty {
             apiKey = envKey
+        } else {
+            apiKey = ""
         }
     }
 

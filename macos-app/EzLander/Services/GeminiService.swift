@@ -13,6 +13,8 @@ class GeminiService {
     func reloadAPIKey() {
         if let key = KeychainService.shared.get(key: "gemini_api_key")?.trimmingCharacters(in: .whitespacesAndNewlines), !key.isEmpty {
             apiKey = key
+        } else {
+            apiKey = ""
         }
     }
 

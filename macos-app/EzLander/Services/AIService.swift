@@ -127,5 +127,13 @@ class AIService: ObservableObject {
     // MARK: - Remove API Key
     func removeAPIKey(for provider: AIProvider) {
         KeychainService.shared.delete(key: provider.keychainKey)
+
+        // Reload the service to clear the cached key
+        switch provider {
+        case .openai: OpenAIService.shared.reloadAPIKey()
+        case .claude: ClaudeService.shared.reloadAPIKey()
+        case .gemini: GeminiService.shared.reloadAPIKey()
+        case .kimi: KimiService.shared.reloadAPIKey()
+        }
     }
 }
