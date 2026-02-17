@@ -14,7 +14,7 @@ class OAuthService: NSObject {
     private var codeVerifier: String?
 
     // Apple Sign In
-    private var appleSignInContinuation: CheckedContinuation<ASAuthorization, Error>?
+    private var appleSignInContinuation: CheckedContinuation<Void, Error>?
 
     // MARK: - Handle URL Callback
     func handleCallback(url: URL) {
@@ -325,7 +325,7 @@ extension OAuthService: ASAuthorizationControllerDelegate {
                 UserDefaults.standard.set(email, forKey: "user_email")
             }
 
-            if let givenName = fullName?.givenName {
+            if fullName?.givenName != nil {
                 let name = [fullName?.givenName, fullName?.familyName]
                     .compactMap { $0 }
                     .joined(separator: " ")
@@ -333,7 +333,7 @@ extension OAuthService: ASAuthorizationControllerDelegate {
             }
 
             print("OAuthService: Apple Sign In successful for user: \(userIdentifier)")
-            appleSignInContinuation?.resume(returning: authorization)
+            appleSignInContinuation?.resume(returning: ())
             appleSignInContinuation = nil
         }
     }
