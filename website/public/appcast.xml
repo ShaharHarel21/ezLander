@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <channel>
+        <title>ezLander Updates</title>
+        <link>https://ezlander.app/appcast.xml</link>
+        <description>Most recent updates to ezLander</description>
+        <language>en</language>
+        <item>
+            <title>Version 1.2.0</title>
+            <sparkle:version>3</sparkle:version>
+            <sparkle:shortVersionString>1.2.0</sparkle:shortVersionString>
+            <sparkle:releaseNotesLink>https://github.com/ShaharHarel21/ezLander/releases/tag/v1.2.0</sparkle:releaseNotesLink>
+            <pubDate>Mon, 17 Feb 2026 12:00:00 +0000</pubDate>
+            <enclosure
+                url="https://github.com/ShaharHarel21/ezLander/releases/download/v1.2.0/EzLander-v1.2.0.zip"
+                sparkle:edSignature="SIGNATURE_PLACEHOLDER"
+                length="1000000"
+                type="application/octet-stream"/>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+        </item>
+    </channel>
+</rss>
