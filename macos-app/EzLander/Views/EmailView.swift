@@ -1,5 +1,6 @@
 import SwiftUI
 import WebKit
+import CryptoKit
 
 struct EmailView: View {
     @StateObject private var viewModel = EmailViewModel.shared
@@ -241,14 +242,11 @@ struct EmailView: View {
 
                 HStack {
                     // Sender avatar
-                    Circle()
-                        .fill(Color.accentColor.opacity(0.2))
-                        .frame(width: 36, height: 36)
-                        .overlay(
-                            Text(String(email.senderName.prefix(1)).uppercased())
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(.accentColor)
-                        )
+                    SenderAvatarView(
+                        email: email.senderEmail,
+                        name: email.senderName,
+                        size: 36
+                    )
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(email.senderName)
@@ -397,14 +395,12 @@ struct EmailListRow: View {
             // Main row content
             HStack(spacing: 12) {
                 // Sender avatar
-                Circle()
-                    .fill(email.isRead ? Color.secondary.opacity(0.2) : Color.accentColor.opacity(0.2))
-                    .frame(width: 40, height: 40)
-                    .overlay(
-                        Text(String(email.senderName.prefix(1)).uppercased())
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(email.isRead ? .secondary : .accentColor)
-                    )
+                SenderAvatarView(
+                    email: email.senderEmail,
+                    name: email.senderName,
+                    size: 40,
+                    isRead: email.isRead
+                )
 
                 // Email content
                 VStack(alignment: .leading, spacing: 4) {
@@ -714,6 +710,130 @@ struct ReplyEmailView: View {
             }
         }
         .frame(width: 380, height: 450)
+    }
+}
+
+// MARK: - Sender Avatar View
+struct SenderAvatarView: View {
+    let email: String
+    let name: String
+    let size: CGFloat
+    var isRead: Bool = false
+
+    @StateObject private var loader = AvatarImageLoader()
+
+    var body: some View {
+        Group {
+            if let image = loader.image {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: size, height: size)
+                    .clipShape(Circle())
+            } else {
+                // Fallback: colored circle with initial
+                Circle()
+                    .fill(isRead ? Color.secondary.opacity(0.2) : Color.accentColor.opacity(0.2))
+                    .frame(width: size, height: size)
+                    .overlay(
+                        Text(String(name.prefix(1)).uppercased())
+                            .font(.system(size: size * 0.4, weight: .medium))
+                            .foregroundColor(isRead ? .secondary : .accentColor)
+                    )
+            }
+        }
+        .onAppear {
+            loader.load(email: email)
+        }
+        .onChange(of: email) { newEmail in
+            loader.load(email: newEmail)
+        }
+    }
+}
+
+// MARK: - Avatar Image Loader
+class AvatarImageLoader: ObservableObject {
+    @Published var image: NSImage?
+
+    private static var cache = NSCache<NSString, NSImage>()
+    private var currentEmail: String?
+
+    func load(email: String) {
+        let cleanEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !cleanEmail.isEmpty else { return }
+        guard cleanEmail != currentEmail else { return }
+        currentEmail = cleanEmail
+
+        // Check cache
+        if let cached = Self.cache.object(forKey: cleanEmail as NSString) {
+            self.image = cached
+            return
+        }
+
+        Task {
+            // 1. Try Gravatar
+            if let img = await fetchGravatar(email: cleanEmail) {
+                await setImage(img, forKey: cleanEmail)
+                return
+            }
+
+            // 2. Try company logo from domain
+            let domain = cleanEmail.components(separatedBy: "@").last ?? ""
+            if !domain.isEmpty, let img = await fetchCompanyLogo(domain: domain) {
+                await setImage(img, forKey: cleanEmail)
+                return
+            }
+        }
+    }
+
+    private func fetchGravatar(email: String) async -> NSImage? {
+        let hash = Insecure.MD5
+            .hash(data: Data(email.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
+
+        guard let url = URL(string: "https://www.gravatar.com/avatar/\(hash)?s=160&d=404") else {
+            return nil
+        }
+
+        return await downloadImage(from: url)
+    }
+
+    private func fetchCompanyLogo(domain: String) async -> NSImage? {
+        // Skip common free email providers — they won't have useful logos
+        let freeProviders = ["gmail.com", "yahoo.com", "hotmail.com", "outlook.com",
+                             "aol.com", "icloud.com", "me.com", "mail.com",
+                             "protonmail.com", "proton.me", "live.com", "msn.com"]
+        guard !freeProviders.contains(domain) else { return nil }
+
+        guard let url = URL(string: "https://logo.clearbit.com/\(domain)?size=160") else {
+            return nil
+        }
+
+        return await downloadImage(from: url)
+    }
+
+    private func downloadImage(from url: URL) async -> NSImage? {
+        do {
+            let (data, response) = try await URLSession.shared.data(from: url)
+            guard let httpResponse = response as? HTTPURLResponse,
+                  httpResponse.statusCode == 200,
+                  let image = NSImage(data: data),
+                  image.isValid else {
+                return nil
+            }
+            return image
+        } catch {
+            return nil
+        }
+    }
+
+    @MainActor
+    private func setImage(_ img: NSImage, forKey key: String) {
+        Self.cache.setObject(img, forKey: key as NSString)
+        if currentEmail == key {
+            self.image = img
+        }
     }
 }
 
