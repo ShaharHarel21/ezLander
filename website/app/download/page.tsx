@@ -13,23 +13,27 @@ const systemRequirements = [
 ]
 
 const installSteps = [
-  'Download the DMG file',
-  'Open the DMG and drag ezLander to Applications',
-  'Launch ezLander from your Applications folder',
+  'Download the ZIP file from GitHub',
+  'Extract the ZIP and drag ezLander.app to Applications',
+  'Right-click the app and select "Open" on first launch',
   'Click "Allow" when prompted for accessibility permissions',
-  'Sign in with your Google or Apple account',
+  'Sign in with your Google account',
   'Start using ezLander from your menu bar!',
 ]
+
+// GitHub releases URL
+const DOWNLOAD_URL = 'https://github.com/ShaharHarel21/ezLander/releases/latest/download/EzLander-v1.2.0.zip'
+const RELEASES_PAGE = 'https://github.com/ShaharHarel21/ezLander/releases/latest'
 
 export default function DownloadPage() {
   const [isDownloading, setIsDownloading] = useState(false)
 
   const handleDownload = () => {
     setIsDownloading(true)
-    // Track download
-    fetch('/api/download', { method: 'POST' })
-    // Start actual download
-    window.location.href = 'https://ezlander.app/releases/ezLander-latest.dmg'
+    // Track download (optional)
+    fetch('/api/download', { method: 'POST' }).catch(() => {})
+    // Start actual download from GitHub
+    window.location.href = DOWNLOAD_URL
     setTimeout(() => setIsDownloading(false), 3000)
   }
 
@@ -72,7 +76,7 @@ export default function DownloadPage() {
               <div className="flex-1 text-center md:text-left">
                 <h2 className="text-2xl font-bold mb-2">ezLander for macOS</h2>
                 <p className="text-gray-600 dark:text-gray-400 mb-4">
-                  Version 1.0.0 • 25 MB
+                  Version 1.2.0 • ~1 MB
                 </p>
                 <button
                   onClick={handleDownload}
@@ -218,7 +222,17 @@ export default function DownloadPage() {
           </div>
 
           {/* Help section */}
-          <div className="mt-12 text-center">
+          <div className="mt-12 text-center space-y-2">
+            <p className="text-gray-600 dark:text-gray-400">
+              <a
+                href={RELEASES_PAGE}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary-600 dark:text-primary-400 hover:underline"
+              >
+                View all releases on GitHub
+              </a>
+            </p>
             <p className="text-gray-600 dark:text-gray-400">
               Need help?{' '}
               <Link
