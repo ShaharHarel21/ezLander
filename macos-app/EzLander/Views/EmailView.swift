@@ -7,9 +7,52 @@ struct EmailView: View {
     @State private var showingCompose = false
     @State private var showingReply = false
     @State private var replyToEmail: Email?
+    @State private var showingError = false
+    @State private var showingSuccess = false
+    @State private var successMessage = ""
 
     var body: some View {
         VStack(spacing: 0) {
+            // Error banner
+            if let error = viewModel.error, showingError {
+                HStack {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(.orange)
+                    Text(error)
+                        .font(.caption)
+                        .lineLimit(2)
+                    Spacer()
+                    Button(action: {
+                        showingError = false
+                        viewModel.error = nil
+                    }) {
+                        Image(systemName: "xmark")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.borderless)
+                }
+                .padding(8)
+                .background(Color.orange.opacity(0.1))
+            }
+
+            // Success banner
+            if showingSuccess {
+                HStack {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                    Text(successMessage)
+                        .font(.caption)
+                    Spacer()
+                }
+                .padding(8)
+                .background(Color.green.opacity(0.1))
+                .onAppear {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                        showingSuccess = false
+                    }
+                }
+            }
+
             // Header
             emailHeader
 
@@ -24,6 +67,11 @@ struct EmailView: View {
                 emailDetailView(email: selected)
             } else {
                 emailListView
+            }
+        }
+        .onChange(of: viewModel.error) { newError in
+            if newError != nil {
+                showingError = true
             }
         }
         .sheet(isPresented: $showingCompose) {
@@ -42,7 +90,12 @@ struct EmailView: View {
                 ReplyEmailView(
                     originalEmail: email,
                     onSend: { replyBody in
-                        viewModel.replyToEmail(email, body: replyBody)
+                        viewModel.replyToEmail(email, body: replyBody) { success in
+                            if success {
+                                successMessage = "Reply sent successfully"
+                                showingSuccess = true
+                            }
+                        }
                         showingReply = false
                         replyToEmail = nil
                     },
@@ -801,16 +854,21 @@ class EmailViewModel: ObservableObject {
         }
     }
 
-    func replyToEmail(_ email: Email, body: String) {
+    func replyToEmail(_ email: Email, body: String, completion: ((Bool) -> Void)? = nil) {
         Task {
             do {
+                NSLog("EmailViewModel: Sending reply to email \(email.id)")
+                NSLog("EmailViewModel: Original from: \(email.from ?? "nil"), threadId: \(email.threadId ?? "nil")")
                 try await GmailService.shared.replyToEmail(originalEmail: email, replyBody: body)
                 await MainActor.run {
-                    // Could show success message
+                    NSLog("EmailViewModel: Reply sent successfully")
+                    completion?(true)
                 }
             } catch {
                 await MainActor.run {
+                    NSLog("EmailViewModel: Reply failed - \(error.localizedDescription)")
                     self.error = error.localizedDescription
+                    completion?(false)
                 }
             }
         }

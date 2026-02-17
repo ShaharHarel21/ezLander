@@ -282,8 +282,13 @@ class GmailService {
     func replyToEmail(originalEmail: Email, replyBody: String) async throws {
         let accessToken = try await oauthService.getValidAccessToken()
 
+        NSLog("GmailService: Starting reply to email ID: \(originalEmail.id)")
+        NSLog("GmailService: Original email from: \(originalEmail.from ?? "nil")")
+        NSLog("GmailService: Original email threadId: \(originalEmail.threadId ?? "nil")")
+
         // First, get the Message-ID header from the original email
         let messageId = try await getMessageIdHeader(emailId: originalEmail.id, accessToken: accessToken)
+        NSLog("GmailService: Got Message-ID header: \(messageId ?? "nil")")
 
         let url = URL(string: "\(baseURL)/users/me/messages/send")!
 
@@ -293,7 +298,8 @@ class GmailService {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         let rawMessage = buildReplyMessage(originalEmail: originalEmail, replyBody: replyBody, messageId: messageId)
-        NSLog("GmailService: Sending reply - raw message length: \(rawMessage.count)")
+        NSLog("GmailService: Built reply message, length: \(rawMessage.count)")
+        NSLog("GmailService: Raw message preview:\n\(String(rawMessage.prefix(500)))")
 
         let encodedMessage = rawMessage.data(using: .utf8)!.base64EncodedString()
             .replacingOccurrences(of: "+", with: "-")
@@ -598,6 +604,8 @@ class GmailService {
 
     private func parseEmailFromResponse(_ response: [String: Any]) -> Email {
         let id = response["id"] as? String ?? ""
+        let threadId = response["threadId"] as? String
+        let labelIds = response["labelIds"] as? [String] ?? []
 
         var subject = ""
         var from: String?
@@ -631,7 +639,10 @@ class GmailService {
             from: from,
             subject: subject,
             body: "",
-            date: date
+            date: date,
+            isRead: !labelIds.contains("UNREAD"),
+            labels: labelIds,
+            threadId: threadId
         )
     }
 
