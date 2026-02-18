@@ -183,8 +183,11 @@ class ClaudeService {
                     let toolInput = block["input"] as! [String: Any]
                     let toolId = block["id"] as! String
 
+                    // Get the user's original message for context
+                    let userMessage = originalMessages.last(where: { $0["role"] as? String == "user" })?["content"] as? String ?? ""
+
                     // Execute the tool
-                    let result = try await executeToolCall(name: toolName, input: toolInput)
+                    let result = try await executeToolCall(name: toolName, input: toolInput, userMessage: userMessage)
 
                     // Create tool call for display
                     toolCall = ToolCall(
@@ -241,10 +244,10 @@ class ClaudeService {
     }
 
     // MARK: - Execute Tool Call
-    private func executeToolCall(name: String, input: [String: Any]) async throws -> String {
+    private func executeToolCall(name: String, input: [String: Any], userMessage: String = "") async throws -> String {
         switch name {
         case "create_calendar_event":
-            return try await handleCreateCalendarEvent(input)
+            return try await handleCreateCalendarEvent(input, userMessage: userMessage)
         case "list_calendar_events":
             return try await handleListCalendarEvents(input)
         case "send_email":
@@ -261,8 +264,14 @@ class ClaudeService {
     }
 
     // MARK: - Tool Handlers
-    private func handleCreateCalendarEvent(_ input: [String: Any]) async throws -> String {
-        let title = input["title"] as! String
+    private func handleCreateCalendarEvent(_ input: [String: Any], userMessage: String = "") async throws -> String {
+        var title = input["title"] as! String
+
+        // If the AI gave a generic title, extract a better one from the user's message
+        let genericTitles = ["new event", "event", "meeting", "untitled", "calendar event", "new meeting", "new calendar event"]
+        if genericTitles.contains(title.lowercased().trimmingCharacters(in: .whitespaces)) && !userMessage.isEmpty {
+            title = extractTitleFromMessage(userMessage)
+        }
         let dateStr = input["date"] as! String
         let timeStr = input["time"] as! String
         let duration = input["duration"] as? Int ?? 60
@@ -435,6 +444,86 @@ class ClaudeService {
     }
 
     // MARK: - Helpers
+    private func extractTitleFromMessage(_ message: String) -> String {
+        var text = message.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Remove common action phrases to get the core subject
+        let prefixes = [
+            "create a new event for ", "create an event for ", "create event for ",
+            "create a new event called ", "create an event called ", "create event called ",
+            "add a new event for ", "add an event for ", "add event for ",
+            "add a new event called ", "add an event called ", "add event called ",
+            "schedule a ", "schedule an ", "schedule ",
+            "set up a ", "set up an ", "set up ",
+            "book a ", "book an ", "book ",
+            "add a ", "add an ", "add ",
+            "create a ", "create an ", "create ",
+            "new event for ", "new event called ", "new event ",
+            "remind me about ", "remind me to ", "remind me of ",
+            "i have a ", "i have an ", "i have ",
+            "put ", "make a ", "make an ", "make ",
+        ]
+
+        let lowerText = text.lowercased()
+        for prefix in prefixes {
+            if lowerText.hasPrefix(prefix) {
+                text = String(text.dropFirst(prefix.count))
+                break
+            }
+        }
+
+        // Remove trailing time/date phrases like "at 3pm", "tomorrow", "on friday", etc.
+        let timePatterns = [
+            " at \\d{1,2}(:\\d{2})?\\s*(am|pm|AM|PM)?.*$",
+            " on (monday|tuesday|wednesday|thursday|friday|saturday|sunday).*$",
+            " on \\d{1,2}(/|-)\\d{1,2}.*$",
+            " tomorrow.*$",
+            " today.*$",
+            " next (monday|tuesday|wednesday|thursday|friday|saturday|sunday|week|month).*$",
+            " this (monday|tuesday|wednesday|thursday|friday|saturday|sunday|week|month).*$",
+            " for \\d+ (minutes|hours|hour|min).*$",
+        ]
+
+        for pattern in timePatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
+                let range = NSRange(text.startIndex..<text.endIndex, in: text)
+                text = regex.stringByReplacingMatches(in: text, range: range, withTemplate: "")
+            }
+        }
+
+        // Clean up and capitalize
+        text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: ".,!?"))
+            .trimmingCharacters(in: .whitespaces)
+
+        // Capitalize each word
+        if !text.isEmpty {
+            text = text.split(separator: " ").map { word in
+                let lower = word.lowercased()
+                // Don't capitalize small words unless first word
+                let smallWords = ["a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with"]
+                if smallWords.contains(lower) {
+                    return String(word)
+                }
+                return word.prefix(1).uppercased() + word.dropFirst()
+            }.joined(separator: " ")
+            // Always capitalize first letter
+            text = text.prefix(1).uppercased() + text.dropFirst()
+        }
+
+        // Fallback if extraction resulted in empty or very short string
+        if text.count < 2 {
+            return "New Event"
+        }
+
+        // Truncate if too long
+        if text.count > 60 {
+            text = String(text.prefix(60))
+        }
+
+        return text
+    }
+
     private func parseDateTime(date: String, time: String) -> Date {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd HH:mm"
