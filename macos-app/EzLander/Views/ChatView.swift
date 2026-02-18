@@ -14,30 +14,30 @@ struct ChatView: View {
                         ForEach(viewModel.messages) { message in
                             MessageBubble(message: message)
                                 .id(message.id)
+
+                            // Show action preview card inline after the message that triggered it
+                            if message.id == viewModel.pendingActionMessageId, let action = viewModel.pendingAction {
+                                AIActionPreviewCard(
+                                    action: action,
+                                    onConfirm: {
+                                        viewModel.confirmAction()
+                                    },
+                                    onDecline: {
+                                        viewModel.declineAction()
+                                    }
+                                )
+                                .padding(.top, 4)
+                            }
+
+                            // Show action result inline after the result message
+                            if message.id == viewModel.actionResultMessageId, let result = viewModel.actionResult {
+                                AIActionResultView(success: result.success, message: result.message)
+                                    .padding(.top, 4)
+                            }
                         }
 
                         if viewModel.isLoading {
                             TypingIndicator()
-                        }
-
-                        // Show pending action preview
-                        if let action = viewModel.pendingAction {
-                            AIActionPreviewCard(
-                                action: action,
-                                onConfirm: {
-                                    viewModel.confirmAction()
-                                },
-                                onDecline: {
-                                    viewModel.declineAction()
-                                }
-                            )
-                            .padding(.top, 8)
-                        }
-
-                        // Show action result
-                        if let result = viewModel.actionResult {
-                            AIActionResultView(success: result.success, message: result.message)
-                                .padding(.top, 4)
                         }
                     }
                     .padding()
@@ -52,6 +52,23 @@ struct ChatView: View {
             }
 
             Divider()
+
+            // Quick action buttons
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    QuickActionButton(icon: "calendar", label: "Today's Schedule") {
+                        viewModel.sendMessage("What's on my calendar today?")
+                    }
+                    QuickActionButton(icon: "envelope", label: "Draft Email") {
+                        viewModel.sendMessage("Help me draft an email")
+                    }
+                    QuickActionButton(icon: "magnifyingglass", label: "Search Emails") {
+                        viewModel.sendMessage("Search my recent emails")
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+            }
 
             // Input area
             HStack(spacing: 8) {
@@ -90,6 +107,30 @@ struct ChatView: View {
         let text = inputText
         inputText = ""
         viewModel.sendMessage(text)
+    }
+}
+
+// MARK: - Quick Action Button
+struct QuickActionButton: View {
+    let icon: String
+    let label: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.caption)
+                Text(label)
+                    .font(.caption)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.warmPrimary.opacity(0.1))
+            .foregroundColor(.warmPrimary)
+            .cornerRadius(16)
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -216,7 +257,9 @@ class ChatViewModel: ObservableObject {
     @Published var messages: [ChatMessage] = []
     @Published var isLoading: Bool = false
     @Published var pendingAction: AIAction?
+    @Published var pendingActionMessageId: UUID?
     @Published var actionResult: (success: Bool, message: String)?
+    @Published var actionResultMessageId: UUID?
 
     private let aiService = AIService.shared
 
@@ -231,7 +274,9 @@ class ChatViewModel: ObservableObject {
     func clearConversation() {
         messages.removeAll()
         pendingAction = nil
+        pendingActionMessageId = nil
         actionResult = nil
+        actionResultMessageId = nil
         // Re-add welcome message
         messages.append(ChatMessage(
             role: .assistant,
@@ -293,10 +338,12 @@ class ChatViewModel: ObservableObject {
                         messages.append(response)
                     } else if let action = parseActionFromResponse(response.content, userMessage: text) {
                         pendingAction = action
-                        messages.append(ChatMessage(
+                        let actionMsg = ChatMessage(
                             role: .assistant,
                             content: "I've prepared the following action for you. Please review and confirm:"
-                        ))
+                        )
+                        pendingActionMessageId = actionMsg.id
+                        messages.append(actionMsg)
                     } else {
                         messages.append(response)
                     }
@@ -315,6 +362,7 @@ class ChatViewModel: ObservableObject {
 
     func confirmAction() {
         guard let action = pendingAction else { return }
+        let resultMsgId = pendingActionMessageId
 
         Task {
             do {
@@ -332,8 +380,10 @@ class ChatViewModel: ObservableObject {
                         )
                         try await GoogleCalendarService.shared.createEvent(event)
                         await MainActor.run {
+                            let resultMsg = ChatMessage(role: .assistant, content: "Done! I've created the event '\(eventData.title)' on your calendar.")
                             actionResult = (true, "Event '\(eventData.title)' created successfully!")
-                            messages.append(ChatMessage(role: .assistant, content: "Done! I've created the event '\(eventData.title)' on your calendar."))
+                            actionResultMessageId = resultMsg.id
+                            messages.append(resultMsg)
                         }
                     }
 
@@ -348,16 +398,20 @@ class ChatViewModel: ObservableObject {
                         )
                         try await GmailService.shared.sendEmail(email)
                         await MainActor.run {
+                            let resultMsg = ChatMessage(role: .assistant, content: "Done! I've sent the email to \(emailData.to).")
                             actionResult = (true, "Email sent to \(emailData.to)")
-                            messages.append(ChatMessage(role: .assistant, content: "Done! I've sent the email to \(emailData.to)."))
+                            actionResultMessageId = resultMsg.id
+                            messages.append(resultMsg)
                         }
                     }
 
                 case .deleteEvent:
                     if let _ = action.eventData {
                         await MainActor.run {
+                            let resultMsg = ChatMessage(role: .assistant, content: "The event has been deleted.")
                             actionResult = (true, "Event deleted")
-                            messages.append(ChatMessage(role: .assistant, content: "The event has been deleted."))
+                            actionResultMessageId = resultMsg.id
+                            messages.append(resultMsg)
                         }
                     }
 
@@ -369,12 +423,16 @@ class ChatViewModel: ObservableObject {
 
                 await MainActor.run {
                     pendingAction = nil
+                    pendingActionMessageId = nil
                 }
             } catch {
                 await MainActor.run {
+                    let resultMsg = ChatMessage(role: .assistant, content: "Sorry, I couldn't complete the action: \(error.localizedDescription)")
                     actionResult = (false, error.localizedDescription)
-                    messages.append(ChatMessage(role: .assistant, content: "Sorry, I couldn't complete the action: \(error.localizedDescription)"))
+                    actionResultMessageId = resultMsg.id
+                    messages.append(resultMsg)
                     pendingAction = nil
+                    pendingActionMessageId = nil
                 }
             }
         }
@@ -382,6 +440,7 @@ class ChatViewModel: ObservableObject {
 
     func declineAction() {
         pendingAction = nil
+        pendingActionMessageId = nil
         messages.append(ChatMessage(
             role: .assistant,
             content: "No problem! I've cancelled that action. Is there anything else you'd like me to help with?"

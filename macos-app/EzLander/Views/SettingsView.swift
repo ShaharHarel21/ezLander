@@ -436,9 +436,21 @@ class SettingsViewModel: ObservableObject {
     @Published var googleCalendarConnected: Bool = false
     @Published var appleCalendarConnected: Bool = false
     @Published var gmailConnected: Bool = false
-    @Published var defaultCalendar: CalendarType = .google
-    @Published var launchAtLogin: Bool = false
-    @Published var showNotifications: Bool = true
+    @Published var defaultCalendar: CalendarType = .google {
+        didSet {
+            UserDefaults.standard.set(defaultCalendar.rawValue, forKey: "default_calendar")
+        }
+    }
+    @Published var launchAtLogin: Bool = false {
+        didSet {
+            UserDefaults.standard.set(launchAtLogin, forKey: "launch_at_login")
+        }
+    }
+    @Published var showNotifications: Bool = true {
+        didSet {
+            UserDefaults.standard.set(showNotifications, forKey: "show_notifications")
+        }
+    }
 
     // AI Provider settings
     @Published var selectedAIProvider: AIProvider = .claude {
@@ -475,6 +487,14 @@ class SettingsViewModel: ObservableObject {
         // Check integration status (Google services require Google sign in)
         googleCalendarConnected = OAuthService.shared.isSignedInWithGoogle
         gmailConnected = OAuthService.shared.isSignedInWithGoogle
+
+        // Load preferences
+        if let savedCalendar = UserDefaults.standard.string(forKey: "default_calendar"),
+           let calType = CalendarType(rawValue: savedCalendar) {
+            defaultCalendar = calType
+        }
+        launchAtLogin = UserDefaults.standard.bool(forKey: "launch_at_login")
+        showNotifications = UserDefaults.standard.object(forKey: "show_notifications") as? Bool ?? true
 
         // Load AI provider settings
         selectedAIProvider = AIService.shared.currentProvider
