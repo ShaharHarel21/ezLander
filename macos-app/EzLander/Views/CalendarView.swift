@@ -5,6 +5,7 @@ struct CalendarView: View {
     @StateObject private var viewModel = CalendarViewModel.shared
     @State private var showingAddEvent = false
     @State private var selectedEvent: CalendarEvent?
+    @State private var editingEvent: CalendarEvent?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -46,19 +47,42 @@ struct CalendarView: View {
             )
         }
         .sheet(item: $selectedEvent) { event in
+            EventDetailView(
+                event: event,
+                onEdit: {
+                    let eventToEdit = event
+                    selectedEvent = nil
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        editingEvent = eventToEdit
+                    }
+                },
+                onDismiss: {
+                    selectedEvent = nil
+                },
+                onMeetingPrep: {
+                    selectedEvent = nil
+                    // Post notification for meeting prep
+                    NotificationCenter.default.post(
+                        name: Notification.Name("MeetingPrepRequested"),
+                        object: event
+                    )
+                }
+            )
+        }
+        .sheet(item: $editingEvent) { event in
             EventEditorView(
                 event: event,
                 selectedDate: viewModel.selectedDate,
                 onSave: { updatedEvent in
                     viewModel.updateEvent(updatedEvent)
-                    selectedEvent = nil
+                    editingEvent = nil
                 },
                 onCancel: {
-                    selectedEvent = nil
+                    editingEvent = nil
                 },
                 onDelete: {
                     viewModel.deleteEvent(event)
-                    selectedEvent = nil
+                    editingEvent = nil
                 }
             )
         }
@@ -472,7 +496,7 @@ struct EventRow: View {
     var body: some View {
         HStack(spacing: 8) {
             RoundedRectangle(cornerRadius: 2)
-                .fill(Color.warmAccent)
+                .fill(calendarBarColor)
                 .frame(width: 3)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -492,7 +516,7 @@ struct EventRow: View {
                     }
 
                     if let location = event.location, !location.isEmpty {
-                        Text("•")
+                        Text("·")
                             .foregroundColor(.secondary)
                         Text(location)
                             .font(.caption)
@@ -503,6 +527,40 @@ struct EventRow: View {
             }
 
             Spacer()
+
+            // Attendee count pill
+            if event.attendeeCount > 0 {
+                HStack(spacing: 2) {
+                    Image(systemName: "person.2.fill")
+                        .font(.system(size: 9))
+                    Text("\(event.attendeeCount)")
+                        .font(.caption2)
+                }
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(Color.secondary.opacity(0.1))
+                .cornerRadius(8)
+            }
+
+            // Join button for video calls
+            if event.hasVideoCall {
+                Button(action: {
+                    if let url = event.effectiveJoinURL {
+                        NSWorkspace.shared.open(url)
+                    }
+                }) {
+                    Text("Join")
+                        .font(.caption2)
+                        .fontWeight(.medium)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color.warmPrimary)
+                        .cornerRadius(6)
+                }
+                .buttonStyle(.plain)
+            }
 
             Image(systemName: "chevron.right")
                 .font(.caption)
@@ -515,6 +573,13 @@ struct EventRow: View {
         .onTapGesture {
             onTap()
         }
+    }
+
+    private var calendarBarColor: Color {
+        if let hex = event.calendarColor {
+            return Color(hex: hex)
+        }
+        return .warmAccent
     }
 }
 
@@ -532,7 +597,7 @@ struct WeekEventRow: View {
     var body: some View {
         HStack(spacing: 8) {
             RoundedRectangle(cornerRadius: 2)
-                .fill(Color.warmAccent)
+                .fill(calendarBarColor)
                 .frame(width: 3)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -540,12 +605,36 @@ struct WeekEventRow: View {
                     .font(.subheadline)
                     .fontWeight(.medium)
 
-                Text(formatter.string(from: event.startDate))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                if event.isAllDay {
+                    Text("All Day")
+                        .font(.caption)
+                        .foregroundColor(.warmPrimary)
+                } else {
+                    Text(formatter.string(from: event.startDate))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
 
             Spacer()
+
+            // Video call indicator
+            if event.hasVideoCall {
+                Image(systemName: "video.fill")
+                    .font(.caption)
+                    .foregroundColor(.warmPrimary)
+            }
+
+            // Attendee count
+            if event.attendeeCount > 0 {
+                HStack(spacing: 2) {
+                    Image(systemName: "person.2.fill")
+                        .font(.system(size: 9))
+                    Text("\(event.attendeeCount)")
+                        .font(.caption2)
+                }
+                .foregroundColor(.secondary)
+            }
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 8)
@@ -554,6 +643,13 @@ struct WeekEventRow: View {
         .onTapGesture {
             onTap()
         }
+    }
+
+    private var calendarBarColor: Color {
+        if let hex = event.calendarColor {
+            return Color(hex: hex)
+        }
+        return .warmAccent
     }
 }
 
@@ -587,13 +683,21 @@ struct DayEventBlock: View {
     var body: some View {
         HStack(spacing: 0) {
             RoundedRectangle(cornerRadius: 2)
-                .fill(Color.warmAccent)
+                .fill(calendarBarColor)
                 .frame(width: 3)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(event.title)
-                    .font(.system(size: 11, weight: .medium))
-                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    Text(event.title)
+                        .font(.system(size: 11, weight: .medium))
+                        .lineLimit(1)
+
+                    if event.hasVideoCall {
+                        Image(systemName: "video.fill")
+                            .font(.system(size: 9))
+                            .foregroundColor(.warmPrimary)
+                    }
+                }
 
                 Text("\(timeFormatter.string(from: event.startDate)) – \(timeFormatter.string(from: event.endDate))")
                     .font(.system(size: 10))
@@ -617,6 +721,13 @@ struct DayEventBlock: View {
         .cornerRadius(4)
         .onTapGesture { onTap() }
     }
+
+    private var calendarBarColor: Color {
+        if let hex = event.calendarColor {
+            return Color(hex: hex)
+        }
+        return .warmAccent
+    }
 }
 
 // MARK: - Event Editor View
@@ -633,6 +744,8 @@ struct EventEditorView: View {
     @State private var location: String = ""
     @State private var notes: String = ""
     @State private var isAllDay: Bool = false
+    @State private var attendeeEmails: [String] = []
+    @State private var newAttendeeEmail: String = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -676,6 +789,38 @@ struct EventEditorView: View {
                 TextField("Notes", text: $notes, axis: .vertical)
                     .lineLimit(3...6)
 
+                // Attendees section
+                Section("Attendees") {
+                    ForEach(attendeeEmails.indices, id: \.self) { index in
+                        HStack {
+                            Text(attendeeEmails[index])
+                                .font(.subheadline)
+                            Spacer()
+                            Button(action: {
+                                attendeeEmails.remove(at: index)
+                            }) {
+                                Image(systemName: "minus.circle.fill")
+                                    .foregroundColor(.red)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+
+                    HStack {
+                        TextField("Add attendee email", text: $newAttendeeEmail)
+                            .textFieldStyle(.plain)
+                            .onSubmit {
+                                addAttendee()
+                            }
+                        Button(action: addAttendee) {
+                            Image(systemName: "plus.circle.fill")
+                                .foregroundColor(.warmPrimary)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(newAttendeeEmail.isEmpty)
+                    }
+                }
+
                 if event != nil, let onDelete = onDelete {
                     Button(role: .destructive) {
                         onDelete()
@@ -690,7 +835,7 @@ struct EventEditorView: View {
             }
             .formStyle(.grouped)
         }
-        .frame(width: 350, height: 400)
+        .frame(width: 350, height: 480)
         .onAppear {
             if let event = event {
                 title = event.title
@@ -699,6 +844,7 @@ struct EventEditorView: View {
                 location = event.location ?? ""
                 notes = event.description ?? ""
                 isAllDay = event.isAllDay
+                attendeeEmails = event.attendees?.map { $0.email } ?? []
             } else {
                 // Set start time to nearest hour
                 let calendar = Calendar.current
@@ -712,7 +858,18 @@ struct EventEditorView: View {
         }
     }
 
+    private func addAttendee() {
+        let email = newAttendeeEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !email.isEmpty, email.contains("@") else { return }
+        attendeeEmails.append(email)
+        newAttendeeEmail = ""
+    }
+
     private func saveEvent() {
+        let attendees: [EventAttendee]? = attendeeEmails.isEmpty ? nil : attendeeEmails.map {
+            EventAttendee(email: $0, responseStatus: .needsAction, isOrganizer: false, isSelf: false)
+        }
+
         let newEvent = CalendarEvent(
             id: event?.id ?? UUID().uuidString,
             title: title,
@@ -721,7 +878,8 @@ struct EventEditorView: View {
             calendarType: .google,
             description: notes.isEmpty ? nil : notes,
             location: location.isEmpty ? nil : location,
-            isAllDay: isAllDay
+            isAllDay: isAllDay,
+            attendees: attendees
         )
         onSave(newEvent)
     }
