@@ -8,6 +8,9 @@ class KimiService {
     private let baseURL = "https://integrate.api.nvidia.com/v1/chat/completions"
     private let model = "moonshotai/kimi-k2.5"
 
+    // Cached calendar context
+    private var cachedCalendarContext: String = ""
+
     private init() {
         // Load API key from Keychain or environment
         if let keychainKey = KeychainService.shared.get(key: "kimi_api_key"), !keychainKey.isEmpty {
@@ -45,6 +48,9 @@ class KimiService {
             NSLog("KimiService: No API key configured!")
             throw KimiError.noAPIKey
         }
+
+        // Refresh calendar context
+        cachedCalendarContext = await CalendarContextService.shared.buildTodayContext()
 
         // Build messages array
         var messages: [[String: Any]] = [
@@ -128,8 +134,24 @@ class KimiService {
 
     // MARK: - System Prompt
     private var systemPrompt: String {
-        """
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let today = dateFormatter.string(from: Date())
+
+        let timeFormatter = DateFormatter()
+        timeFormatter.timeStyle = .short
+        let currentTime = timeFormatter.string(from: Date())
+
+        let calendar = Calendar.current
+        let weekday = calendar.component(.weekday, from: Date())
+        let weekdayName = DateFormatter().weekdaySymbols[weekday - 1]
+
+        return """
         You are ezLander, a helpful AI assistant integrated into a macOS menu bar app. You help users manage their calendar and email.
+
+        Today is \(weekdayName), \(today). Current time: \(currentTime).
+
+        \(cachedCalendarContext)
 
         You can help users with:
         - Creating calendar events
@@ -144,6 +166,7 @@ class KimiService {
         - When creating events, clarify date/time if ambiguous
         - Format dates and times in a human-readable way
         - If you don't have enough information, ask for clarification
+        - When the user asks about their calendar, use the schedule information above to answer directly
         """
     }
 

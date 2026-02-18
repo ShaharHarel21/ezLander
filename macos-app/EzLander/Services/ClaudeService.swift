@@ -7,6 +7,9 @@ class ClaudeService {
     private let baseURL = "https://api.anthropic.com/v1/messages"
     private let model = "claude-sonnet-4-20250514"
 
+    // Cached calendar context (refreshed on each sendMessage call)
+    private var cachedCalendarContext: String = ""
+
     private init() {
         // Load API key from: 1) Keychain, 2) Environment variable, 3) Empty (will fail gracefully)
         if let keychainKey = KeychainService.shared.get(key: "anthropic_api_key"), !keychainKey.isEmpty {
@@ -14,7 +17,6 @@ class ClaudeService {
         } else if let envKey = ProcessInfo.processInfo.environment["ANTHROPIC_API_KEY"], !envKey.isEmpty {
             apiKey = envKey
         } else {
-            // TODO: Replace with your API key for testing, or set ANTHROPIC_API_KEY environment variable
             apiKey = ""
         }
     }
@@ -48,7 +50,9 @@ class ClaudeService {
                     "date": ["type": "string", "description": "Event date in YYYY-MM-DD format"],
                     "time": ["type": "string", "description": "Event start time in HH:MM format (24-hour)"],
                     "duration": ["type": "integer", "description": "Duration in minutes (default 60)"],
-                    "calendar_type": ["type": "string", "enum": ["google", "apple"], "description": "Which calendar to use"]
+                    "calendar_type": ["type": "string", "enum": ["google", "apple"], "description": "Which calendar to use"],
+                    "attendees": ["type": "array", "items": ["type": "string"], "description": "Array of attendee email addresses to invite"],
+                    "add_video_call": ["type": "boolean", "description": "Whether to add a Google Meet video call link to the event"]
                 ],
                 "required": ["title", "date", "time"]
             ]
@@ -102,11 +106,26 @@ class ClaudeService {
                 ],
                 "required": ["query"]
             ]
+        ],
+        [
+            "name": "get_meeting_prep",
+            "description": "Get meeting preparation context including event details, attendees, RSVP status, and recent email threads with attendees. Use when the user asks to prepare for a meeting.",
+            "input_schema": [
+                "type": "object",
+                "properties": [
+                    "event_title": ["type": "string", "description": "The title or partial title of the meeting to prepare for"],
+                    "date": ["type": "string", "description": "Optional date in YYYY-MM-DD format to narrow the search"]
+                ],
+                "required": ["event_title"]
+            ]
         ]
     ]
 
     // MARK: - Send Message
     func sendMessage(_ text: String, conversationHistory: [ChatMessage]) async throws -> ChatMessage {
+        // Refresh calendar context before each message
+        cachedCalendarContext = await CalendarContextService.shared.buildTodayContext()
+
         // Build messages array
         var messages: [[String: Any]] = conversationHistory.map { message in
             ["role": message.role.rawValue, "content": message.content]
@@ -234,6 +253,8 @@ class ClaudeService {
             return handleDraftEmail(input)
         case "search_emails":
             return try await handleSearchEmails(input)
+        case "get_meeting_prep":
+            return try await handleGetMeetingPrep(input)
         default:
             return "Unknown tool: \(name)"
         }
@@ -246,13 +267,35 @@ class ClaudeService {
         let timeStr = input["time"] as! String
         let duration = input["duration"] as? Int ?? 60
         let calendarType = input["calendar_type"] as? String ?? "google"
+        let attendeeEmails = input["attendees"] as? [String]
+        let addVideoCall = input["add_video_call"] as? Bool ?? false
+
+        // Build attendees
+        var attendees: [EventAttendee]?
+        if let emails = attendeeEmails, !emails.isEmpty {
+            attendees = emails.map {
+                EventAttendee(email: $0, responseStatus: .needsAction, isOrganizer: false, isSelf: false)
+            }
+        }
+
+        // Build conference data if video call requested
+        var confData: ConferenceData?
+        if addVideoCall {
+            confData = ConferenceData(
+                conferenceId: nil,
+                conferenceSolution: ConferenceSolution(name: "Google Meet", iconUri: nil),
+                entryPoints: nil
+            )
+        }
 
         let event = CalendarEvent(
             id: UUID().uuidString,
             title: title,
             startDate: parseDateTime(date: dateStr, time: timeStr),
             endDate: parseDateTime(date: dateStr, time: timeStr).addingTimeInterval(TimeInterval(duration * 60)),
-            calendarType: calendarType == "google" ? .google : .apple
+            calendarType: calendarType == "google" ? .google : .apple,
+            attendees: attendees,
+            conferenceData: addVideoCall ? confData : nil
         )
 
         if calendarType == "google" {
@@ -261,7 +304,14 @@ class ClaudeService {
             try await AppleCalendarService.shared.createEvent(event)
         }
 
-        return "Successfully created event '\(title)' on \(dateStr) at \(timeStr)"
+        var resultMsg = "Successfully created event '\(title)' on \(dateStr) at \(timeStr)"
+        if let emails = attendeeEmails, !emails.isEmpty {
+            resultMsg += " with attendees: \(emails.joined(separator: ", "))"
+        }
+        if addVideoCall {
+            resultMsg += " with Google Meet video call"
+        }
+        return resultMsg
     }
 
     private func handleListCalendarEvents(_ input: [String: Any]) async throws -> String {
@@ -296,7 +346,19 @@ class ClaudeService {
         formatter.timeStyle = .short
 
         let eventList = events.map { event in
-            "- \(event.title) on \(formatter.string(from: event.startDate))"
+            var line = "- \(event.title) on \(formatter.string(from: event.startDate))"
+            if event.hasVideoCall {
+                line += " (video call)"
+            }
+            if event.attendeeCount > 0 {
+                let names = event.attendees?.compactMap { $0.displayName ?? $0.email }.prefix(3).joined(separator: ", ") ?? ""
+                line += " with \(names)"
+                if event.attendeeCount > 3 { line += " +\(event.attendeeCount - 3) more" }
+            }
+            if let loc = event.location, !loc.isEmpty {
+                line += " @ \(loc)"
+            }
+            return line
         }.joined(separator: "\n")
 
         return "Found \(events.count) event(s):\n\(eventList)"
@@ -355,6 +417,23 @@ class ClaudeService {
         return "Found \(emails.count) email(s). Here are the most recent:\n\(emailList)"
     }
 
+    private func handleGetMeetingPrep(_ input: [String: Any]) async throws -> String {
+        let eventTitle = input["event_title"] as! String
+        let dateStr = input["date"] as? String
+
+        var searchDate: Date?
+        if let dateStr = dateStr {
+            searchDate = parseDate(dateStr)
+        }
+
+        guard let event = await CalendarContextService.shared.findEvent(title: eventTitle, nearDate: searchDate) else {
+            return "Could not find a meeting matching '\(eventTitle)' in the next 7 days."
+        }
+
+        let prep = await CalendarContextService.shared.buildMeetingPrepContext(for: event)
+        return prep
+    }
+
     // MARK: - Helpers
     private func parseDateTime(date: String, time: String) -> Date {
         let formatter = DateFormatter()
@@ -374,6 +453,10 @@ class ClaudeService {
         dateFormatter.dateFormat = "yyyy-MM-dd"
         let today = dateFormatter.string(from: Date())
 
+        let timeFormatter = DateFormatter()
+        timeFormatter.timeStyle = .short
+        let currentTime = timeFormatter.string(from: Date())
+
         let calendar = Calendar.current
         let weekday = calendar.component(.weekday, from: Date())
         let weekdayName = DateFormatter().weekdaySymbols[weekday - 1]
@@ -381,14 +464,17 @@ class ClaudeService {
         return """
         You are ezLander, a helpful AI assistant integrated into a macOS menu bar app. You help users manage their calendar and email.
 
-        Today is \(weekdayName), \(today).
+        Today is \(weekdayName), \(today). Current time: \(currentTime).
+
+        \(cachedCalendarContext)
 
         You have access to the following tools:
-        - create_calendar_event: Create new calendar events
+        - create_calendar_event: Create new calendar events (supports attendees and Google Meet video calls)
         - list_calendar_events: List events for a date range
         - send_email: Send an email (use with caution, confirm with user first)
         - draft_email: Create a draft email for user review
         - search_emails: Search through emails
+        - get_meeting_prep: Get detailed meeting preparation context with attendees and recent emails
 
         IMPORTANT — Creating calendar events:
         - Always extract a specific, descriptive title from the user's message. NEVER use generic titles like "New Event", "Event", or "Meeting".
@@ -401,6 +487,17 @@ class ClaudeService {
         - Resolve relative dates like "tomorrow", "next Monday", "this Friday" using today's date.
         - If the user doesn't specify a duration, default to 60 minutes. Use shorter durations for quick things (haircut: 30min) and longer for things like flights.
         - If the date or time is ambiguous, ask for clarification before creating the event.
+        - If the user mentions attendees (e.g., "with john@example.com"), include their emails in the attendees array.
+        - If the user asks for a video call or mentions Zoom/Meet, set add_video_call to true.
+
+        IMPORTANT — Calendar awareness:
+        - You already have today's schedule injected above. When the user asks "what's on my calendar today?" or similar, answer directly from that context without needing to call list_calendar_events.
+        - Only use list_calendar_events for date ranges you don't already have in context.
+        - When discussing events, mention attendees, video calls, and locations when relevant.
+
+        IMPORTANT — Meeting prep:
+        - When the user asks to prepare for a meeting, use the get_meeting_prep tool to get detailed context.
+        - Provide a concise briefing: who's attending, their RSVP status, key topics from recent emails, and the video call link.
 
         General guidelines:
         - Be concise and helpful

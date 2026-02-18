@@ -41,9 +41,9 @@ class GoogleCalendarService {
         let calendars = try await listCalendars(accessToken: accessToken)
         NSLog("GoogleCalendarService: Found \(calendars.count) calendars")
 
-        var allEvents: [GoogleEvent] = []
+        var allEvents: [CalendarEvent] = []
 
-        // Fetch events from ALL calendars
+        // Fetch events from ALL calendars, converting inside the loop
         for calendar in calendars {
             NSLog("GoogleCalendarService: Fetching events from calendar: \(calendar.summary ?? calendar.id)")
             do {
@@ -54,7 +54,78 @@ class GoogleCalendarService {
                     to: endDate
                 )
                 NSLog("GoogleCalendarService: Found \(calEvents.count) events in \(calendar.summary ?? calendar.id)")
-                allEvents.append(contentsOf: calEvents)
+
+                // Convert GoogleEvent -> CalendarEvent with calendar metadata
+                let converted = calEvents.compactMap { googleEvent -> CalendarEvent? in
+                    guard googleEvent.status != "cancelled" else { return nil }
+                    guard let start = googleEvent.start, let end = googleEvent.end else { return nil }
+
+                    // Build attendees
+                    let attendees = googleEvent.attendees?.map { ga -> EventAttendee in
+                        EventAttendee(
+                            email: ga.email,
+                            displayName: ga.displayName,
+                            responseStatus: EventAttendee.ResponseStatus(rawValue: ga.responseStatus ?? "needsAction") ?? .needsAction,
+                            isOrganizer: ga.organizer ?? false,
+                            isSelf: ga.self_ ?? false
+                        )
+                    }
+
+                    // Build organizer
+                    var organizerAttendee: EventAttendee?
+                    if let org = googleEvent.organizer {
+                        organizerAttendee = EventAttendee(
+                            email: org.email ?? "",
+                            displayName: org.displayName,
+                            responseStatus: .accepted,
+                            isOrganizer: true,
+                            isSelf: org.self_ ?? false
+                        )
+                    }
+
+                    // Build conference data
+                    var confData: ConferenceData?
+                    if let gc = googleEvent.conferenceData {
+                        let solution = gc.conferenceSolution.map {
+                            ConferenceSolution(name: $0.name, iconUri: $0.iconUri)
+                        }
+                        let entryPoints = gc.entryPoints?.map {
+                            ConferenceEntryPoint(entryPointType: $0.entryPointType, uri: $0.uri, label: $0.label)
+                        }
+                        confData = ConferenceData(
+                            conferenceId: gc.conferenceId,
+                            conferenceSolution: solution,
+                            entryPoints: entryPoints
+                        )
+                    }
+
+                    // Determine meeting link (priority: hangoutLink > conferenceData > description > location)
+                    var meetingLink: URL?
+                    if let hangout = googleEvent.hangoutLink, let url = URL(string: hangout) {
+                        meetingLink = url
+                    }
+                    // conferenceData joinURL and description/location regex are handled by effectiveJoinURL computed property
+
+                    return CalendarEvent(
+                        id: googleEvent.id,
+                        title: googleEvent.summary ?? "Untitled",
+                        startDate: parseGoogleDateTime(start),
+                        endDate: parseGoogleDateTime(end),
+                        calendarType: .google,
+                        description: googleEvent.description,
+                        location: googleEvent.location,
+                        isAllDay: isAllDayEvent(googleEvent),
+                        attendees: attendees,
+                        meetingLink: meetingLink,
+                        organizer: organizerAttendee,
+                        calendarColor: calendar.backgroundColor,
+                        calendarName: calendar.summary,
+                        conferenceData: confData,
+                        htmlLink: googleEvent.htmlLink
+                    )
+                }
+
+                allEvents.append(contentsOf: converted)
             } catch {
                 NSLog("GoogleCalendarService: Error fetching from \(calendar.summary ?? calendar.id): \(error)")
                 // Continue with other calendars
@@ -63,43 +134,41 @@ class GoogleCalendarService {
 
         NSLog("GoogleCalendarService: Total events from all calendars: \(allEvents.count)")
 
-        // Convert to CalendarEvent, filter cancelled, and sort by start date
-        let events = allEvents.compactMap { googleEvent -> CalendarEvent? in
-            // Skip cancelled events
-            if googleEvent.status == "cancelled" { return nil }
-            // Skip events with missing start/end
-            guard let start = googleEvent.start, let end = googleEvent.end else { return nil }
-
-            return CalendarEvent(
-                id: googleEvent.id,
-                title: googleEvent.summary ?? "Untitled",
-                startDate: parseGoogleDateTime(start),
-                endDate: parseGoogleDateTime(end),
-                calendarType: .google,
-                description: googleEvent.description,
-                location: googleEvent.location,
-                isAllDay: isAllDayEvent(googleEvent)
-            )
-        }.sorted { $0.startDate < $1.startDate }
+        let sortedEvents = allEvents.sorted { $0.startDate < $1.startDate }
 
         // Log events by date for debugging
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd"
         var eventsByDate: [String: Int] = [:]
-        for event in events {
+        for event in sortedEvents {
             let dateKey = dateFormatter.string(from: event.startDate)
             eventsByDate[dateKey, default: 0] += 1
         }
         NSLog("GoogleCalendarService: Events by date: \(eventsByDate)")
 
-        return events
+        return sortedEvents
     }
 
     // MARK: - Create Event
     func createEvent(_ event: CalendarEvent) async throws {
         let accessToken = try await oauthService.getValidAccessToken()
 
-        let url = URL(string: "\(baseURL)/calendars/primary/events")!
+        var conferenceDataForCreate: Int? = nil
+        // Check if we should request conference data creation
+        if event.conferenceData != nil || event.meetingLink != nil {
+            conferenceDataForCreate = 1
+        }
+
+        let url: URL
+        if conferenceDataForCreate != nil {
+            var components = URLComponents(string: "\(baseURL)/calendars/primary/events")!
+            components.queryItems = [
+                URLQueryItem(name: "conferenceDataVersion", value: "1")
+            ]
+            url = components.url!
+        } else {
+            url = URL(string: "\(baseURL)/calendars/primary/events")!
+        }
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -111,7 +180,14 @@ class GoogleCalendarService {
             description: event.description,
             location: event.location,
             start: GoogleDateTime(dateTime: formatISO8601(event.startDate), timeZone: TimeZone.current.identifier),
-            end: GoogleDateTime(dateTime: formatISO8601(event.endDate), timeZone: TimeZone.current.identifier)
+            end: GoogleDateTime(dateTime: formatISO8601(event.endDate), timeZone: TimeZone.current.identifier),
+            attendees: event.attendees?.map { GoogleAttendeeRequest(email: $0.email) },
+            conferenceData: conferenceDataForCreate != nil ? GoogleConferenceDataRequest(
+                createRequest: GoogleCreateConferenceRequest(
+                    requestId: UUID().uuidString,
+                    conferenceSolutionKey: GoogleConferenceSolutionKey(type: "hangoutsMeet")
+                )
+            ) : nil
         )
 
         request.httpBody = try JSONEncoder().encode(googleEvent)
@@ -143,7 +219,9 @@ class GoogleCalendarService {
             description: event.description,
             location: event.location,
             start: GoogleDateTime(dateTime: formatISO8601(event.startDate), timeZone: TimeZone.current.identifier),
-            end: GoogleDateTime(dateTime: formatISO8601(event.endDate), timeZone: TimeZone.current.identifier)
+            end: GoogleDateTime(dateTime: formatISO8601(event.endDate), timeZone: TimeZone.current.identifier),
+            attendees: event.attendees?.map { GoogleAttendeeRequest(email: $0.email) },
+            conferenceData: nil
         )
 
         request.httpBody = try JSONEncoder().encode(googleEvent)
@@ -213,7 +291,7 @@ class GoogleCalendarService {
             URLQueryItem(name: "timeMax", value: timeMax),
             URLQueryItem(name: "singleEvents", value: "true"),
             URLQueryItem(name: "orderBy", value: "startTime"),
-            URLQueryItem(name: "maxResults", value: "250") // Increased from 50
+            URLQueryItem(name: "maxResults", value: "250")
         ]
 
         guard let url = components.url else { return [] }
@@ -277,7 +355,8 @@ class GoogleCalendarService {
     }
 }
 
-// MARK: - API Models
+// MARK: - API Response Models
+
 struct GoogleCalendarListResponse: Codable {
     let items: [GoogleCalendar]?
 }
@@ -286,6 +365,8 @@ struct GoogleCalendar: Codable {
     let id: String
     let summary: String?
     let primary: Bool?
+    let backgroundColor: String?
+    let foregroundColor: String?
 }
 
 struct GoogleEventsResponse: Codable {
@@ -305,6 +386,54 @@ struct GoogleEvent: Codable {
     let start: GoogleDateTimeResponse?
     let end: GoogleDateTimeResponse?
     let status: String?
+    let attendees: [GoogleAttendee]?
+    let hangoutLink: String?
+    let conferenceData: GoogleConferenceData?
+    let htmlLink: String?
+    let creator: GooglePerson?
+    let organizer: GooglePerson?
+    let colorId: String?
+}
+
+struct GoogleAttendee: Codable {
+    let email: String
+    let displayName: String?
+    let responseStatus: String?
+    let organizer: Bool?
+    let self_: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case email, displayName, responseStatus, organizer
+        case self_ = "self"
+    }
+}
+
+struct GooglePerson: Codable {
+    let email: String?
+    let displayName: String?
+    let self_: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case email, displayName
+        case self_ = "self"
+    }
+}
+
+struct GoogleConferenceData: Codable {
+    let conferenceId: String?
+    let conferenceSolution: GoogleConferenceSolution?
+    let entryPoints: [GoogleConferenceEntryPoint]?
+}
+
+struct GoogleConferenceSolution: Codable {
+    let name: String?
+    let iconUri: String?
+}
+
+struct GoogleConferenceEntryPoint: Codable {
+    let entryPointType: String?
+    let uri: String?
+    let label: String?
 }
 
 struct GoogleDateTimeResponse: Codable {
@@ -313,12 +442,33 @@ struct GoogleDateTimeResponse: Codable {
     let timeZone: String?
 }
 
+// MARK: - API Request Models
+
 struct GoogleEventRequest: Codable {
     let summary: String
     let description: String?
     let location: String?
     let start: GoogleDateTime
     let end: GoogleDateTime
+    let attendees: [GoogleAttendeeRequest]?
+    let conferenceData: GoogleConferenceDataRequest?
+}
+
+struct GoogleAttendeeRequest: Codable {
+    let email: String
+}
+
+struct GoogleConferenceDataRequest: Codable {
+    let createRequest: GoogleCreateConferenceRequest
+}
+
+struct GoogleCreateConferenceRequest: Codable {
+    let requestId: String
+    let conferenceSolutionKey: GoogleConferenceSolutionKey
+}
+
+struct GoogleConferenceSolutionKey: Codable {
+    let type: String
 }
 
 struct GoogleDateTime: Codable {

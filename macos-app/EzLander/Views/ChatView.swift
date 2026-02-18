@@ -76,6 +76,12 @@ struct ChatView: View {
         }
         .onAppear {
             isInputFocused = true
+            viewModel.loadDailyBriefingIfNeeded()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("MeetingPrepRequested"))) { notification in
+            if let event = notification.object as? CalendarEvent {
+                viewModel.requestMeetingPrep(for: event)
+            }
         }
     }
 
@@ -233,6 +239,41 @@ class ChatViewModel: ObservableObject {
         ))
     }
 
+    // MARK: - Daily Briefing
+    func loadDailyBriefingIfNeeded() {
+        let defaults = UserDefaults.standard
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let todayKey = dateFormatter.string(from: Date())
+
+        let lastBriefingDate = defaults.string(forKey: "last_daily_briefing_date") ?? ""
+
+        guard lastBriefingDate != todayKey else { return }
+        guard GoogleCalendarService.shared.isAuthorized else { return }
+
+        defaults.set(todayKey, forKey: "last_daily_briefing_date")
+
+        Task {
+            let briefing = await CalendarContextService.shared.buildDailyBriefing()
+            await MainActor.run {
+                messages.append(ChatMessage(role: .assistant, content: briefing))
+            }
+        }
+    }
+
+    // MARK: - Meeting Prep
+    func requestMeetingPrep(for event: CalendarEvent) {
+        // Switch to chat tab
+        NotificationCenter.default.post(
+            name: MenuBarController.switchTabNotification,
+            object: "chat"
+        )
+
+        // Send as user message so the AI uses the get_meeting_prep tool
+        let text = "Prepare me for my meeting: \(event.title)"
+        sendMessage(text)
+    }
+
     func sendMessage(_ text: String) {
         let userMessage = ChatMessage(role: .user, content: text)
         messages.append(userMessage)
@@ -311,8 +352,7 @@ class ChatViewModel: ObservableObject {
                     }
 
                 case .deleteEvent:
-                    if let eventData = action.eventData {
-                        // For delete, we'd need the event ID
+                    if let _ = action.eventData {
                         await MainActor.run {
                             actionResult = (true, "Event deleted")
                             messages.append(ChatMessage(role: .assistant, content: "The event has been deleted."))
@@ -378,9 +418,6 @@ class ChatViewModel: ObservableObject {
     }
 
     private func parseEventData(from content: String) -> EventActionData? {
-        // Try to extract event details using patterns
-        // This is a simplified parser - in production, you'd use the AI's structured output
-
         var title = "New Event"
         var startDate = Date()
         var endDate = Date().addingTimeInterval(3600)
@@ -500,6 +537,7 @@ struct ToolCall: Codable {
         case "send_email": return "Sending email"
         case "draft_email": return "Drafting email"
         case "search_emails": return "Searching emails"
+        case "get_meeting_prep": return "Preparing for meeting"
         default: return name
         }
     }
@@ -508,6 +546,7 @@ struct ToolCall: Codable {
         switch name {
         case "create_calendar_event", "list_calendar_events": return "calendar"
         case "send_email", "draft_email", "search_emails": return "envelope"
+        case "get_meeting_prep": return "brain.head.profile"
         default: return "gear"
         }
     }
