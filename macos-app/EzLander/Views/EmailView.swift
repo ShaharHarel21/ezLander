@@ -758,6 +758,26 @@ struct SenderAvatarView: View {
 
     @StateObject private var loader = AvatarImageLoader()
 
+    // Gmail-style palette for initials circles
+    private static let avatarColors: [Color] = [
+        Color(red: 0.92, green: 0.34, blue: 0.34), // Red
+        Color(red: 0.90, green: 0.49, blue: 0.13), // Orange
+        Color(red: 0.78, green: 0.68, blue: 0.16), // Yellow
+        Color(red: 0.26, green: 0.63, blue: 0.28), // Green
+        Color(red: 0.00, green: 0.59, blue: 0.53), // Teal
+        Color(red: 0.13, green: 0.59, blue: 0.95), // Blue
+        Color(red: 0.25, green: 0.32, blue: 0.71), // Indigo
+        Color(red: 0.40, green: 0.23, blue: 0.72), // Deep Purple
+        Color(red: 0.61, green: 0.15, blue: 0.69), // Purple
+        Color(red: 0.76, green: 0.18, blue: 0.42), // Pink
+    ]
+
+    private var senderColor: Color {
+        let hash = email.lowercased().utf8.reduce(0) { ($0 &* 31) &+ Int($1) }
+        let index = abs(hash) % Self.avatarColors.count
+        return Self.avatarColors[index]
+    }
+
     var body: some View {
         Group {
             if let image = loader.image {
@@ -767,14 +787,14 @@ struct SenderAvatarView: View {
                     .frame(width: size, height: size)
                     .clipShape(Circle())
             } else {
-                // Fallback: colored circle with initial
+                // Fallback: colored circle with initial (consistent per-sender color)
                 Circle()
-                    .fill(isRead ? Color.secondary.opacity(0.2) : Color.warmPrimary.opacity(0.15))
+                    .fill(isRead ? senderColor.opacity(0.15) : senderColor.opacity(0.2))
                     .frame(width: size, height: size)
                     .overlay(
                         Text(String(name.prefix(1)).uppercased())
                             .font(.system(size: size * 0.4, weight: .medium))
-                            .foregroundColor(isRead ? .secondary : .warmPrimary)
+                            .foregroundColor(isRead ? senderColor.opacity(0.6) : senderColor)
                     )
             }
         }
@@ -794,6 +814,13 @@ class AvatarImageLoader: ObservableObject {
     private static var cache = NSCache<NSString, NSImage>()
     private var currentEmail: String?
 
+    private static let freeProviders: Set<String> = [
+        "gmail.com", "yahoo.com", "hotmail.com", "outlook.com",
+        "aol.com", "icloud.com", "me.com", "mail.com",
+        "protonmail.com", "proton.me", "live.com", "msn.com",
+        "ymail.com", "googlemail.com"
+    ]
+
     func load(email: String) {
         let cleanEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !cleanEmail.isEmpty else { return }
@@ -806,21 +833,78 @@ class AvatarImageLoader: ObservableObject {
             return
         }
 
+        let domain = cleanEmail.components(separatedBy: "@").last ?? ""
+
         Task {
-            // 1. Try Gravatar
+            // 1. Try Google People API (profile photo)
+            if let img = await fetchGoogleProfilePhoto(email: cleanEmail) {
+                await setImage(img, forKey: cleanEmail)
+                return
+            }
+
+            // 2. Try Gravatar
             if let img = await fetchGravatar(email: cleanEmail) {
                 await setImage(img, forKey: cleanEmail)
                 return
             }
 
-            // 2. Try company logo from domain
-            let domain = cleanEmail.components(separatedBy: "@").last ?? ""
-            if !domain.isEmpty, let img = await fetchCompanyLogo(domain: domain) {
-                await setImage(img, forKey: cleanEmail)
-                return
+            // 3. Try company logos (skip free email providers)
+            if !domain.isEmpty, !Self.freeProviders.contains(domain) {
+                // 3a. Try Clearbit logo
+                if let img = await fetchClearbitLogo(domain: domain) {
+                    await setImage(img, forKey: cleanEmail)
+                    return
+                }
+
+                // 3b. Try Google Favicon
+                if let img = await fetchGoogleFavicon(domain: domain) {
+                    await setImage(img, forKey: cleanEmail)
+                    return
+                }
             }
+
+            // 4. No image found — initials fallback handled by SenderAvatarView
         }
     }
+
+    // MARK: - Google People API
+
+    private func fetchGoogleProfilePhoto(email: String) async -> NSImage? {
+        do {
+            let accessToken = try await OAuthService.shared.getValidAccessToken()
+
+            guard let encodedEmail = email.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+                  let url = URL(string: "https://people.googleapis.com/v1/otherContacts:search?query=\(encodedEmail)&readMask=photos&pageSize=1") else {
+                return nil
+            }
+
+            var request = URLRequest(url: url)
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+            request.timeoutInterval = 5
+
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+                return nil
+            }
+
+            // Parse the JSON response to extract photo URL
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let results = json["results"] as? [[String: Any]],
+                  let firstResult = results.first,
+                  let person = firstResult["person"] as? [String: Any],
+                  let photos = person["photos"] as? [[String: Any]],
+                  let photoUrl = photos.first?["url"] as? String,
+                  let url = URL(string: photoUrl) else {
+                return nil
+            }
+
+            return await downloadImage(from: url)
+        } catch {
+            return nil
+        }
+    }
+
+    // MARK: - Gravatar
 
     private func fetchGravatar(email: String) async -> NSImage? {
         let hash = Insecure.MD5
@@ -835,19 +919,30 @@ class AvatarImageLoader: ObservableObject {
         return await downloadImage(from: url)
     }
 
-    private func fetchCompanyLogo(domain: String) async -> NSImage? {
-        // Skip common free email providers — they won't have useful logos
-        let freeProviders = ["gmail.com", "yahoo.com", "hotmail.com", "outlook.com",
-                             "aol.com", "icloud.com", "me.com", "mail.com",
-                             "protonmail.com", "proton.me", "live.com", "msn.com"]
-        guard !freeProviders.contains(domain) else { return nil }
+    // MARK: - Company Logos
 
+    private func fetchClearbitLogo(domain: String) async -> NSImage? {
         guard let url = URL(string: "https://logo.clearbit.com/\(domain)?size=160") else {
             return nil
         }
-
         return await downloadImage(from: url)
     }
+
+    private func fetchGoogleFavicon(domain: String) async -> NSImage? {
+        guard let url = URL(string: "https://www.google.com/s2/favicons?domain=\(domain)&sz=128") else {
+            return nil
+        }
+
+        // Google favicons always return something — filter out the tiny default globe icon
+        guard let img = await downloadImage(from: url) else { return nil }
+        let rep = img.representations.first
+        let width = rep?.pixelsWide ?? Int(img.size.width)
+        // If the returned icon is 16x16 or smaller, it's likely the default — skip it
+        if width <= 16 { return nil }
+        return img
+    }
+
+    // MARK: - Helpers
 
     private func downloadImage(from url: URL) async -> NSImage? {
         do {
