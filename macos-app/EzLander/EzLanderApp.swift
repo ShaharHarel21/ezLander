@@ -16,8 +16,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var menuBarController: MenuBarController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Hide dock icon (menu bar only app)
-        NSApp.setActivationPolicy(.accessory)
+        // Show dock icon alongside menu bar
+        NSApp.setActivationPolicy(.regular)
 
         // Initialize menu bar controller
         menuBarController = MenuBarController()
@@ -29,6 +29,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             forEventClass: AEEventClass(kInternetEventClass),
             andEventID: AEEventID(kAEGetURL)
         )
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        // When user clicks the Dock icon, show the popover
+        menuBarController?.showPopover()
+        return false
     }
 
     func applicationWillTerminate(_ notification: Notification) {

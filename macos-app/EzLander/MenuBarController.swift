@@ -133,7 +133,7 @@ class MenuBarController: NSObject {
         }
     }
 
-    private func showPopover() {
+    func showPopover() {
         if let button = statusItem.button {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             eventMonitor?.start()

@@ -46,15 +46,23 @@ struct OnboardingView: View {
 
             // Step content
             VStack(spacing: 24) {
-                Image(systemName: steps[currentStep].icon)
-                    .font(.system(size: 64))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [Color.warmPrimary, Color.warmAccent],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
+                if currentStep == 0 {
+                    Image(nsImage: NSApp.applicationIconImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 80, height: 80)
+                        .cornerRadius(16)
+                } else {
+                    Image(systemName: steps[currentStep].icon)
+                        .font(.system(size: 64))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [Color.warmPrimary, Color.warmAccent],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
                         )
-                    )
+                }
 
                 Text(steps[currentStep].title)
                     .font(.title2)

@@ -54,6 +54,28 @@ struct EmailView: View {
                 }
             }
 
+            // Undo delete banner
+            if viewModel.showUndoBanner {
+                HStack {
+                    Image(systemName: "trash")
+                        .foregroundColor(.red)
+                    Text("Email deleted")
+                        .font(.caption)
+                    Spacer()
+                    Button("Undo") {
+                        withAnimation {
+                            viewModel.undoDelete()
+                        }
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.warmPrimary)
+                }
+                .padding(8)
+                .background(Color.red.opacity(0.1))
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+
             // Header
             emailHeader
 
@@ -998,8 +1020,12 @@ class EmailViewModel: ObservableObject {
     @Published var fullEmailBody: String?
     @Published var fullEmailHtml: String?
     @Published var availableLabels: [GmailLabel] = []
+    @Published var showUndoBanner = false
 
     private var hasLoadedOnce = false
+    private var pendingDeleteEmail: Email?
+    private var pendingDeleteIndex: Int?
+    private var deleteWorkItem: DispatchWorkItem?
 
     init() {
         checkConnection()
@@ -1087,12 +1113,52 @@ class EmailViewModel: ObservableObject {
     }
 
     func deleteEmail(_ email: Email) {
+        // If there's already a pending delete, commit it immediately
+        commitPendingDelete()
+
+        // Store the email and its position for undo
+        if let index = emails.firstIndex(where: { $0.id == email.id }) {
+            pendingDeleteEmail = email
+            pendingDeleteIndex = index
+        }
+
+        // Optimistically remove from the list
+        emails.removeAll { $0.id == email.id }
+        showUndoBanner = true
+
+        // Schedule the actual API call after 5 seconds
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.commitPendingDelete()
+        }
+        deleteWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: workItem)
+    }
+
+    func undoDelete() {
+        deleteWorkItem?.cancel()
+        deleteWorkItem = nil
+        showUndoBanner = false
+
+        if let email = pendingDeleteEmail, let index = pendingDeleteIndex {
+            let insertAt = min(index, emails.count)
+            emails.insert(email, at: insertAt)
+        }
+        pendingDeleteEmail = nil
+        pendingDeleteIndex = nil
+    }
+
+    private func commitPendingDelete() {
+        deleteWorkItem?.cancel()
+        deleteWorkItem = nil
+        showUndoBanner = false
+
+        guard let email = pendingDeleteEmail else { return }
+        pendingDeleteEmail = nil
+        pendingDeleteIndex = nil
+
         Task {
             do {
                 try await GmailService.shared.deleteEmail(id: email.id)
-                await MainActor.run {
-                    self.emails.removeAll { $0.id == email.id }
-                }
             } catch {
                 await MainActor.run {
                     self.error = error.localizedDescription

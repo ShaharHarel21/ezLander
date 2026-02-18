@@ -35,9 +35,11 @@ struct MainPopover: View {
 
     private var headerView: some View {
         HStack {
-            Image(systemName: "brain.head.profile")
-                .font(.title2)
-                .foregroundColor(.warmPrimary)
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 28, height: 28)
+                .cornerRadius(6)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("ezLander")
@@ -60,6 +62,13 @@ struct MainPopover: View {
                     .background(Color.proBadge.opacity(0.15))
                     .cornerRadius(8)
             }
+
+            Button(action: { selectedTab = .settings }) {
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: 14))
+                    .foregroundColor(selectedTab == .settings ? .warmPrimary : .secondary)
+            }
+            .buttonStyle(.plain)
         }
         .padding()
     }
@@ -83,7 +92,6 @@ struct MainPopover: View {
             tabButton(tab: .chat, icon: "bubble.left.and.bubble.right.fill", label: "Chat")
             tabButton(tab: .calendar, icon: "calendar", label: "Calendar")
             tabButton(tab: .email, icon: "envelope.fill", label: "Email")
-            tabButton(tab: .settings, icon: "gearshape.fill", label: "Settings")
         }
         .padding(.vertical, 8)
     }
