@@ -11,6 +11,7 @@ class UpdateService: ObservableObject {
     @Published var releaseNotes: String?
     @Published var downloadProgress: Double = 0
     @Published var isDownloading = false
+    @Published var isInstalling = false
     @Published var error: String?
     @Published var checkedOnce = false
 
@@ -21,7 +22,20 @@ class UpdateService: ObservableObject {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
     }
 
-    private init() {}
+    private init() {
+        cleanupPreviousUpdate()
+    }
+
+    /// Remove leftover backup and temp files from a previous update
+    private func cleanupPreviousUpdate() {
+        let parentDir = Bundle.main.bundleURL.deletingLastPathComponent()
+        let backupURL = parentDir.appendingPathComponent(".EzLander-old.app")
+        try? FileManager.default.removeItem(at: backupURL)
+
+        let updateDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("EzLander-update")
+        try? FileManager.default.removeItem(at: updateDir)
+    }
 
     // MARK: - Check for Updates
     func checkForUpdates() async {
@@ -121,64 +135,105 @@ class UpdateService: ObservableObject {
         }
 
         do {
-            // Download the update
-            let (tempURL, _) = try await URLSession.shared.download(from: downloadURL)
+            // Create a clean temp directory for this update
+            let updateDir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("EzLander-update")
+            try? FileManager.default.removeItem(at: updateDir)
+            try FileManager.default.createDirectory(at: updateDir, withIntermediateDirectories: true)
 
-            // Move to Downloads folder
-            let downloadsURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first!
+            // Download the update file
+            let (tempFileURL, _) = try await URLSession.shared.download(from: downloadURL)
             let fileName = downloadURL.lastPathComponent
-            let destinationURL = downloadsURL.appendingPathComponent(fileName)
-
-            // Remove existing file if present
-            try? FileManager.default.removeItem(at: destinationURL)
-            try FileManager.default.moveItem(at: tempURL, to: destinationURL)
+            let downloadedFile = updateDir.appendingPathComponent(fileName)
+            try? FileManager.default.removeItem(at: downloadedFile)
+            try FileManager.default.moveItem(at: tempFileURL, to: downloadedFile)
 
             await MainActor.run {
-                isDownloading = false
                 downloadProgress = 1.0
+                isDownloading = false
+                isInstalling = true
             }
 
-            // If it's a ZIP, unzip and open
             if fileName.hasSuffix(".zip") {
+                // Unzip
                 let unzipProcess = Process()
                 unzipProcess.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-                unzipProcess.arguments = ["-o", destinationURL.path, "-d", downloadsURL.path]
+                unzipProcess.arguments = ["-o", downloadedFile.path, "-d", updateDir.path]
                 try unzipProcess.run()
                 unzipProcess.waitUntilExit()
 
-                // Open the app location
-                NSWorkspace.shared.selectFile(downloadsURL.appendingPathComponent("EzLander.app").path,
-                                             inFileViewerRootedAtPath: downloadsURL.path)
-
-                // Show instructions
-                await MainActor.run {
-                    showInstallInstructions(appPath: downloadsURL.appendingPathComponent("EzLander.app"))
+                // Find the .app bundle in extracted contents
+                let contents = try FileManager.default.contentsOfDirectory(
+                    at: updateDir, includingPropertiesForKeys: nil)
+                guard let newAppURL = contents.first(where: { $0.pathExtension == "app" }) else {
+                    throw UpdateError.downloadFailed
                 }
+
+                // Replace current app and relaunch
+                try replaceAndRelaunch(with: newAppURL, updateDir: updateDir)
+
             } else if fileName.hasSuffix(".dmg") {
-                // Open the DMG
-                NSWorkspace.shared.open(destinationURL)
+                // DMG: mount and let the user handle it
+                NSWorkspace.shared.open(downloadedFile)
+                await MainActor.run {
+                    isInstalling = false
+                }
+            } else {
+                await MainActor.run {
+                    isInstalling = false
+                    self.error = "Unsupported update format"
+                }
             }
 
         } catch {
             await MainActor.run {
                 isDownloading = false
-                self.error = "Download failed: \(error.localizedDescription)"
+                isInstalling = false
+                self.error = "Update failed: \(error.localizedDescription)"
             }
         }
     }
 
-    // MARK: - Show Install Instructions
-    private func showInstallInstructions(appPath: URL) {
-        let alert = NSAlert()
-        alert.messageText = "Update Downloaded"
-        alert.informativeText = "The new version has been downloaded to your Downloads folder.\n\n1. Quit ezLander\n2. Move the new EzLander.app to Applications (replace existing)\n3. Open the new version"
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: "Quit & Install")
-        alert.addButton(withTitle: "Later")
+    // MARK: - Replace App Bundle and Relaunch
+    private func replaceAndRelaunch(with newAppURL: URL, updateDir: URL) throws {
+        let currentAppURL = Bundle.main.bundleURL
+        let parentDir = currentAppURL.deletingLastPathComponent()
+        let backupURL = parentDir.appendingPathComponent(".EzLander-old.app")
+        let currentPID = ProcessInfo.processInfo.processIdentifier
 
-        let response = alert.runModal()
-        if response == .alertFirstButtonReturn {
-            // Quit the app so user can install
+        // Clean any leftover backup
+        try? FileManager.default.removeItem(at: backupURL)
+
+        // Rename current app to backup (atomic rename, same directory)
+        try FileManager.default.moveItem(at: currentAppURL, to: backupURL)
+
+        do {
+            // Copy new app to the original location
+            try FileManager.default.copyItem(at: newAppURL, to: currentAppURL)
+        } catch {
+            // Rollback: restore from backup
+            try? FileManager.default.moveItem(at: backupURL, to: currentAppURL)
+            throw error
+        }
+
+        // Spawn a relaunch script that waits for this process to exit,
+        // then opens the new app and cleans up
+        let script = """
+        while kill -0 \(currentPID) 2>/dev/null; do sleep 0.2; done
+        open "\(currentAppURL.path)"
+        rm -rf "\(backupURL.path)"
+        rm -rf "\(updateDir.path)"
+        """
+
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/bin/sh")
+        task.arguments = ["-c", script]
+        task.standardOutput = FileHandle.nullDevice
+        task.standardError = FileHandle.nullDevice
+        try task.run()
+
+        // Quit the app — the script will relaunch the new version
+        DispatchQueue.main.async {
             NSApplication.shared.terminate(nil)
         }
     }

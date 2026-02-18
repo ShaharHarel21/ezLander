@@ -18,5 +18,10 @@
     <array>
         <string>Default</string>
     </array>
+    <key>com.apple.security.temporary-exception.files.absolute-path.read-write</key>
+    <array>
+        <string>/Applications/EzLander.app</string>
+        <string>/Applications/.EzLander-old.app</string>
+    </array>
 </dict>
 </plist>

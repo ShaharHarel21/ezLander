@@ -287,8 +287,16 @@ struct SettingsView: View {
                         Text("Downloading...")
                             .font(.caption)
                             .foregroundColor(.secondary)
+                    } else if updateService.isInstalling {
+                        HStack {
+                            ProgressView()
+                                .scaleEffect(0.7)
+                            Text("Installing... app will reopen shortly")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
                     } else {
-                        Button("Download Update") {
+                        Button("Install & Reopen") {
                             Task {
                                 await updateService.downloadAndInstall()
                             }
