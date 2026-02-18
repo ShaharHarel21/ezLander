@@ -182,20 +182,20 @@ struct ToolCallBadge: View {
 
 // MARK: - Typing Indicator
 struct TypingIndicator: View {
-    @State private var animationOffset: CGFloat = 0
+    @State private var animating = false
 
     var body: some View {
         HStack(spacing: 4) {
-            ForEach(0..<3) { index in
+            ForEach(0..<3, id: \.self) { index in
                 Circle()
                     .fill(Color.warmAccent)
                     .frame(width: 8, height: 8)
-                    .offset(y: animationOffset)
+                    .offset(y: animating ? -5 : 0)
                     .animation(
                         Animation.easeInOut(duration: 0.5)
-                            .repeatForever()
+                            .repeatForever(autoreverses: true)
                             .delay(Double(index) * 0.15),
-                        value: animationOffset
+                        value: animating
                     )
             }
         }
@@ -204,7 +204,7 @@ struct TypingIndicator: View {
         .background(Color(NSColor.controlBackgroundColor))
         .cornerRadius(16)
         .onAppear {
-            animationOffset = -5
+            animating = true
         }
     }
 }
@@ -288,8 +288,10 @@ class ChatViewModel: ObservableObject {
                 await MainActor.run {
                     isLoading = false
 
-                    // Check if the response contains an action request
-                    if let action = parseActionFromResponse(response.content) {
+                    // If the AI already executed a tool call (e.g. Claude), don't parse for actions again
+                    if response.toolCall != nil {
+                        messages.append(response)
+                    } else if let action = parseActionFromResponse(response.content, userMessage: text) {
                         pendingAction = action
                         messages.append(ChatMessage(
                             role: .assistant,
@@ -387,14 +389,14 @@ class ChatViewModel: ObservableObject {
     }
 
     // Parse action requests from AI response
-    private func parseActionFromResponse(_ content: String) -> AIAction? {
+    private func parseActionFromResponse(_ content: String, userMessage: String = "") -> AIAction? {
         // Look for action markers in the response
         // Format: [ACTION:type] followed by JSON data
 
         // Check for event creation pattern
         if content.contains("[CREATE_EVENT]") || content.lowercased().contains("i'll create") || content.lowercased().contains("i will create") {
             // Try to parse event details from the response
-            if let eventData = parseEventData(from: content) {
+            if let eventData = parseEventData(from: content, userMessage: userMessage) {
                 return AIAction(
                     type: .createEvent,
                     eventData: eventData,
@@ -417,35 +419,66 @@ class ChatViewModel: ObservableObject {
         return nil
     }
 
-    private func parseEventData(from content: String) -> EventActionData? {
-        var title = "New Event"
+    private func parseEventData(from content: String, userMessage: String = "") -> EventActionData? {
+        var title = ""
         var startDate = Date()
         var endDate = Date().addingTimeInterval(3600)
         let location: String? = nil
         let description: String? = nil
 
-        // Extract title (look for quoted text or "titled" pattern)
-        if let titleMatch = content.range(of: "\"([^\"]+)\"", options: .regularExpression) {
+        // 1. Try to extract title from the AI response text
+        // Look for quoted text first (most reliable)
+        if let titleMatch = content.range(of: "'([^']+)'", options: .regularExpression) {
+            title = String(content[titleMatch]).replacingOccurrences(of: "'", with: "")
+        } else if let titleMatch = content.range(of: "\"([^\"]+)\"", options: .regularExpression) {
             title = String(content[titleMatch]).replacingOccurrences(of: "\"", with: "")
-        } else if let titledMatch = content.range(of: "titled\\s+([^,\\.]+)", options: .regularExpression) {
-            let match = String(content[titledMatch])
-            title = match.replacingOccurrences(of: "titled ", with: "").trimmingCharacters(in: .whitespaces)
-        } else if let calledMatch = content.range(of: "called\\s+([^,\\.]+)", options: .regularExpression) {
-            let match = String(content[calledMatch])
-            title = match.replacingOccurrences(of: "called ", with: "").trimmingCharacters(in: .whitespaces)
         }
+        // Look for "titled X" or "called X"
+        else if let titledMatch = content.range(of: "titled\\s+([^,\\.\\n]+)", options: .regularExpression) {
+            title = String(content[titledMatch]).replacingOccurrences(of: "titled ", with: "").trimmingCharacters(in: .whitespaces)
+        } else if let calledMatch = content.range(of: "called\\s+([^,\\.\\n]+)", options: .regularExpression) {
+            title = String(content[calledMatch]).replacingOccurrences(of: "called ", with: "").trimmingCharacters(in: .whitespaces)
+        }
+        // Look for "create a/an {title} (for|on|at|tomorrow|event)"
+        else if let createMatch = content.range(of: "(?:create|schedule|set up|book|add)\\s+(?:a |an )?(.+?)(?:\\s+(?:for|on|at|tomorrow|today|next|this|event|from)\\b|[,\\.\\n]|$)", options: [.regularExpression, .caseInsensitive]) {
+            let fullMatch = String(content[createMatch])
+            // Extract just the capture group
+            if let regex = try? NSRegularExpression(pattern: "(?:create|schedule|set up|book|add)\\s+(?:a |an )?(.+?)(?:\\s+(?:for|on|at|tomorrow|today|next|this|event|from)\\b|[,\\.\\n]|$)", options: .caseInsensitive) {
+                let nsContent = fullMatch as NSString
+                let results = regex.matches(in: fullMatch, range: NSRange(location: 0, length: nsContent.length))
+                if let match = results.first, match.numberOfRanges > 1 {
+                    title = nsContent.substring(with: match.range(at: 1)).trimmingCharacters(in: .whitespaces)
+                }
+            }
+        }
+
+        // 2. If we still don't have a good title, extract from user message
+        if title.isEmpty || title.lowercased() == "new event" || title.lowercased() == "event" {
+            title = extractTitleFromUserMessage(userMessage)
+        }
+
+        // 3. Final fallback
+        if title.isEmpty {
+            title = "New Event"
+        }
+
+        // Capitalize title
+        title = title.split(separator: " ").map { word in
+            word.prefix(1).uppercased() + word.dropFirst()
+        }.joined(separator: " ")
 
         // Extract time (simplified - look for common patterns)
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "h:mm a"
 
-        if content.lowercased().contains("tomorrow") {
+        if content.lowercased().contains("tomorrow") || userMessage.lowercased().contains("tomorrow") {
             startDate = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
         }
 
-        // Look for time patterns like "at 3pm" or "at 3:00 PM"
-        if let timeMatch = content.range(of: "at\\s+(\\d{1,2}(?::\\d{2})?\\s*(?:am|pm|AM|PM)?)", options: .regularExpression) {
-            let timeStr = String(content[timeMatch]).replacingOccurrences(of: "at ", with: "").trimmingCharacters(in: .whitespaces)
+        // Look for time patterns like "at 3pm" or "at 3:00 PM" in both AI response and user message
+        let textToSearch = content + " " + userMessage
+        if let timeMatch = textToSearch.range(of: "at\\s+(\\d{1,2}(?::\\d{2})?\\s*(?:am|pm|AM|PM)?)", options: .regularExpression) {
+            let timeStr = String(textToSearch[timeMatch]).replacingOccurrences(of: "at ", with: "").trimmingCharacters(in: .whitespaces)
             if let parsedDate = dateFormatter.date(from: timeStr) {
                 let calendar = Calendar.current
                 var components = calendar.dateComponents([.year, .month, .day], from: startDate)
@@ -459,9 +492,9 @@ class ChatViewModel: ObservableObject {
         endDate = startDate.addingTimeInterval(3600) // Default 1 hour
 
         // Look for duration
-        if content.lowercased().contains("2 hour") {
+        if textToSearch.lowercased().contains("2 hour") {
             endDate = startDate.addingTimeInterval(7200)
-        } else if content.lowercased().contains("30 minute") {
+        } else if textToSearch.lowercased().contains("30 minute") {
             endDate = startDate.addingTimeInterval(1800)
         }
 
@@ -472,6 +505,67 @@ class ChatViewModel: ObservableObject {
             location: location,
             description: description
         )
+    }
+
+    private func extractTitleFromUserMessage(_ message: String) -> String {
+        guard !message.isEmpty else { return "" }
+
+        var text = message.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Remove common action phrases
+        let prefixes = [
+            "create a new event for ", "create an event for ", "create event for ",
+            "create a new event called ", "create an event called ",
+            "add a new event for ", "add an event for ",
+            "add a new event called ", "add an event called ",
+            "schedule a ", "schedule an ", "schedule ",
+            "set up a ", "set up an ", "set up ",
+            "book a ", "book an ", "book ",
+            "add a ", "add an ", "add ",
+            "create a ", "create an ", "create ",
+            "new event for ", "new event called ", "new event ",
+            "remind me about ", "remind me to ", "remind me of ",
+            "i have a ", "i have an ", "i have ",
+            "i need a ", "i need an ", "i need to ",
+            "put a ", "put an ", "put ",
+            "make a ", "make an ", "make ",
+            "can you create ", "can you schedule ", "can you add ",
+            "please create ", "please schedule ", "please add ",
+        ]
+
+        let lowerText = text.lowercased()
+        for prefix in prefixes {
+            if lowerText.hasPrefix(prefix) {
+                text = String(text.dropFirst(prefix.count))
+                break
+            }
+        }
+
+        // Remove trailing time/date phrases
+        let timePatterns = [
+            " at \\d{1,2}(:\\d{2})?\\s*(am|pm|AM|PM)?.*$",
+            " on (monday|tuesday|wednesday|thursday|friday|saturday|sunday).*$",
+            " on \\d{1,2}(/|-)\\d{1,2}.*$",
+            " tomorrow.*$",
+            " today.*$",
+            " next (monday|tuesday|wednesday|thursday|friday|saturday|sunday|week|month).*$",
+            " this (monday|tuesday|wednesday|thursday|friday|saturday|sunday|week|month).*$",
+            " for \\d+ (minutes|hours|hour|min).*$",
+            " from \\d{1,2}.*$",
+        ]
+
+        for pattern in timePatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
+                let range = NSRange(text.startIndex..<text.endIndex, in: text)
+                text = regex.stringByReplacingMatches(in: text, range: range, withTemplate: "")
+            }
+        }
+
+        text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: ".,!?"))
+            .trimmingCharacters(in: .whitespaces)
+
+        return text.count >= 2 ? text : ""
     }
 
     private func parseEmailData(from content: String) -> EmailActionData? {
