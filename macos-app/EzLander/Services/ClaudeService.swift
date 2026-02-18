@@ -265,12 +265,16 @@ class ClaudeService {
 
     // MARK: - Tool Handlers
     private func handleCreateCalendarEvent(_ input: [String: Any], userMessage: String = "") async throws -> String {
+        NSLog("ClaudeService: create_calendar_event called with input: \(input)")
+        NSLog("ClaudeService: userMessage: \(userMessage)")
+
         var title = input["title"] as! String
 
         // If the AI gave a generic title, extract a better one from the user's message
         let genericTitles = ["new event", "event", "meeting", "untitled", "calendar event", "new meeting", "new calendar event"]
         if genericTitles.contains(title.lowercased().trimmingCharacters(in: .whitespaces)) && !userMessage.isEmpty {
             title = extractTitleFromMessage(userMessage)
+            NSLog("ClaudeService: Extracted better title: '\(title)'")
         }
         let dateStr = input["date"] as! String
         let timeStr = input["time"] as! String
@@ -525,15 +529,101 @@ class ClaudeService {
     }
 
     private func parseDateTime(date: String, time: String) -> Date {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd HH:mm"
-        return formatter.date(from: "\(date) \(time)") ?? Date()
+        NSLog("ClaudeService: Parsing date='\(date)' time='\(time)'")
+
+        // Parse the date part
+        let parsedDate = parseDate(date)
+
+        // Parse the time part — try multiple formats the AI might use
+        let cleanTime = time.trimmingCharacters(in: .whitespaces)
+        let timeFormats = [
+            "HH:mm",       // 15:00 (24-hour)
+            "H:mm",        // 3:00 (24-hour single digit)
+            "HH:mm:ss",    // 15:00:00
+            "h:mm a",      // 3:00 PM
+            "h:mma",       // 3:00PM
+            "ha",          // 3PM
+            "h a",         // 3 PM
+            "h:mm",        // 3:00 (ambiguous, treat as 24h)
+        ]
+
+        var parsedHour: Int?
+        var parsedMinute: Int = 0
+
+        for format in timeFormats {
+            let formatter = DateFormatter()
+            formatter.dateFormat = format
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            if let parsed = formatter.date(from: cleanTime) {
+                let cal = Calendar.current
+                parsedHour = cal.component(.hour, from: parsed)
+                parsedMinute = cal.component(.minute, from: parsed)
+                NSLog("ClaudeService: Parsed time with format '\(format)' → \(parsedHour!):\(parsedMinute)")
+                break
+            }
+        }
+
+        // Fallback: try to extract numbers manually (e.g. "15", "3pm", "3:30pm")
+        if parsedHour == nil {
+            let lower = cleanTime.lowercased()
+            let isPM = lower.contains("pm")
+            let isAM = lower.contains("am")
+            let digits = lower.replacingOccurrences(of: "[^0-9:]", with: "", options: .regularExpression)
+
+            let parts = digits.split(separator: ":")
+            if let hour = Int(parts.first ?? "") {
+                var h = hour
+                if isPM && h < 12 { h += 12 }
+                if isAM && h == 12 { h = 0 }
+                parsedHour = h
+                parsedMinute = parts.count > 1 ? (Int(parts[1]) ?? 0) : 0
+                NSLog("ClaudeService: Manual time parse → \(parsedHour!):\(parsedMinute)")
+            }
+        }
+
+        guard let hour = parsedHour else {
+            NSLog("ClaudeService: Failed to parse time '\(time)', using noon")
+            // Use noon as fallback instead of current time
+            let cal = Calendar.current
+            var components = cal.dateComponents([.year, .month, .day], from: parsedDate)
+            components.hour = 12
+            components.minute = 0
+            return cal.date(from: components) ?? parsedDate
+        }
+
+        let cal = Calendar.current
+        var components = cal.dateComponents([.year, .month, .day], from: parsedDate)
+        components.hour = hour
+        components.minute = parsedMinute
+        let result = cal.date(from: components) ?? parsedDate
+        NSLog("ClaudeService: Final parsed datetime: \(result)")
+        return result
     }
 
     private func parseDate(_ dateString: String) -> Date {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter.date(from: dateString) ?? Date()
+        let clean = dateString.trimmingCharacters(in: .whitespaces)
+
+        // Try multiple date formats
+        let formats = [
+            "yyyy-MM-dd",          // 2026-02-19
+            "MM/dd/yyyy",          // 02/19/2026
+            "dd/MM/yyyy",          // 19/02/2026
+            "MMMM d, yyyy",       // February 19, 2026
+            "MMM d, yyyy",        // Feb 19, 2026
+            "yyyy-MM-dd'T'HH:mm", // 2026-02-19T15:00
+        ]
+
+        for format in formats {
+            let formatter = DateFormatter()
+            formatter.dateFormat = format
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            if let date = formatter.date(from: clean) {
+                return date
+            }
+        }
+
+        NSLog("ClaudeService: Failed to parse date '\(dateString)', using today")
+        return Date()
     }
 
     // MARK: - System Prompt

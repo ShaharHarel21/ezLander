@@ -943,8 +943,8 @@ struct HTMLEmailBodyView: NSViewRepresentable {
                     }
                 }
                 img {
-                    max-width: 100%;
-                    height: auto;
+                    max-width: 100% !important;
+                    height: auto !important;
                 }
                 a {
                     color: #FF6B6B;
@@ -971,17 +971,46 @@ struct HTMLEmailBodyView: NSViewRepresentable {
                         color: #aaa;
                     }
                 }
+                /* Strip borders from email layout tables */
                 table {
+                    border: none !important;
                     border-collapse: collapse;
-                    max-width: 100%;
+                    max-width: 100% !important;
+                    width: auto !important;
                 }
                 td, th {
-                    padding: 6px 12px;
-                    border: 1px solid #ddd;
+                    border: none !important;
+                    padding: 0;
+                }
+                /* Strip borders and outlines from all common layout elements */
+                div, span, p, table, tr, td, th, tbody, thead, tfoot {
+                    border-color: transparent !important;
+                    outline: none !important;
+                }
+                /* Remove fixed widths that cause horizontal overflow */
+                table, td, th, div {
+                    max-width: 100% !important;
+                }
+                /* Tame inline styles that set explicit borders */
+                [style*="border"] {
+                    border-color: transparent !important;
+                }
+                [style*="border-top"], [style*="border-bottom"],
+                [style*="border-left"], [style*="border-right"] {
+                    border-color: transparent !important;
+                }
+                /* Keep hr lines subtle */
+                hr {
+                    border: none;
+                    border-top: 1px solid #e0e0e0;
+                    margin: 12px 0;
                 }
                 @media (prefers-color-scheme: dark) {
-                    td, th {
-                        border-color: #444;
+                    hr {
+                        border-top-color: #444;
+                    }
+                    [style*="border"] {
+                        border-color: transparent !important;
                     }
                 }
             </style>

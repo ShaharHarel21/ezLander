@@ -467,35 +467,96 @@ class ChatViewModel: ObservableObject {
             word.prefix(1).uppercased() + word.dropFirst()
         }.joined(separator: " ")
 
-        // Extract time (simplified - look for common patterns)
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "h:mm a"
+        // Parse date and time from both AI response and user message
+        let textToSearch = content + " " + userMessage
+        let lowerText = textToSearch.lowercased()
+        let cal = Calendar.current
 
-        if content.lowercased().contains("tomorrow") || userMessage.lowercased().contains("tomorrow") {
-            startDate = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
+        // --- Date parsing ---
+        if lowerText.contains("tomorrow") {
+            startDate = cal.date(byAdding: .day, value: 1, to: Date()) ?? Date()
+        } else if lowerText.contains("today") {
+            startDate = Date()
+        } else {
+            // Check for day names
+            let dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]
+            for (index, dayName) in dayNames.enumerated() {
+                let weekdayTarget = index + 1 // Calendar weekday is 1-based (Sunday=1)
+                if lowerText.contains("next \(dayName)") {
+                    var comps = DateComponents()
+                    comps.weekday = weekdayTarget
+                    if let nextDate = cal.nextDate(after: Date(), matching: comps, matchingPolicy: .nextTime) {
+                        startDate = nextDate
+                    }
+                    break
+                } else if lowerText.contains("this \(dayName)") || lowerText.contains("on \(dayName)") || lowerText.contains(dayName) {
+                    var comps = DateComponents()
+                    comps.weekday = weekdayTarget
+                    if let nextDate = cal.nextDate(after: Date(), matching: comps, matchingPolicy: .nextTime) {
+                        startDate = nextDate
+                    }
+                    break
+                }
+            }
         }
 
-        // Look for time patterns like "at 3pm" or "at 3:00 PM" in both AI response and user message
-        let textToSearch = content + " " + userMessage
-        if let timeMatch = textToSearch.range(of: "at\\s+(\\d{1,2}(?::\\d{2})?\\s*(?:am|pm|AM|PM)?)", options: .regularExpression) {
-            let timeStr = String(textToSearch[timeMatch]).replacingOccurrences(of: "at ", with: "").trimmingCharacters(in: .whitespaces)
-            if let parsedDate = dateFormatter.date(from: timeStr) {
-                let calendar = Calendar.current
-                var components = calendar.dateComponents([.year, .month, .day], from: startDate)
-                let timeComponents = calendar.dateComponents([.hour, .minute], from: parsedDate)
-                components.hour = timeComponents.hour
-                components.minute = timeComponents.minute
-                startDate = calendar.date(from: components) ?? startDate
+        // --- Time parsing ---
+        // Match patterns: "at 3pm", "at 3:00 PM", "at 15:00", "3:30pm", etc.
+        let timePatterns = [
+            "at\\s+(\\d{1,2}:\\d{2}\\s*(?:am|pm))",  // at 3:00 pm
+            "at\\s+(\\d{1,2}\\s*(?:am|pm))",           // at 3pm
+            "at\\s+(\\d{1,2}:\\d{2})",                  // at 15:00
+            "(\\d{1,2}:\\d{2}\\s*(?:am|pm))",           // 3:00pm (no "at")
+            "(\\d{1,2}\\s*(?:am|pm))",                  // 3pm (no "at")
+        ]
+
+        var parsedHour: Int?
+        var parsedMinute: Int = 0
+
+        for pattern in timePatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
+                let nsText = textToSearch as NSString
+                let results = regex.matches(in: textToSearch, range: NSRange(location: 0, length: nsText.length))
+                if let match = results.first, match.numberOfRanges > 1 {
+                    let timeStr = nsText.substring(with: match.range(at: 1)).trimmingCharacters(in: .whitespaces)
+                    let lower = timeStr.lowercased()
+                    let isPM = lower.contains("pm")
+                    let isAM = lower.contains("am")
+                    let digits = lower.replacingOccurrences(of: "[^0-9:]", with: "", options: .regularExpression)
+                    let parts = digits.split(separator: ":")
+                    if let hour = Int(parts.first ?? "") {
+                        var h = hour
+                        if isPM && h < 12 { h += 12 }
+                        if isAM && h == 12 { h = 0 }
+                        if !isPM && !isAM && h <= 12 { h = hour } // ambiguous, keep as-is
+                        parsedHour = h
+                        parsedMinute = parts.count > 1 ? (Int(parts[1]) ?? 0) : 0
+                    }
+                    break
+                }
             }
+        }
+
+        if let hour = parsedHour {
+            var components = cal.dateComponents([.year, .month, .day], from: startDate)
+            components.hour = hour
+            components.minute = parsedMinute
+            startDate = cal.date(from: components) ?? startDate
         }
 
         endDate = startDate.addingTimeInterval(3600) // Default 1 hour
 
-        // Look for duration
-        if textToSearch.lowercased().contains("2 hour") {
-            endDate = startDate.addingTimeInterval(7200)
-        } else if textToSearch.lowercased().contains("30 minute") {
-            endDate = startDate.addingTimeInterval(1800)
+        // --- Duration parsing ---
+        if let durationMatch = lowerText.range(of: "(\\d+)\\s*(?:hour|hr)", options: .regularExpression) {
+            let numStr = String(lowerText[durationMatch]).replacingOccurrences(of: "[^0-9]", with: "", options: .regularExpression)
+            if let hours = Int(numStr) {
+                endDate = startDate.addingTimeInterval(TimeInterval(hours * 3600))
+            }
+        } else if let durationMatch = lowerText.range(of: "(\\d+)\\s*(?:minute|min)", options: .regularExpression) {
+            let numStr = String(lowerText[durationMatch]).replacingOccurrences(of: "[^0-9]", with: "", options: .regularExpression)
+            if let mins = Int(numStr) {
+                endDate = startDate.addingTimeInterval(TimeInterval(mins * 60))
+            }
         }
 
         return EventActionData(
