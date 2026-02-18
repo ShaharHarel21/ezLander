@@ -151,6 +151,13 @@ class GoogleCalendarService {
 
     // MARK: - Create Event
     func createEvent(_ event: CalendarEvent) async throws {
+        NSLog("GoogleCalendarService: Creating event '\(event.title)' from \(event.startDate) to \(event.endDate)")
+
+        guard oauthService.isSignedInWithGoogle else {
+            NSLog("GoogleCalendarService: Not signed in with Google!")
+            throw GoogleCalendarError.notAuthenticated
+        }
+
         let accessToken = try await oauthService.getValidAccessToken()
 
         var conferenceDataForCreate: Int? = nil
@@ -192,19 +199,29 @@ class GoogleCalendarService {
 
         request.httpBody = try JSONEncoder().encode(googleEvent)
 
-        let (_, response) = try await URLSession.shared.data(for: request)
+        if let bodyString = String(data: request.httpBody!, encoding: .utf8) {
+            NSLog("GoogleCalendarService: Request body: \(bodyString)")
+        }
+
+        let (data, response) = try await URLSession.shared.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw GoogleCalendarError.invalidResponse
         }
 
         guard httpResponse.statusCode == 200 || httpResponse.statusCode == 201 else {
-            throw GoogleCalendarError.apiError(statusCode: httpResponse.statusCode)
+            let responseBody = String(data: data, encoding: .utf8) ?? "No response body"
+            NSLog("GoogleCalendarService: Create event failed with status \(httpResponse.statusCode): \(responseBody)")
+            throw GoogleCalendarError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: responseBody)
         }
+
+        NSLog("GoogleCalendarService: Event created successfully")
     }
 
     // MARK: - Update Event
     func updateEvent(_ event: CalendarEvent) async throws {
+        NSLog("GoogleCalendarService: Updating event '\(event.title)' (\(event.id))")
+
         let accessToken = try await oauthService.getValidAccessToken()
 
         let url = URL(string: "\(baseURL)/calendars/primary/events/\(event.id)")!
@@ -226,19 +243,25 @@ class GoogleCalendarService {
 
         request.httpBody = try JSONEncoder().encode(googleEvent)
 
-        let (_, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await URLSession.shared.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw GoogleCalendarError.invalidResponse
         }
 
         guard httpResponse.statusCode == 200 else {
-            throw GoogleCalendarError.apiError(statusCode: httpResponse.statusCode)
+            let responseBody = String(data: data, encoding: .utf8) ?? "No response body"
+            NSLog("GoogleCalendarService: Update event failed with status \(httpResponse.statusCode): \(responseBody)")
+            throw GoogleCalendarError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: responseBody)
         }
+
+        NSLog("GoogleCalendarService: Event updated successfully")
     }
 
     // MARK: - Delete Event
     func deleteEvent(id: String) async throws {
+        NSLog("GoogleCalendarService: Deleting event \(id)")
+
         let accessToken = try await oauthService.getValidAccessToken()
 
         let url = URL(string: "\(baseURL)/calendars/primary/events/\(id)")!
@@ -247,15 +270,19 @@ class GoogleCalendarService {
         request.httpMethod = "DELETE"
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
-        let (_, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await URLSession.shared.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw GoogleCalendarError.invalidResponse
         }
 
         guard httpResponse.statusCode == 204 || httpResponse.statusCode == 200 else {
-            throw GoogleCalendarError.apiError(statusCode: httpResponse.statusCode)
+            let responseBody = String(data: data, encoding: .utf8) ?? "No response body"
+            NSLog("GoogleCalendarService: Delete event failed with status \(httpResponse.statusCode): \(responseBody)")
+            throw GoogleCalendarError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: responseBody)
         }
+
+        NSLog("GoogleCalendarService: Event deleted successfully")
     }
 
     // MARK: - List All Calendars
