@@ -24,7 +24,8 @@ class MenuBarController: NSObject {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "brain.head.profile", accessibilityDescription: "ezLander")
+            button.image = NSImage(named: "MenuBarIcon")
+            button.image?.isTemplate = true
             button.action = #selector(handleClick)
             button.target = self
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
