@@ -168,6 +168,9 @@ class OAuthService: NSObject {
 
         UserDefaults.standard.set(userInfo.email, forKey: "user_email")
         UserDefaults.standard.set(userInfo.name, forKey: "user_name")
+        if let picture = userInfo.picture {
+            UserDefaults.standard.set(picture, forKey: "user_picture")
+        }
     }
 
     // MARK: - Refresh Token
@@ -231,6 +234,7 @@ class OAuthService: NSObject {
         // Clear user info
         UserDefaults.standard.removeObject(forKey: "user_email")
         UserDefaults.standard.removeObject(forKey: "user_name")
+        UserDefaults.standard.removeObject(forKey: "user_picture")
     }
 
     // MARK: - Verify Apple Sign In Status

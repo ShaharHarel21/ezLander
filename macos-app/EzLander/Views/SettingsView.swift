@@ -53,15 +53,33 @@ struct SettingsView: View {
     // MARK: - Signed In View
     private var signedInView: some View {
         HStack {
-            // Profile picture placeholder
-            Circle()
-                .fill(Color.warmPrimary.opacity(0.15))
+            // Profile picture
+            if let pictureURL = viewModel.userPicture, let url = URL(string: pictureURL) {
+                AsyncImage(url: url) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                } placeholder: {
+                    Circle()
+                        .fill(Color.warmPrimary.opacity(0.15))
+                        .overlay(
+                            Text(String(viewModel.userName.prefix(1)).uppercased())
+                                .font(.headline)
+                                .foregroundColor(.warmPrimary)
+                        )
+                }
                 .frame(width: 40, height: 40)
-                .overlay(
-                    Text(String(viewModel.userName.prefix(1)).uppercased())
-                        .font(.headline)
-                        .foregroundColor(.warmPrimary)
-                )
+                .clipShape(Circle())
+            } else {
+                Circle()
+                    .fill(Color.warmPrimary.opacity(0.15))
+                    .frame(width: 40, height: 40)
+                    .overlay(
+                        Text(String(viewModel.userName.prefix(1)).uppercased())
+                            .font(.headline)
+                            .foregroundColor(.warmPrimary)
+                    )
+            }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("Hi, \(viewModel.userName)!")
@@ -432,6 +450,7 @@ class SettingsViewModel: ObservableObject {
     @Published var isSignedIn: Bool = false
     @Published var userEmail: String = ""
     @Published var userName: String = ""
+    @Published var userPicture: String? = nil
     @Published var subscriptionStatus: SubscriptionStatus = .none
     @Published var googleCalendarConnected: Bool = false
     @Published var appleCalendarConnected: Bool = false
@@ -475,6 +494,7 @@ class SettingsViewModel: ObservableObject {
         // Load user info from UserDefaults
         userEmail = UserDefaults.standard.string(forKey: "user_email") ?? ""
         userName = UserDefaults.standard.string(forKey: "user_name") ?? ""
+        userPicture = UserDefaults.standard.string(forKey: "user_picture")
 
         // Check if signed in via Google or Apple
         isSignedIn = OAuthService.shared.isSignedIn
