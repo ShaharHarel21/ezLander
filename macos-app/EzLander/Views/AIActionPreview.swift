@@ -87,7 +87,7 @@ struct AIActionPreviewCard: View {
             HStack(spacing: 8) {
                 Image(systemName: action.type.icon)
                     .font(.title3)
-                    .foregroundColor(.accentColor)
+                    .foregroundColor(.warmAccent)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(action.type.title)
@@ -132,7 +132,7 @@ struct AIActionPreviewCard: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(action.type.isDestructive ? .red : .accentColor)
+                .tint(action.type.isDestructive ? .red : .warmPrimary)
                 .disabled(isProcessing)
             }
         }
@@ -141,7 +141,7 @@ struct AIActionPreviewCard: View {
         .cornerRadius(12)
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.accentColor.opacity(0.3), lineWidth: 1)
+                .stroke(Color.warmPrimary.opacity(0.3), lineWidth: 1)
         )
     }
 

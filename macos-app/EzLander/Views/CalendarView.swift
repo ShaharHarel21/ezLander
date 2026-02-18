@@ -17,16 +17,20 @@ struct CalendarView: View {
             viewModeToggle
 
             // Calendar content
-            if viewModel.viewMode == .month {
+            switch viewModel.viewMode {
+            case .month:
                 monthView
-            } else {
+            case .week:
                 weekView
+            case .day:
+                dayView
             }
 
-            Divider()
-
-            // Selected day events
-            selectedDayEvents
+            // Selected day events (hidden in day view since events are shown inline)
+            if viewModel.viewMode != .day {
+                Divider()
+                selectedDayEvents
+            }
         }
         .sheet(isPresented: $showingAddEvent) {
             EventEditorView(
@@ -111,6 +115,7 @@ struct CalendarView: View {
         Picker("View", selection: $viewModel.viewMode) {
             Text("Month").tag(CalendarViewMode.month)
             Text("Week").tag(CalendarViewMode.week)
+            Text("Day").tag(CalendarViewMode.day)
         }
         .pickerStyle(.segmented)
         .padding(.horizontal)
@@ -163,11 +168,11 @@ struct CalendarView: View {
                             .foregroundColor(.secondary)
                         Text(viewModel.dayNumber(date))
                             .font(.system(size: 14, weight: viewModel.isSameDay(date, Date()) ? .bold : .regular))
-                            .foregroundColor(viewModel.isSameDay(date, Date()) ? .accentColor : .primary)
+                            .foregroundColor(viewModel.isSameDay(date, Date()) ? .warmPrimary : .primary)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 4)
-                    .background(viewModel.isSameDay(date, viewModel.selectedDate) ? Color.accentColor.opacity(0.1) : Color.clear)
+                    .background(viewModel.isSameDay(date, viewModel.selectedDate) ? Color.warmPrimary.opacity(0.1) : Color.clear)
                     .cornerRadius(4)
                     .onTapGesture {
                         viewModel.selectDate(date)
@@ -196,6 +201,125 @@ struct CalendarView: View {
                 .padding(.horizontal, 4)
             }
         }
+    }
+
+    // MARK: - Day View
+    private var dayView: some View {
+        let hourHeight: CGFloat = 52
+        let totalHeight: CGFloat = hourHeight * 24
+        let allDayEvents = viewModel.selectedDayEvents.filter { $0.isAllDay }
+
+        return VStack(spacing: 0) {
+            // All-day events section
+            if !allDayEvents.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("All Day")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .padding(.leading, 50)
+
+                    ForEach(allDayEvents, id: \.id) { event in
+                        HStack(spacing: 6) {
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(Color.warmAccent)
+                                .frame(width: 3, height: 16)
+                            Text(event.title)
+                                .font(.system(size: 11, weight: .medium))
+                                .lineLimit(1)
+                        }
+                        .padding(.leading, 50)
+                        .padding(.trailing, 8)
+                        .onTapGesture { selectedEvent = event }
+                    }
+                }
+                .padding(.vertical, 6)
+
+                Divider()
+            }
+
+            // Timeline
+            ScrollViewReader { proxy in
+                ScrollView {
+                    ZStack(alignment: .topLeading) {
+                        // Hour grid lines and labels
+                        VStack(spacing: 0) {
+                            ForEach(0..<24, id: \.self) { hour in
+                                HStack(alignment: .top, spacing: 4) {
+                                    Text(hourLabel(hour))
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.secondary)
+                                        .frame(width: 42, alignment: .trailing)
+
+                                    VStack(spacing: 0) {
+                                        Divider()
+                                        Spacer()
+                                    }
+                                }
+                                .frame(height: hourHeight)
+                                .id(hour)
+                            }
+                        }
+
+                        // Events overlay
+                        ForEach(viewModel.selectedDayEvents.filter { !$0.isAllDay }, id: \.id) { event in
+                            let yOffset = yPositionForTime(event.startDate, hourHeight: hourHeight)
+                            let eventHeight = max(hourHeight / 2, eventHeightForDuration(event, hourHeight: hourHeight))
+
+                            DayEventBlock(event: event) {
+                                selectedEvent = event
+                            }
+                            .frame(height: eventHeight)
+                            .padding(.leading, 50)
+                            .padding(.trailing, 8)
+                            .offset(y: yOffset)
+                        }
+
+                        // Current time indicator
+                        if viewModel.isSameDay(viewModel.selectedDate, viewModel.currentTime) {
+                            let timeY = yPositionForTime(viewModel.currentTime, hourHeight: hourHeight)
+                            CurrentTimeIndicator()
+                                .offset(y: timeY)
+                        }
+                    }
+                    .frame(height: totalHeight)
+                }
+                .onAppear {
+                    scrollToRelevantHour(proxy: proxy)
+                }
+                .onChange(of: viewModel.selectedDate) { _ in
+                    scrollToRelevantHour(proxy: proxy)
+                }
+            }
+        }
+    }
+
+    private func scrollToRelevantHour(proxy: ScrollViewProxy) {
+        let scrollHour: Int
+        if viewModel.isSameDay(viewModel.selectedDate, Date()) {
+            scrollHour = max(0, Calendar.current.component(.hour, from: Date()) - 1)
+        } else {
+            scrollHour = 8
+        }
+        proxy.scrollTo(scrollHour, anchor: .top)
+    }
+
+    private func hourLabel(_ hour: Int) -> String {
+        if hour == 0 { return "12 AM" }
+        if hour < 12 { return "\(hour) AM" }
+        if hour == 12 { return "12 PM" }
+        return "\(hour - 12) PM"
+    }
+
+    private func yPositionForTime(_ date: Date, hourHeight: CGFloat) -> CGFloat {
+        let cal = Calendar.current
+        let hour = cal.component(.hour, from: date)
+        let minute = cal.component(.minute, from: date)
+        return CGFloat(hour) * hourHeight + CGFloat(minute) / 60.0 * hourHeight
+    }
+
+    private func eventHeightForDuration(_ event: CalendarEvent, hourHeight: CGFloat) -> CGFloat {
+        let durationHours = event.duration / 3600.0
+        return CGFloat(durationHours) * hourHeight
     }
 
     // MARK: - Selected Day Events
@@ -295,7 +419,7 @@ struct DayCell: View {
             HStack(spacing: 2) {
                 ForEach(0..<min(eventCount, 3), id: \.self) { _ in
                     Circle()
-                        .fill(isSelected ? Color.white.opacity(0.8) : Color.accentColor)
+                        .fill(isSelected ? Color.white.opacity(0.8) : Color.eventDot)
                         .frame(width: 4, height: 4)
                 }
             }
@@ -318,17 +442,17 @@ struct DayCell: View {
             return .white
         }
         if isToday {
-            return .accentColor
+            return .warmPrimary
         }
         return .primary
     }
 
     private var backgroundColor: Color {
         if isSelected {
-            return .accentColor
+            return .warmPrimary
         }
         if isToday {
-            return .accentColor.opacity(0.1)
+            return .warmPrimary.opacity(0.1)
         }
         return .clear
     }
@@ -348,7 +472,7 @@ struct EventRow: View {
     var body: some View {
         HStack(spacing: 8) {
             RoundedRectangle(cornerRadius: 2)
-                .fill(Color.accentColor)
+                .fill(Color.warmAccent)
                 .frame(width: 3)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -357,9 +481,15 @@ struct EventRow: View {
                     .lineLimit(1)
 
                 HStack(spacing: 4) {
-                    Text(timeFormatter.string(from: event.startDate))
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    if event.isAllDay {
+                        Text("All Day")
+                            .font(.caption)
+                            .foregroundColor(.warmPrimary)
+                    } else {
+                        Text(timeFormatter.string(from: event.startDate))
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
 
                     if let location = event.location, !location.isEmpty {
                         Text("•")
@@ -402,7 +532,7 @@ struct WeekEventRow: View {
     var body: some View {
         HStack(spacing: 8) {
             RoundedRectangle(cornerRadius: 2)
-                .fill(Color.accentColor)
+                .fill(Color.warmAccent)
                 .frame(width: 3)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -424,6 +554,68 @@ struct WeekEventRow: View {
         .onTapGesture {
             onTap()
         }
+    }
+}
+
+// MARK: - Current Time Indicator
+struct CurrentTimeIndicator: View {
+    var body: some View {
+        HStack(spacing: 0) {
+            Circle()
+                .fill(Color.red)
+                .frame(width: 8, height: 8)
+                .padding(.leading, 42)
+
+            Rectangle()
+                .fill(Color.red)
+                .frame(height: 1)
+        }
+    }
+}
+
+// MARK: - Day Event Block
+struct DayEventBlock: View {
+    let event: CalendarEvent
+    let onTap: () -> Void
+
+    private let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.timeStyle = .short
+        return f
+    }()
+
+    var body: some View {
+        HStack(spacing: 0) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(Color.warmAccent)
+                .frame(width: 3)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(event.title)
+                    .font(.system(size: 11, weight: .medium))
+                    .lineLimit(1)
+
+                Text("\(timeFormatter.string(from: event.startDate)) – \(timeFormatter.string(from: event.endDate))")
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+
+                if let location = event.location, !location.isEmpty {
+                    Text(location)
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            .padding(.leading, 6)
+            .padding(.vertical, 4)
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+        .background(Color.warmPrimary.opacity(0.12))
+        .cornerRadius(4)
+        .onTapGesture { onTap() }
     }
 }
 
@@ -539,6 +731,7 @@ struct EventEditorView: View {
 enum CalendarViewMode {
     case month
     case week
+    case day
 }
 
 class CalendarViewModel: ObservableObject {
@@ -551,15 +744,30 @@ class CalendarViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var isConnected = false
     @Published var error: String?
+    @Published var currentTime: Date = Date()
 
     private let calendar = Calendar.current
     private var hasLoadedOnce = false
+    private var timeTimer: Timer?
 
     // Cache for event counts per day
     private var eventCountCache: [String: Int] = [:]
 
     init() {
         checkConnection()
+        startTimeTimer()
+    }
+
+    deinit {
+        timeTimer?.invalidate()
+    }
+
+    private func startTimeTimer() {
+        timeTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            DispatchQueue.main.async {
+                self?.currentTime = Date()
+            }
+        }
     }
 
     func onAppear() {
@@ -591,8 +799,17 @@ class CalendarViewModel: ObservableObject {
 
     var headerTitle: String {
         let formatter = DateFormatter()
-        formatter.dateFormat = viewMode == .month ? "MMMM yyyy" : "'Week of' MMM d"
-        return formatter.string(from: currentMonth)
+        switch viewMode {
+        case .month:
+            formatter.dateFormat = "MMMM yyyy"
+            return formatter.string(from: currentMonth)
+        case .week:
+            formatter.dateFormat = "'Week of' MMM d"
+            return formatter.string(from: currentMonth)
+        case .day:
+            formatter.dateFormat = "EEEE, MMM d"
+            return formatter.string(from: selectedDate)
+        }
     }
 
     var selectedDateFormatted: String {
@@ -667,16 +884,14 @@ class CalendarViewModel: ObservableObject {
     }
 
     func eventsForDate(_ date: Date) -> [CalendarEvent] {
-        let targetYear = calendar.component(.year, from: date)
-        let targetMonth = calendar.component(.month, from: date)
-        let targetDay = calendar.component(.day, from: date)
+        guard let dayStart = calendar.dateInterval(of: .day, for: date) else {
+            return []
+        }
+        let dayEnd = dayStart.end
 
         let matching = events.filter { event in
-            let eventYear = calendar.component(.year, from: event.startDate)
-            let eventMonth = calendar.component(.month, from: event.startDate)
-            let eventDay = calendar.component(.day, from: event.startDate)
-
-            return eventYear == targetYear && eventMonth == targetMonth && eventDay == targetDay
+            // Event overlaps with this day if it starts before day ends AND ends after day starts
+            return event.startDate < dayEnd && event.endDate > dayStart.start
         }
         return matching.sorted { $0.startDate < $1.startDate }
     }
@@ -713,20 +928,28 @@ class CalendarViewModel: ObservableObject {
 
     // MARK: - Navigation
     func previousPeriod() {
-        if viewMode == .month {
+        switch viewMode {
+        case .month:
             currentMonth = calendar.date(byAdding: .month, value: -1, to: currentMonth) ?? currentMonth
-        } else {
+        case .week:
             selectedDate = calendar.date(byAdding: .weekOfYear, value: -1, to: selectedDate) ?? selectedDate
+            currentMonth = selectedDate
+        case .day:
+            selectedDate = calendar.date(byAdding: .day, value: -1, to: selectedDate) ?? selectedDate
             currentMonth = selectedDate
         }
         loadEvents()
     }
 
     func nextPeriod() {
-        if viewMode == .month {
+        switch viewMode {
+        case .month:
             currentMonth = calendar.date(byAdding: .month, value: 1, to: currentMonth) ?? currentMonth
-        } else {
+        case .week:
             selectedDate = calendar.date(byAdding: .weekOfYear, value: 1, to: selectedDate) ?? selectedDate
+            currentMonth = selectedDate
+        case .day:
+            selectedDate = calendar.date(byAdding: .day, value: 1, to: selectedDate) ?? selectedDate
             currentMonth = selectedDate
         }
         loadEvents()

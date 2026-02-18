@@ -37,7 +37,7 @@ struct MainPopover: View {
         HStack {
             Image(systemName: "brain.head.profile")
                 .font(.title2)
-                .foregroundColor(.accentColor)
+                .foregroundColor(.warmPrimary)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("ezLander")
@@ -54,10 +54,10 @@ struct MainPopover: View {
             if viewModel.isSubscribed {
                 Label("Pro", systemImage: "crown.fill")
                     .font(.caption)
-                    .foregroundColor(.yellow)
+                    .foregroundColor(.proBadge)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(Color.yellow.opacity(0.2))
+                    .background(Color.proBadge.opacity(0.15))
                     .cornerRadius(8)
             }
         }
@@ -97,7 +97,7 @@ struct MainPopover: View {
                     .font(.caption2)
             }
             .frame(maxWidth: .infinity)
-            .foregroundColor(selectedTab == tab ? .accentColor : .secondary)
+            .foregroundColor(selectedTab == tab ? .warmPrimary : .secondary)
         }
         .buttonStyle(.plain)
     }

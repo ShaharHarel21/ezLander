@@ -171,6 +171,9 @@ export default function Pricing() {
               >
                 {plan.cta}
               </Link>
+              <p className={`mt-3 text-xs text-center ${plan.popular ? 'text-white/70' : 'text-gray-500 dark:text-gray-400'}`}>
+                Cancel anytime. 30-day money-back guarantee.
+              </p>
             </motion.div>
           ))}
         </div>

@@ -40,14 +40,14 @@ class ClaudeService {
     private let tools: [[String: Any]] = [
         [
             "name": "create_calendar_event",
-            "description": "Create a new calendar event",
+            "description": "Create a new calendar event. Extract a descriptive, specific title from the user's message — never use generic titles like 'New Event' or 'Event'.",
             "input_schema": [
                 "type": "object",
                 "properties": [
-                    "title": ["type": "string", "description": "Event title"],
+                    "title": ["type": "string", "description": "A descriptive event title extracted from the user's message. Examples: 'Dentist Appointment', 'Team Standup Meeting', 'Lunch with Sarah', 'Flight to NYC'. Never use generic titles like 'New Event'."],
                     "date": ["type": "string", "description": "Event date in YYYY-MM-DD format"],
                     "time": ["type": "string", "description": "Event start time in HH:MM format (24-hour)"],
-                    "duration": ["type": "integer", "description": "Duration in minutes"],
+                    "duration": ["type": "integer", "description": "Duration in minutes (default 60)"],
                     "calendar_type": ["type": "string", "enum": ["google", "apple"], "description": "Which calendar to use"]
                 ],
                 "required": ["title", "date", "time"]
@@ -370,8 +370,18 @@ class ClaudeService {
 
     // MARK: - System Prompt
     private var systemPrompt: String {
-        """
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let today = dateFormatter.string(from: Date())
+
+        let calendar = Calendar.current
+        let weekday = calendar.component(.weekday, from: Date())
+        let weekdayName = DateFormatter().weekdaySymbols[weekday - 1]
+
+        return """
         You are ezLander, a helpful AI assistant integrated into a macOS menu bar app. You help users manage their calendar and email.
+
+        Today is \(weekdayName), \(today).
 
         You have access to the following tools:
         - create_calendar_event: Create new calendar events
@@ -380,10 +390,21 @@ class ClaudeService {
         - draft_email: Create a draft email for user review
         - search_emails: Search through emails
 
-        Guidelines:
+        IMPORTANT — Creating calendar events:
+        - Always extract a specific, descriptive title from the user's message. NEVER use generic titles like "New Event", "Event", or "Meeting".
+        - Examples of good title extraction:
+          - User says "schedule a dentist appointment tomorrow at 3pm" → title: "Dentist Appointment"
+          - User says "remind me about the team standup at 9am" → title: "Team Standup"
+          - User says "add lunch with Sarah on Friday" → title: "Lunch with Sarah"
+          - User says "I have a flight to NYC next Monday at 6am" → title: "Flight to NYC"
+          - User says "book a haircut for Saturday 2pm" → title: "Haircut"
+        - Resolve relative dates like "tomorrow", "next Monday", "this Friday" using today's date.
+        - If the user doesn't specify a duration, default to 60 minutes. Use shorter durations for quick things (haircut: 30min) and longer for things like flights.
+        - If the date or time is ambiguous, ask for clarification before creating the event.
+
+        General guidelines:
         - Be concise and helpful
         - Always confirm before sending emails
-        - When creating events, clarify date/time if ambiguous
         - Format dates and times in a human-readable way
         - If you don't have enough information, ask for clarification
         """

@@ -69,7 +69,7 @@ struct ShortcutRow: View {
         HStack(spacing: 12) {
             Image(systemName: shortcut.action.icon)
                 .frame(width: 20)
-                .foregroundColor(.accentColor)
+                .foregroundColor(.warmPrimary)
 
             Text(shortcut.action.displayName)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -110,15 +110,15 @@ struct KeyRecorderView: View {
         HStack(spacing: 8) {
             Text(modifiersString)
                 .font(.system(.body, design: .monospaced))
-                .foregroundColor(.accentColor)
+                .foregroundColor(.warmPrimary)
                 .frame(minWidth: 60)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .background(Color.accentColor.opacity(0.1))
+                .background(Color.warmPrimary.opacity(0.1))
                 .cornerRadius(6)
                 .overlay(
                     RoundedRectangle(cornerRadius: 6)
-                        .stroke(Color.accentColor, lineWidth: 1)
+                        .stroke(Color.warmPrimary, lineWidth: 1)
                 )
 
             Button(action: onCancel) {
@@ -183,7 +183,7 @@ struct KeyboardShortcutsSettingsView: View {
                 HStack {
                     Image(systemName: shortcut.action.icon)
                         .frame(width: 20)
-                        .foregroundColor(.accentColor)
+                        .foregroundColor(.warmPrimary)
 
                     Text(shortcut.action.displayName)
                         .font(.subheadline)
@@ -193,10 +193,10 @@ struct KeyboardShortcutsSettingsView: View {
                     if recordingShortcut == shortcut.action {
                         Text("Press keys...")
                             .font(.system(.caption, design: .monospaced))
-                            .foregroundColor(.accentColor)
+                            .foregroundColor(.warmPrimary)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(Color.accentColor.opacity(0.1))
+                            .background(Color.warmPrimary.opacity(0.1))
                             .cornerRadius(4)
 
                         Button(action: { recordingShortcut = nil }) {

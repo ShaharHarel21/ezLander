@@ -5,6 +5,7 @@ import CryptoKit
 struct EmailView: View {
     @StateObject private var viewModel = EmailViewModel.shared
     @State private var selectedEmail: Email?
+    @State private var openedEmail: Email?
     @State private var showingCompose = false
     @State private var replyToEmail: Email?
     @State private var showingError = false
@@ -63,8 +64,8 @@ struct EmailView: View {
                 notConnectedView
             } else if viewModel.isLoading && viewModel.emails.isEmpty {
                 loadingView
-            } else if let selected = selectedEmail {
-                emailDetailView(email: selected)
+            } else if let opened = openedEmail {
+                emailDetailView(email: opened)
             } else {
                 emailListView
             }
@@ -110,14 +111,14 @@ struct EmailView: View {
     // MARK: - Header
     private var emailHeader: some View {
         HStack {
-            if selectedEmail != nil {
-                Button(action: { selectedEmail = nil }) {
+            if openedEmail != nil {
+                Button(action: { openedEmail = nil }) {
                     Image(systemName: "chevron.left")
                 }
                 .buttonStyle(.borderless)
             }
 
-            Text(selectedEmail != nil ? "Email" : "Inbox")
+            Text(openedEmail != nil ? "Email" : "Inbox")
                 .font(.headline)
 
             Spacer()
@@ -189,6 +190,10 @@ struct EmailView: View {
                         isSelected: selectedEmail?.id == email.id,
                         onTap: {
                             selectedEmail = email
+                        },
+                        onDoubleTap: {
+                            selectedEmail = email
+                            openedEmail = email
                             viewModel.markAsRead(email)
                         },
                         onReply: {
@@ -293,7 +298,7 @@ struct EmailView: View {
 
                 Button(action: {
                     viewModel.archiveEmail(email)
-                    selectedEmail = nil
+                    openedEmail = nil
                 }) {
                     Label("Archive", systemImage: "archivebox")
                 }
@@ -301,7 +306,7 @@ struct EmailView: View {
 
                 Button(role: .destructive, action: {
                     viewModel.deleteEmail(email)
-                    selectedEmail = nil
+                    openedEmail = nil
                 }) {
                     Label("Delete", systemImage: "trash")
                 }
@@ -312,7 +317,7 @@ struct EmailView: View {
                         ForEach(viewModel.availableLabels) { label in
                             Button(action: {
                                 viewModel.moveEmail(email, to: label)
-                                selectedEmail = nil
+                                openedEmail = nil
                             }) {
                                 Label(label.displayName, systemImage: label.icon)
                             }
@@ -339,6 +344,7 @@ struct EmailListRow: View {
     let email: Email
     var isSelected: Bool = false
     let onTap: () -> Void
+    var onDoubleTap: (() -> Void)?
     let onReply: () -> Void
     let onArchive: () -> Void
     let onDelete: () -> Void
@@ -348,6 +354,7 @@ struct EmailListRow: View {
 
     @State private var isHovered = false
     @State private var swipeOffset: CGFloat = 0
+    @State private var lastClickTime: Date = .distantPast
 
     private let swipeThreshold: CGFloat = 80
 
@@ -369,7 +376,7 @@ struct EmailListRow: View {
                 }
                 .frame(width: max(swipeOffset, 0))
                 .frame(maxHeight: .infinity)
-                .background(Color.blue)
+                .background(Color.warmAccent)
                 .clipped()
 
                 Spacer()
@@ -452,7 +459,7 @@ struct EmailListRow: View {
             .padding(.vertical, 10)
             .background(
                 isSelected
-                    ? Color.accentColor.opacity(0.15)
+                    ? Color.warmPrimary.opacity(0.12)
                     : (isHovered && swipeOffset == 0 ? Color(NSColor.controlBackgroundColor) : Color(NSColor.windowBackgroundColor))
             )
             .offset(x: swipeOffset)
@@ -500,8 +507,15 @@ struct EmailListRow: View {
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                     swipeOffset = 0
                 }
+                return
+            }
+            let now = Date()
+            if now.timeIntervalSince(lastClickTime) < 0.3 {
+                onDoubleTap?()
+                lastClickTime = .distantPast
             } else {
                 onTap()
+                lastClickTime = now
             }
         }
         .onHover { hovering in
@@ -733,12 +747,12 @@ struct SenderAvatarView: View {
             } else {
                 // Fallback: colored circle with initial
                 Circle()
-                    .fill(isRead ? Color.secondary.opacity(0.2) : Color.accentColor.opacity(0.2))
+                    .fill(isRead ? Color.secondary.opacity(0.2) : Color.warmPrimary.opacity(0.15))
                     .frame(width: size, height: size)
                     .overlay(
                         Text(String(name.prefix(1)).uppercased())
                             .font(.system(size: size * 0.4, weight: .medium))
-                            .foregroundColor(isRead ? .secondary : .accentColor)
+                            .foregroundColor(isRead ? .secondary : .warmPrimary)
                     )
             }
         }
@@ -903,7 +917,7 @@ struct HTMLEmailBodyView: NSViewRepresentable {
                         color: #e0e0e0;
                     }
                     a {
-                        color: #6bb3f8;
+                        color: #FFA94D;
                     }
                 }
                 img {
@@ -911,7 +925,7 @@ struct HTMLEmailBodyView: NSViewRepresentable {
                     height: auto;
                 }
                 a {
-                    color: #0066cc;
+                    color: #FF6B6B;
                 }
                 blockquote {
                     border-left: 3px solid #ccc;

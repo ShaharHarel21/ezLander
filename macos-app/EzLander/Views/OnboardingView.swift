@@ -36,7 +36,7 @@ struct OnboardingView: View {
             HStack(spacing: 8) {
                 ForEach(0..<steps.count, id: \.self) { index in
                     Circle()
-                        .fill(index <= currentStep ? Color.accentColor : Color.secondary.opacity(0.3))
+                        .fill(index <= currentStep ? Color.warmPrimary : Color.secondary.opacity(0.3))
                         .frame(width: 8, height: 8)
                 }
             }
@@ -48,7 +48,13 @@ struct OnboardingView: View {
             VStack(spacing: 24) {
                 Image(systemName: steps[currentStep].icon)
                     .font(.system(size: 64))
-                    .foregroundColor(.accentColor)
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [Color.warmPrimary, Color.warmAccent],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
 
                 Text(steps[currentStep].title)
                     .font(.title2)

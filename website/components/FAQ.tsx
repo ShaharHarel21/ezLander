@@ -18,7 +18,7 @@ const faqs = [
   },
   {
     question: 'What AI powers ezLander?',
-    answer: 'ezLander uses Claude, Anthropic\'s advanced AI assistant. Your conversations are processed through Anthropic\'s secure API, which has strong privacy protections.',
+    answer: 'ezLander supports multiple AI providers: OpenAI (GPT-4o), Anthropic\'s Claude, Google Gemini, and Kimi. You choose which provider to use and provide your own API key — your key stays securely on your device and is never sent to our servers.',
   },
   {
     question: 'Can I cancel anytime?',

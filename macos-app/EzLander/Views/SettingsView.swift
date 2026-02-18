@@ -55,12 +55,12 @@ struct SettingsView: View {
         HStack {
             // Profile picture placeholder
             Circle()
-                .fill(Color.accentColor.opacity(0.2))
+                .fill(Color.warmPrimary.opacity(0.15))
                 .frame(width: 40, height: 40)
                 .overlay(
                     Text(String(viewModel.userName.prefix(1)).uppercased())
                         .font(.headline)
-                        .foregroundColor(.accentColor)
+                        .foregroundColor(.warmPrimary)
                 )
 
             VStack(alignment: .leading, spacing: 2) {
@@ -343,7 +343,7 @@ struct IntegrationRow: View {
             if isConnected {
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.green)
+                        .foregroundColor(.blue)
 
                     Button("Disconnect") {
                         onDisconnect()
@@ -353,12 +353,17 @@ struct IntegrationRow: View {
                     .controlSize(.small)
                 }
             } else {
-                Button("Connect") {
-                    onConnect()
+                HStack(spacing: 8) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.red)
+
+                    Button("Connect") {
+                        onConnect()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.blue)
+                    .controlSize(.small)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.blue)
-                .controlSize(.small)
             }
         }
     }
@@ -380,7 +385,7 @@ struct APIKeyRow: View {
             HStack {
                 Image(systemName: provider.icon)
                     .frame(width: 24)
-                    .foregroundColor(.accentColor)
+                    .foregroundColor(.warmAccent)
 
                 Text(provider.displayName)
                     .fontWeight(.medium)
@@ -407,7 +412,7 @@ struct APIKeyRow: View {
                         onAddKey()
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(.blue)
+                    .tint(.warmPrimary)
                     .controlSize(.small)
                 }
             }

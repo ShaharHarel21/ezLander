@@ -66,7 +66,7 @@ struct ChatView: View {
                 Button(action: sendMessage) {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.title2)
-                        .foregroundColor(inputText.isEmpty ? .secondary : .accentColor)
+                        .foregroundColor(inputText.isEmpty ? .secondary : .warmPrimary)
                 }
                 .buttonStyle(.plain)
                 .disabled(inputText.isEmpty || viewModel.isLoading)
@@ -108,7 +108,13 @@ struct MessageBubble: View {
                     Text(message.content)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
-                        .background(Color.accentColor)
+                        .background(
+                            LinearGradient(
+                                colors: [Color.warmPrimary, Color.warmAccent],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
                         .foregroundColor(.white)
                         .cornerRadius(16)
                 }
@@ -176,7 +182,7 @@ struct TypingIndicator: View {
         HStack(spacing: 4) {
             ForEach(0..<3) { index in
                 Circle()
-                    .fill(Color.secondary)
+                    .fill(Color.warmAccent)
                     .frame(width: 8, height: 8)
                     .offset(y: animationOffset)
                     .animation(

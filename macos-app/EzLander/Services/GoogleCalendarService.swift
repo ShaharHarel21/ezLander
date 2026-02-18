@@ -63,16 +63,22 @@ class GoogleCalendarService {
 
         NSLog("GoogleCalendarService: Total events from all calendars: \(allEvents.count)")
 
-        // Convert to CalendarEvent and sort by start date
-        let events = allEvents.map { googleEvent in
-            CalendarEvent(
+        // Convert to CalendarEvent, filter cancelled, and sort by start date
+        let events = allEvents.compactMap { googleEvent -> CalendarEvent? in
+            // Skip cancelled events
+            if googleEvent.status == "cancelled" { return nil }
+            // Skip events with missing start/end
+            guard let start = googleEvent.start, let end = googleEvent.end else { return nil }
+
+            return CalendarEvent(
                 id: googleEvent.id,
                 title: googleEvent.summary ?? "Untitled",
-                startDate: parseGoogleDateTime(googleEvent.start),
-                endDate: parseGoogleDateTime(googleEvent.end),
+                startDate: parseGoogleDateTime(start),
+                endDate: parseGoogleDateTime(end),
                 calendarType: .google,
                 description: googleEvent.description,
-                location: googleEvent.location
+                location: googleEvent.location,
+                isAllDay: isAllDayEvent(googleEvent)
             )
         }.sorted { $0.startDate < $1.startDate }
 
@@ -235,15 +241,33 @@ class GoogleCalendarService {
     // MARK: - Helpers
     private func parseGoogleDateTime(_ dateTime: GoogleDateTimeResponse) -> Date {
         if let dateTimeStr = dateTime.dateTime {
+            // Try with fractional seconds first, then without
+            let formatterWithFrac = ISO8601DateFormatter()
+            formatterWithFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = formatterWithFrac.date(from: dateTimeStr) {
+                return date
+            }
+
             let formatter = ISO8601DateFormatter()
-            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            return formatter.date(from: dateTimeStr) ?? Date()
+            formatter.formatOptions = [.withInternetDateTime]
+            if let date = formatter.date(from: dateTimeStr) {
+                return date
+            }
+
+            NSLog("GoogleCalendarService: Failed to parse dateTime: \(dateTimeStr)")
+            return Date()
         } else if let dateStr = dateTime.date {
+            // All-day events: "2026-02-17" — parse in local timezone
             let formatter = DateFormatter()
             formatter.dateFormat = "yyyy-MM-dd"
+            formatter.timeZone = TimeZone.current
             return formatter.date(from: dateStr) ?? Date()
         }
         return Date()
+    }
+
+    private func isAllDayEvent(_ event: GoogleEvent) -> Bool {
+        return event.start?.date != nil && event.start?.dateTime == nil
     }
 
     private func formatISO8601(_ date: Date) -> String {
@@ -278,8 +302,9 @@ struct GoogleEvent: Codable {
     let summary: String?
     let description: String?
     let location: String?
-    let start: GoogleDateTimeResponse
-    let end: GoogleDateTimeResponse
+    let start: GoogleDateTimeResponse?
+    let end: GoogleDateTimeResponse?
+    let status: String?
 }
 
 struct GoogleDateTimeResponse: Codable {
