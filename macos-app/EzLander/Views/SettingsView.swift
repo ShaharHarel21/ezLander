@@ -119,9 +119,13 @@ struct SettingsView: View {
                 Spacer()
 
                 if viewModel.subscriptionStatus == .active {
-                    Image(systemName: "checkmark.circle.fill")
+                    Text("Active")
+                        .font(.caption)
                         .foregroundColor(.green)
-                        .font(.title2)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color.green.opacity(0.12))
+                        .cornerRadius(4)
                 }
             }
 
@@ -178,9 +182,9 @@ struct SettingsView: View {
                         Image(systemName: provider.icon)
                         Text(provider.displayName)
                         if provider.isConfigured {
-                            Image(systemName: "checkmark.circle.fill")
+                            Text("Active")
+                                .font(.caption2)
                                 .foregroundColor(.green)
-                                .font(.caption)
                         }
                     }
                     .tag(provider)
@@ -276,13 +280,9 @@ struct SettingsView: View {
                 }
             } else if updateService.checkedOnce && !updateService.updateAvailable {
                 // Already checked and up to date
-                HStack {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.green)
-                    Text("You have the latest version")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
+                Text("Up to date")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             } else {
                 Button("Check for Updates") {
                     Task {
@@ -342,28 +342,22 @@ struct IntegrationRow: View {
 
             if isConnected {
                 HStack(spacing: 8) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.blue)
+                    Text("Connected")
+                        .font(.caption)
+                        .foregroundColor(.green)
 
                     Button("Disconnect") {
                         onDisconnect()
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.red)
+                    .buttonStyle(.bordered)
                     .controlSize(.small)
                 }
             } else {
-                HStack(spacing: 8) {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.red)
-
-                    Button("Connect") {
-                        onConnect()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.blue)
-                    .controlSize(.small)
+                Button("Connect") {
+                    onConnect()
                 }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
             }
         }
     }
@@ -393,13 +387,13 @@ struct APIKeyRow: View {
                 Spacer()
 
                 if isConfigured {
-                    Image(systemName: "checkmark.circle.fill")
+                    Text("Active")
+                        .font(.caption)
                         .foregroundColor(.green)
                     Button("Remove") {
                         onRemoveKey()
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.red)
+                    .buttonStyle(.bordered)
                     .controlSize(.small)
                 } else {
                     Button("Get Key") {
@@ -412,7 +406,6 @@ struct APIKeyRow: View {
                         onAddKey()
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(.warmPrimary)
                     .controlSize(.small)
                 }
             }
