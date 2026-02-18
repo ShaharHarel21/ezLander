@@ -152,7 +152,43 @@ class GmailService {
 
     // MARK: - List Recent Emails
     func listRecentEmails(maxResults: Int = 20) async throws -> [Email] {
-        return try await searchEmails(query: "in:inbox", maxResults: maxResults)
+        return try await listEmailsByLabel(labelId: "INBOX", maxResults: maxResults)
+    }
+
+    // MARK: - List Emails by Label
+    func listEmailsByLabel(labelId: String, maxResults: Int = 20) async throws -> [Email] {
+        let accessToken = try await oauthService.getValidAccessToken()
+
+        let url = URL(string: "\(baseURL)/users/me/messages?labelIds=\(labelId)&maxResults=\(maxResults)")!
+
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw GmailError.invalidResponse
+        }
+
+        guard httpResponse.statusCode == 200 else {
+            throw GmailError.apiError(statusCode: httpResponse.statusCode)
+        }
+
+        let listResponse = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        guard let messages = listResponse["messages"] as? [[String: Any]] else {
+            return []
+        }
+
+        var emails: [Email] = []
+        for message in messages.prefix(maxResults) {
+            if let messageId = message["id"] as? String {
+                if let email = try? await getEmail(id: messageId) {
+                    emails.append(email)
+                }
+            }
+        }
+
+        return emails
     }
 
     // MARK: - Get Full Email with Body
@@ -800,6 +836,15 @@ struct GmailLabel: Identifiable, Hashable {
         case "TRASH": return "trash"
         default: return "folder"
         }
+    }
+
+    /// Labels that can be browsed as folders
+    var isBrowsable: Bool {
+        let excluded = ["UNREAD", "IMPORTANT",
+                        "CATEGORY_PERSONAL", "CATEGORY_SOCIAL",
+                        "CATEGORY_PROMOTIONS", "CATEGORY_UPDATES",
+                        "CATEGORY_FORUMS"]
+        return !excluded.contains(id)
     }
 
     /// Labels that make sense as move targets

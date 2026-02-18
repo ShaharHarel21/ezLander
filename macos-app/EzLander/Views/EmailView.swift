@@ -140,8 +140,12 @@ struct EmailView: View {
                 .buttonStyle(.borderless)
             }
 
-            Text(openedEmail != nil ? "Email" : "Inbox")
-                .font(.headline)
+            if openedEmail != nil {
+                Text("Email")
+                    .font(.headline)
+            } else {
+                folderMenu
+            }
 
             Spacer()
 
@@ -164,6 +168,66 @@ struct EmailView: View {
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
+    }
+
+    // MARK: - Folder Menu
+    private var folderMenu: some View {
+        Menu {
+            // Inbox (nil = default)
+            Button(action: { viewModel.selectFolder(nil) }) {
+                Label {
+                    Text("Inbox")
+                } icon: {
+                    Image(systemName: viewModel.selectedFolder == nil ? "checkmark" : "tray")
+                }
+            }
+
+            // System labels in a fixed order
+            let systemOrder = ["STARRED", "SENT", "DRAFT", "SPAM", "TRASH"]
+            let systemLabels = systemOrder.compactMap { id in
+                viewModel.browsableLabels.first { $0.id == id }
+            }
+
+            ForEach(systemLabels) { label in
+                Button(action: { viewModel.selectFolder(label) }) {
+                    Label {
+                        Text(label.displayName)
+                    } icon: {
+                        Image(systemName: viewModel.selectedFolder?.id == label.id ? "checkmark" : label.icon)
+                    }
+                }
+            }
+
+            // User/custom labels
+            let userLabels = viewModel.browsableLabels
+                .filter { $0.type == "user" }
+                .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+
+            if !userLabels.isEmpty {
+                Divider()
+                ForEach(userLabels) { label in
+                    Button(action: { viewModel.selectFolder(label) }) {
+                        Label {
+                            Text(label.displayName)
+                        } icon: {
+                            Image(systemName: viewModel.selectedFolder?.id == label.id ? "checkmark" : "tag")
+                        }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: viewModel.selectedFolderIcon)
+                    .font(.subheadline)
+                Text(viewModel.selectedFolderName)
+                    .font(.headline)
+                Image(systemName: "chevron.down")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
     }
 
     // MARK: - Not Connected View
@@ -1144,6 +1208,8 @@ class EmailViewModel: ObservableObject {
     @Published var fullEmailBody: String?
     @Published var fullEmailHtml: String?
     @Published var availableLabels: [GmailLabel] = []
+    @Published var browsableLabels: [GmailLabel] = []
+    @Published var selectedFolder: GmailLabel?
     @Published var showUndoBanner = false
 
     private var hasLoadedOnce = false
@@ -1190,9 +1256,11 @@ class EmailViewModel: ObservableObject {
         isLoading = true
         hasLoadedOnce = true
 
+        let labelId = selectedFolder?.id ?? "INBOX"
+
         Task {
             do {
-                let fetchedEmails = try await GmailService.shared.listRecentEmails(maxResults: 20)
+                let fetchedEmails = try await GmailService.shared.listEmailsByLabel(labelId: labelId, maxResults: 20)
                 await MainActor.run {
                     self.emails = fetchedEmails
                     self.isLoading = false
@@ -1204,6 +1272,20 @@ class EmailViewModel: ObservableObject {
                 }
             }
         }
+    }
+
+    func selectFolder(_ label: GmailLabel?) {
+        selectedFolder = label
+        emails = []
+        loadEmails()
+    }
+
+    var selectedFolderName: String {
+        selectedFolder?.displayName ?? "Inbox"
+    }
+
+    var selectedFolderIcon: String {
+        selectedFolder?.icon ?? "tray"
     }
 
     func loadFullEmail(_ email: Email) {
@@ -1362,6 +1444,7 @@ class EmailViewModel: ObservableObject {
                 await MainActor.run {
                     self.availableLabels = labels.filter { $0.isMoveTarget }
                         .sorted { $0.displayName < $1.displayName }
+                    self.browsableLabels = labels.filter { $0.isBrowsable }
                 }
             } catch {
                 // Silently fail — labels are a nice-to-have
