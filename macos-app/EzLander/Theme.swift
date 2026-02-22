@@ -1,34 +1,34 @@
 import SwiftUI
 
-// MARK: - Warm & Modern Color Theme
+// MARK: - Blue & Purple Modern Theme (matches website branding)
 extension Color {
-    // Primary coral — main interactive elements, buttons, selected states
-    static let warmPrimary = Color(red: 1.0, green: 0.42, blue: 0.42)       // #FF6B6B
+    // Primary blue — main interactive elements, buttons, selected states
+    static let warmPrimary = Color(red: 0.047, green: 0.549, blue: 0.902)       // #0C8CE6
 
-    // Accent amber — secondary highlights, gradients
-    static let warmAccent = Color(red: 1.0, green: 0.66, blue: 0.30)        // #FFA94D
+    // Accent purple — secondary highlights, gradients
+    static let warmAccent = Color(red: 0.851, green: 0.275, blue: 0.937)        // #D946EF
 
-    // Highlight warm yellow — badges, special elements
-    static let warmHighlight = Color(red: 1.0, green: 0.85, blue: 0.24)     // #FFD93D
+    // Highlight light blue — badges, special elements
+    static let warmHighlight = Color(red: 0.212, green: 0.667, blue: 0.961)     // #36AAF5
 
-    // Soft peach — subtle backgrounds, hover states
-    static let warmSoft = Color(red: 1.0, green: 0.91, blue: 0.87)          // #FFE8DE
+    // Soft blue tint — subtle backgrounds, hover states
+    static let warmSoft = Color(red: 0.878, green: 0.937, blue: 0.996)          // #E0EFFE
 
-    // Gradient: coral to amber
+    // Gradient: blue to purple
     static let warmGradient = LinearGradient(
         colors: [warmPrimary, warmAccent],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
 
-    // User message bubble — warm coral
-    static let userBubble = Color(red: 1.0, green: 0.42, blue: 0.42)        // #FF6B6B
+    // User message bubble — primary blue
+    static let userBubble = Color(red: 0.047, green: 0.549, blue: 0.902)        // #0C8CE6
 
     // Event indicator dot color
-    static let eventDot = Color(red: 1.0, green: 0.55, blue: 0.36)          // #FF8C5C
+    static let eventDot = Color(red: 0.486, green: 0.549, blue: 0.984)          // #7C8CFB
 
     // Pro badge gold
-    static let proBadge = Color(red: 1.0, green: 0.76, blue: 0.20)          // #FFC233
+    static let proBadge = Color(red: 1.0, green: 0.76, blue: 0.20)             // #FFC233
 
     // Initialize from hex string (e.g. "#FF6B6B" or "FF6B6B")
     init(hex: String) {
@@ -53,7 +53,7 @@ extension Color {
     }
 }
 
-// MARK: - Warm Gradient Button Style
+// MARK: - Gradient Button Style
 struct WarmGradientButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
