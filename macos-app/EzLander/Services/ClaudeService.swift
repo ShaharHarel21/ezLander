@@ -34,8 +34,25 @@ class ClaudeService {
 
     // MARK: - Check if configured
     var isConfigured: Bool {
+        if ClaudeOAuthService.shared.isSignedIn {
+            return true
+        }
         reloadAPIKey()
         return !apiKey.isEmpty
+    }
+
+    // MARK: - Auth Headers
+    private func setAuthHeaders(on request: inout URLRequest) async throws {
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+
+        if ClaudeOAuthService.shared.isSignedIn {
+            let token = try await ClaudeOAuthService.shared.getValidAccessToken()
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        } else {
+            reloadAPIKey()
+            request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+        }
     }
 
     // MARK: - Tools Definition
@@ -143,15 +160,21 @@ class ClaudeService {
 
         var request = URLRequest(url: URL(string: baseURL)!)
         request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
-        request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        try await setAuthHeaders(on: &request)
         request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        var (data, response) = try await URLSession.shared.data(for: request)
 
-        guard let httpResponse = response as? HTTPURLResponse else {
+        guard var httpResponse = response as? HTTPURLResponse else {
             throw ClaudeError.invalidResponse
+        }
+
+        // Retry once on 401 if using OAuth (token may have just expired)
+        if httpResponse.statusCode == 401 && ClaudeOAuthService.shared.isSignedIn {
+            _ = try await ClaudeOAuthService.shared.refreshAccessToken()
+            try await setAuthHeaders(on: &request)
+            (data, response) = try await URLSession.shared.data(for: request)
+            httpResponse = response as! HTTPURLResponse
         }
 
         guard httpResponse.statusCode == 200 else {
@@ -223,9 +246,7 @@ class ClaudeService {
 
                     var request = URLRequest(url: URL(string: baseURL)!)
                     request.httpMethod = "POST"
-                    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                    request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
-                    request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+                    try await setAuthHeaders(on: &request)
                     request.httpBody = try JSONSerialization.data(withJSONObject: finalRequestBody)
 
                     let (finalData, _) = try await URLSession.shared.data(for: request)

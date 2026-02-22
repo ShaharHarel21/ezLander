@@ -37,6 +37,7 @@
 		1A0000000000000000000060 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A000000000000000000003E /* Theme.swift */; };
 		1A0000000000000000000061 /* EventDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A000000000000000000003F /* EventDetailView.swift */; };
 		1A0000000000000000000062 /* CalendarContextService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000047 /* CalendarContextService.swift */; };
+		1A0000000000000000000063 /* ClaudeOAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000070 /* ClaudeOAuthService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -73,6 +74,7 @@
 		1A000000000000000000003E /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		1A000000000000000000003F /* EventDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventDetailView.swift; sourceTree = "<group>"; };
 		1A0000000000000000000047 /* CalendarContextService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarContextService.swift; sourceTree = "<group>"; };
+		1A0000000000000000000070 /* ClaudeOAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeOAuthService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -139,6 +141,7 @@
 			children = (
 				1A0000000000000000000034 /* AIService.swift */,
 				1A0000000000000000000017 /* ClaudeService.swift */,
+				1A0000000000000000000070 /* ClaudeOAuthService.swift */,
 				1A0000000000000000000035 /* KimiService.swift */,
 				1A0000000000000000000018 /* OAuthService.swift */,
 				1A0000000000000000000019 /* GoogleCalendarService.swift */,
@@ -271,6 +274,7 @@
 				1A0000000000000000000060 /* Theme.swift in Sources */,
 				1A0000000000000000000061 /* EventDetailView.swift in Sources */,
 				1A0000000000000000000062 /* CalendarContextService.swift in Sources */,
+				1A0000000000000000000063 /* ClaudeOAuthService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

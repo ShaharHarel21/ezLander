@@ -217,19 +217,40 @@ struct SettingsView: View {
 
             // API Keys for each provider
             ForEach(AIProvider.allCases) { provider in
-                APIKeyRow(
-                    provider: provider,
-                    isConfigured: provider.isConfigured,
-                    showInput: viewModel.showKeyInput[provider] ?? false,
-                    keyInput: Binding(
-                        get: { viewModel.keyInputs[provider] ?? "" },
-                        set: { viewModel.keyInputs[provider] = $0 }
-                    ),
-                    onAddKey: { viewModel.showKeyInput[provider] = true },
-                    onSaveKey: { viewModel.saveAPIKey(for: provider) },
-                    onRemoveKey: { viewModel.removeAPIKey(for: provider) },
-                    onGetKey: { viewModel.openKeyURL(for: provider) }
-                )
+                if provider.supportsOAuth {
+                    ClaudeAuthRow(
+                        provider: provider,
+                        useOAuth: $viewModel.claudeUseOAuth,
+                        isOAuthConnected: provider.isOAuthConnected,
+                        isAPIKeyConfigured: KeychainService.shared.get(key: provider.keychainKey) != nil,
+                        isConnecting: viewModel.isClaudeOAuthConnecting,
+                        showInput: viewModel.showKeyInput[provider] ?? false,
+                        keyInput: Binding(
+                            get: { viewModel.keyInputs[provider] ?? "" },
+                            set: { viewModel.keyInputs[provider] = $0 }
+                        ),
+                        onSignInOAuth: { viewModel.signInWithClaudeOAuth() },
+                        onSignOutOAuth: { viewModel.signOutClaudeOAuth() },
+                        onAddKey: { viewModel.showKeyInput[provider] = true },
+                        onSaveKey: { viewModel.saveAPIKey(for: provider) },
+                        onRemoveKey: { viewModel.removeAPIKey(for: provider) },
+                        onGetKey: { viewModel.openKeyURL(for: provider) }
+                    )
+                } else {
+                    APIKeyRow(
+                        provider: provider,
+                        isConfigured: provider.isConfigured,
+                        showInput: viewModel.showKeyInput[provider] ?? false,
+                        keyInput: Binding(
+                            get: { viewModel.keyInputs[provider] ?? "" },
+                            set: { viewModel.keyInputs[provider] = $0 }
+                        ),
+                        onAddKey: { viewModel.showKeyInput[provider] = true },
+                        onSaveKey: { viewModel.saveAPIKey(for: provider) },
+                        onRemoveKey: { viewModel.removeAPIKey(for: provider) },
+                        onGetKey: { viewModel.openKeyURL(for: provider) }
+                    )
+                }
             }
         }
     }
@@ -388,6 +409,118 @@ struct IntegrationRow: View {
     }
 }
 
+// MARK: - Claude Auth Row
+struct ClaudeAuthRow: View {
+    let provider: AIProvider
+    @Binding var useOAuth: Bool
+    let isOAuthConnected: Bool
+    let isAPIKeyConfigured: Bool
+    let isConnecting: Bool
+    let showInput: Bool
+    @Binding var keyInput: String
+    let onSignInOAuth: () -> Void
+    let onSignOutOAuth: () -> Void
+    let onAddKey: () -> Void
+    let onSaveKey: () -> Void
+    let onRemoveKey: () -> Void
+    let onGetKey: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: provider.icon)
+                    .frame(width: 24)
+                    .foregroundColor(.warmAccent)
+
+                Text(provider.displayName)
+                    .fontWeight(.medium)
+
+                Spacer()
+
+                if isOAuthConnected || isAPIKeyConfigured {
+                    Text("Active")
+                        .font(.caption)
+                        .foregroundColor(.green)
+                }
+            }
+
+            Picker("", selection: $useOAuth) {
+                Text("API Key").tag(false)
+                Text("Claude Account").tag(true)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+
+            if useOAuth {
+                if isOAuthConnected {
+                    HStack {
+                        Text("Connected to Claude")
+                            .font(.caption)
+                            .foregroundColor(.green)
+                        Spacer()
+                        Button("Disconnect") {
+                            onSignOutOAuth()
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+                } else {
+                    HStack {
+                        Button("Sign in with Claude") {
+                            onSignInOAuth()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                        .disabled(isConnecting)
+
+                        if isConnecting {
+                            ProgressView()
+                                .scaleEffect(0.7)
+                        }
+                    }
+
+                    Text("Use your Claude Pro/Max subscription")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            } else {
+                if isAPIKeyConfigured {
+                    HStack {
+                        Spacer()
+                        Button("Remove") {
+                            onRemoveKey()
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+                } else {
+                    HStack {
+                        Button("Get Key") { onGetKey() }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+
+                        Button("Add Key") { onAddKey() }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+                    }
+                }
+
+                if showInput {
+                    HStack {
+                        SecureField(provider.keyPlaceholder, text: $keyInput)
+                            .textFieldStyle(.roundedBorder)
+                        Button("Save") { onSaveKey() }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+                            .disabled(keyInput.isEmpty)
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
 // MARK: - API Key Row
 struct APIKeyRow: View {
     let provider: AIProvider
@@ -489,6 +622,10 @@ class SettingsViewModel: ObservableObject {
     @Published var showKeyInput: [AIProvider: Bool] = [:]
     @Published var keyInputs: [AIProvider: String] = [:]
 
+    // Claude OAuth
+    @Published var claudeUseOAuth: Bool = false
+    @Published var isClaudeOAuthConnecting: Bool = false
+
     var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
     }
@@ -525,6 +662,7 @@ class SettingsViewModel: ObservableObject {
 
         // Load AI provider settings
         selectedAIProvider = AIService.shared.currentProvider
+        claudeUseOAuth = ClaudeOAuthService.shared.isSignedIn
     }
 
     // MARK: - AI Key Management
@@ -545,6 +683,31 @@ class SettingsViewModel: ObservableObject {
         if let url = URL(string: provider.helpURL) {
             NSWorkspace.shared.open(url)
         }
+    }
+
+    func signInWithClaudeOAuth() {
+        isClaudeOAuthConnecting = true
+        Task {
+            do {
+                try await ClaudeOAuthService.shared.signIn()
+                await MainActor.run {
+                    claudeUseOAuth = true
+                    isClaudeOAuthConnecting = false
+                    objectWillChange.send()
+                }
+            } catch {
+                await MainActor.run {
+                    isClaudeOAuthConnecting = false
+                }
+                print("Claude OAuth error: \(error)")
+            }
+        }
+    }
+
+    func signOutClaudeOAuth() {
+        ClaudeOAuthService.shared.signOut()
+        claudeUseOAuth = false
+        objectWillChange.send()
     }
 
     func signInWithGoogle() {

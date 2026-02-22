@@ -63,6 +63,20 @@ enum AIProvider: String, CaseIterable, Codable, Identifiable {
         case .kimi: return KimiService.shared.isConfigured
         }
     }
+
+    var supportsOAuth: Bool {
+        switch self {
+        case .claude: return true
+        default: return false
+        }
+    }
+
+    var isOAuthConnected: Bool {
+        switch self {
+        case .claude: return ClaudeOAuthService.shared.isSignedIn
+        default: return false
+        }
+    }
 }
 
 // MARK: - AI Service Manager

@@ -51,7 +51,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Handle OAuth callback
         if url.scheme == "com.ezlander.app" {
-            OAuthService.shared.handleCallback(url: url)
+            let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            let state = components?.queryItems?.first(where: { $0.name == "state" })?.value
+            if state == "claude" {
+                ClaudeOAuthService.shared.handleCallback(url: url)
+            } else {
+                OAuthService.shared.handleCallback(url: url)
+            }
         }
     }
 }
