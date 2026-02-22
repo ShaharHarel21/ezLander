@@ -264,15 +264,7 @@ struct SettingsView: View {
             }
 
             // Update section
-            if updateService.isCheckingForUpdates {
-                HStack {
-                    ProgressView()
-                        .scaleEffect(0.7)
-                    Text("Checking for updates...")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            } else if updateService.updateAvailable {
+            if updateService.updateAvailable {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Image(systemName: "arrow.down.circle.fill")
@@ -304,18 +296,25 @@ struct SettingsView: View {
                         .buttonStyle(.borderedProminent)
                     }
                 }
-            } else if updateService.checkedOnce && !updateService.updateAvailable {
-                // Already checked and up to date
-                Text("Up to date")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
             } else {
-                Button("Check for Updates") {
-                    Task {
-                        await updateService.checkForUpdates()
+                HStack {
+                    Button("Check for Updates") {
+                        Task {
+                            await updateService.checkForUpdates()
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(updateService.isCheckingForUpdates)
+
+                    if updateService.isCheckingForUpdates {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                    } else if updateService.checkedOnce {
+                        Text("Up to date")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
                 }
-                .buttonStyle(.bordered)
             }
 
             Divider()
