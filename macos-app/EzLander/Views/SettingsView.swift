@@ -1,59 +1,317 @@
 import SwiftUI
 
-struct SettingsView: View {
-    @StateObject private var viewModel = SettingsViewModel()
-    @StateObject private var updateService = UpdateService.shared
+// MARK: - Settings Category
+enum SettingsCategory: String, CaseIterable, Identifiable {
+    case accountSubscription
+    case integrations
+    case aiProviders
+    case general
+    case keyboardShortcuts
+    case about
 
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                // Account Section
-                SettingsSection(title: "Account") {
-                    if viewModel.isSignedIn {
-                        signedInView
-                    } else {
-                        signInButtons
-                    }
-                }
+    var id: String { rawValue }
 
-                // Subscription Section
-                SettingsSection(title: "Subscription") {
-                    subscriptionView
-                }
-
-                // Integrations Section
-                SettingsSection(title: "Integrations") {
-                    integrationsView
-                }
-
-                // AI Provider Section
-                SettingsSection(title: "AI Provider") {
-                    aiProviderView
-                }
-
-                // Preferences Section
-                SettingsSection(title: "Preferences") {
-                    preferencesView
-                }
-
-                // Keyboard Shortcuts Section
-                SettingsSection(title: "Keyboard Shortcuts") {
-                    keyboardShortcutsView
-                }
-
-                // About Section
-                SettingsSection(title: "About") {
-                    aboutView
-                }
-            }
-            .padding()
+    var title: String {
+        switch self {
+        case .accountSubscription: return "Account & Subscription"
+        case .integrations: return "Integrations"
+        case .aiProviders: return "AI Providers"
+        case .general: return "General"
+        case .keyboardShortcuts: return "Keyboard Shortcuts"
+        case .about: return "About"
         }
     }
 
-    // MARK: - Signed In View
-    private var signedInView: some View {
+    var icon: String {
+        switch self {
+        case .accountSubscription: return "person.crop.circle"
+        case .integrations: return "link"
+        case .aiProviders: return "brain"
+        case .general: return "gearshape"
+        case .keyboardShortcuts: return "command"
+        case .about: return "info.circle"
+        }
+    }
+
+    var iconColor: Color {
+        switch self {
+        case .accountSubscription: return .warmPrimary
+        case .integrations: return .green
+        case .aiProviders: return .warmAccent
+        case .general: return .gray
+        case .keyboardShortcuts: return .warmHighlight
+        case .about: return .blue
+        }
+    }
+}
+
+// MARK: - Settings View
+struct SettingsView: View {
+    @StateObject private var viewModel = SettingsViewModel()
+    @State private var activeCategory: SettingsCategory?
+
+    var body: some View {
+        ZStack {
+            if activeCategory == nil {
+                mainListView
+                    .transition(.move(edge: .leading))
+            } else {
+                detailView(for: activeCategory!)
+                    .transition(.move(edge: .trailing))
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: activeCategory)
+        .clipped()
+    }
+
+    // MARK: - Main List
+    private var mainListView: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                ProfileCard(viewModel: viewModel)
+                    .onTapGesture { activeCategory = .accountSubscription }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                    .padding(.bottom, 8)
+
+                Divider()
+                    .padding(.horizontal, 16)
+
+                VStack(spacing: 1) {
+                    ForEach(SettingsCategory.allCases) { category in
+                        SettingsCategoryRow(
+                            category: category,
+                            subtitle: subtitleForCategory(category),
+                            onTap: { activeCategory = category }
+                        )
+                    }
+                }
+                .padding(.top, 8)
+            }
+        }
+    }
+
+    private func subtitleForCategory(_ category: SettingsCategory) -> String? {
+        switch category {
+        case .accountSubscription:
+            return viewModel.subscriptionStatus.displayName
+        case .integrations:
+            let count = viewModel.connectedIntegrationCount
+            return count > 0 ? "\(count) connected" : "None connected"
+        case .aiProviders:
+            return viewModel.selectedAIProvider.displayName
+        case .general:
+            return nil
+        case .keyboardShortcuts:
+            return nil
+        case .about:
+            return "v\(viewModel.appVersion)"
+        }
+    }
+
+    // MARK: - Detail View Dispatch
+    @ViewBuilder
+    private func detailView(for category: SettingsCategory) -> some View {
+        SettingsDetailContainer(title: category.title, onBack: { activeCategory = nil }) {
+            switch category {
+            case .accountSubscription:
+                AccountSubscriptionDetailView(viewModel: viewModel)
+            case .integrations:
+                IntegrationsDetailView(viewModel: viewModel)
+            case .aiProviders:
+                AIProvidersDetailView(viewModel: viewModel)
+            case .general:
+                GeneralDetailView(viewModel: viewModel)
+            case .keyboardShortcuts:
+                KeyboardShortcutsSettingsView()
+            case .about:
+                AboutDetailView(viewModel: viewModel)
+            }
+        }
+    }
+}
+
+// MARK: - Profile Card
+struct ProfileCard: View {
+    @ObservedObject var viewModel: SettingsViewModel
+
+    var body: some View {
+        HStack(spacing: 12) {
+            if viewModel.isSignedIn {
+                profileAvatar
+            } else {
+                Image(systemName: "person.crop.circle.fill")
+                    .font(.system(size: 36))
+                    .foregroundColor(.secondary.opacity(0.4))
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                if viewModel.isSignedIn {
+                    Text(viewModel.userName)
+                        .font(.headline)
+                    Text(viewModel.userEmail)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                } else {
+                    Text("Sign In")
+                        .font(.headline)
+                    Text("Sign in to sync your data")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+        .padding(.vertical, 8)
+        .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    private var profileAvatar: some View {
+        if let pictureURL = viewModel.userPicture, let url = URL(string: pictureURL) {
+            AsyncImage(url: url) { image in
+                image
+                    .resizable()
+                    .scaledToFill()
+            } placeholder: {
+                avatarPlaceholder
+            }
+            .frame(width: 40, height: 40)
+            .clipShape(Circle())
+        } else {
+            avatarPlaceholder
+        }
+    }
+
+    private var avatarPlaceholder: some View {
+        Circle()
+            .fill(Color.warmPrimary.opacity(0.15))
+            .frame(width: 40, height: 40)
+            .overlay(
+                Text(String(viewModel.userName.prefix(1)).uppercased())
+                    .font(.headline)
+                    .foregroundColor(.warmPrimary)
+            )
+    }
+}
+
+// MARK: - Category Row
+struct SettingsCategoryRow: View {
+    let category: SettingsCategory
+    let subtitle: String?
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 12) {
+                Image(systemName: category.icon)
+                    .font(.system(size: 14))
+                    .foregroundColor(.white)
+                    .frame(width: 28, height: 28)
+                    .background(category.iconColor)
+                    .cornerRadius(6)
+
+                Text(category.title)
+                    .foregroundColor(.primary)
+
+                Spacer()
+
+                if let subtitle = subtitle {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundColor(.secondary.opacity(0.5))
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Detail Container
+struct SettingsDetailContainer<Content: View>: View {
+    let title: String
+    let onBack: () -> Void
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header with back button
+            HStack(spacing: 8) {
+                Button(action: onBack) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 14, weight: .medium))
+                        Text("Settings")
+                            .font(.subheadline)
+                    }
+                    .foregroundColor(.warmPrimary)
+                }
+                .buttonStyle(.plain)
+
+                Spacer()
+
+                Text(title)
+                    .font(.headline)
+
+                Spacer()
+
+                // Invisible spacer to center the title
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 14, weight: .medium))
+                    Text("Settings")
+                        .font(.subheadline)
+                }
+                .opacity(0)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+
+            Divider()
+
+            ScrollView {
+                content
+                    .padding(16)
+            }
+        }
+    }
+}
+
+// MARK: - Account & Subscription Detail
+struct AccountSubscriptionDetailView: View {
+    @ObservedObject var viewModel: SettingsViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            // Account
+            if viewModel.isSignedIn {
+                signedInSection
+            } else {
+                signInSection
+            }
+
+            Divider()
+
+            // Subscription
+            subscriptionSection
+        }
+    }
+
+    private var signedInSection: some View {
         HStack {
-            // Profile picture
             if let pictureURL = viewModel.userPicture, let url = URL(string: pictureURL) {
                 AsyncImage(url: url) { image in
                     image
@@ -98,8 +356,7 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - Sign In Buttons
-    private var signInButtons: some View {
+    private var signInSection: some View {
         VStack(spacing: 12) {
             Button(action: viewModel.signInWithGoogle) {
                 HStack {
@@ -122,8 +379,7 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - Subscription View
-    private var subscriptionView: some View {
+    private var subscriptionSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 VStack(alignment: .leading) {
@@ -160,9 +416,13 @@ struct SettingsView: View {
             }
         }
     }
+}
 
-    // MARK: - Integrations View
-    private var integrationsView: some View {
+// MARK: - Integrations Detail
+struct IntegrationsDetailView: View {
+    @ObservedObject var viewModel: SettingsViewModel
+
+    var body: some View {
         VStack(spacing: 12) {
             IntegrationRow(
                 name: "Google Calendar",
@@ -189,11 +449,14 @@ struct SettingsView: View {
             )
         }
     }
+}
 
-    // MARK: - AI Provider View
-    private var aiProviderView: some View {
+// MARK: - AI Providers Detail
+struct AIProvidersDetailView: View {
+    @ObservedObject var viewModel: SettingsViewModel
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Provider selector
             Picker("Active Provider", selection: $viewModel.selectedAIProvider) {
                 ForEach(AIProvider.allCases) { provider in
                     HStack {
@@ -215,7 +478,6 @@ struct SettingsView: View {
 
             Divider()
 
-            // API Keys for each provider
             ForEach(AIProvider.allCases) { provider in
                 if provider.supportsOAuth {
                     ClaudeAuthRow(
@@ -254,10 +516,14 @@ struct SettingsView: View {
             }
         }
     }
+}
 
-    // MARK: - Preferences View
-    private var preferencesView: some View {
-        VStack(alignment: .leading, spacing: 12) {
+// MARK: - General Detail
+struct GeneralDetailView: View {
+    @ObservedObject var viewModel: SettingsViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
             Picker("Default Calendar", selection: $viewModel.defaultCalendar) {
                 Text("Google Calendar").tag(CalendarType.google)
                 Text("Apple Calendar").tag(CalendarType.apple)
@@ -268,14 +534,14 @@ struct SettingsView: View {
             Toggle("Show Notifications", isOn: $viewModel.showNotifications)
         }
     }
+}
 
-    // MARK: - Keyboard Shortcuts View
-    private var keyboardShortcutsView: some View {
-        KeyboardShortcutsSettingsView()
-    }
+// MARK: - About Detail
+struct AboutDetailView: View {
+    @ObservedObject var viewModel: SettingsViewModel
+    @StateObject private var updateService = UpdateService.shared
 
-    // MARK: - About View
-    private var aboutView: some View {
+    var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("Version")
@@ -284,7 +550,6 @@ struct SettingsView: View {
                     .foregroundColor(.secondary)
             }
 
-            // Update section
             if updateService.updateAvailable {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
@@ -341,30 +606,17 @@ struct SettingsView: View {
             Divider()
 
             HStack(spacing: 16) {
-                Link("Website", destination: URL(string: "https://ezlander.app")!)
-                Link("Privacy Policy", destination: URL(string: "https://ezlander.app/privacy")!)
-                Link("Terms", destination: URL(string: "https://ezlander.app/terms")!)
+                if let websiteURL = URL(string: "https://ezlander.app") {
+                    Link("Website", destination: websiteURL)
+                }
+                if let privacyURL = URL(string: "https://ezlander.app/privacy") {
+                    Link("Privacy Policy", destination: privacyURL)
+                }
+                if let termsURL = URL(string: "https://ezlander.app/terms") {
+                    Link("Terms", destination: termsURL)
+                }
             }
             .font(.caption)
-        }
-    }
-}
-
-// MARK: - Settings Section
-struct SettingsSection<Content: View>: View {
-    let title: String
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(title)
-                .font(.headline)
-                .foregroundColor(.secondary)
-
-            content
-                .padding()
-                .background(Color(NSColor.controlBackgroundColor))
-                .cornerRadius(8)
         }
     }
 }
@@ -630,6 +882,11 @@ class SettingsViewModel: ObservableObject {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
     }
 
+    var connectedIntegrationCount: Int {
+        [googleCalendarConnected, appleCalendarConnected, gmailConnected]
+            .filter { $0 }.count
+    }
+
     init() {
         loadSettings()
     }
@@ -835,5 +1092,5 @@ enum CalendarType: String, CaseIterable {
 
 #Preview {
     SettingsView()
-        .frame(width: 400, height: 600)
+        .frame(width: 400, height: 500)
 }

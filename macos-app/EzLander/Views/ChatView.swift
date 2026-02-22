@@ -81,15 +81,30 @@ struct ChatView: View {
                     }
 
                 Button(action: sendMessage) {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.title2)
-                        .foregroundColor(inputText.isEmpty ? .secondary : .warmPrimary)
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white)
+                        .frame(width: 30, height: 30)
+                        .background(
+                            LinearGradient(
+                                colors: inputText.isEmpty
+                                    ? [Color.secondary.opacity(0.3), Color.secondary.opacity(0.3)]
+                                    : [Color.warmPrimary, Color.warmAccent],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .cornerRadius(8)
                 }
                 .buttonStyle(.plain)
                 .disabled(inputText.isEmpty || viewModel.isLoading)
             }
-            .padding()
-            .background(Color(NSColor.controlBackgroundColor))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
+            .cornerRadius(10)
+            .padding(.horizontal, 12)
+            .padding(.bottom, 8)
         }
         .onAppear {
             isInputFocused = true
@@ -150,20 +165,14 @@ struct MessageBubble: View {
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
                         .background(Color(NSColor.controlBackgroundColor))
-                        .cornerRadius(16)
+                        .clipShape(BubbleShape(isUser: false))
                 } else {
                     Text(message.content)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
-                        .background(
-                            LinearGradient(
-                                colors: [Color.warmPrimary, Color.warmAccent],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
+                        .background(Color.warmPrimary)
                         .foregroundColor(.white)
-                        .cornerRadius(16)
+                        .clipShape(BubbleShape(isUser: true))
                 }
 
                 if let toolCall = message.toolCall {
@@ -174,6 +183,42 @@ struct MessageBubble: View {
             if message.role == .assistant {
                 Spacer(minLength: 60)
             }
+        }
+    }
+}
+
+// MARK: - Bubble Shape (matching website mockup)
+struct BubbleShape: Shape {
+    let isUser: Bool
+
+    func path(in rect: CGRect) -> Path {
+        let bigRadius: CGFloat = 16
+        let smallRadius: CGFloat = 6
+
+        // User: small radius on bottom-right, AI: small radius on bottom-left
+        let topLeft = bigRadius
+        let topRight = bigRadius
+        let bottomRight = isUser ? smallRadius : bigRadius
+        let bottomLeft = isUser ? bigRadius : smallRadius
+
+        return Path { path in
+            path.move(to: CGPoint(x: rect.minX + topLeft, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX - topRight, y: rect.minY))
+            path.addArc(tangent1End: CGPoint(x: rect.maxX, y: rect.minY),
+                        tangent2End: CGPoint(x: rect.maxX, y: rect.minY + topRight),
+                        radius: topRight)
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - bottomRight))
+            path.addArc(tangent1End: CGPoint(x: rect.maxX, y: rect.maxY),
+                        tangent2End: CGPoint(x: rect.maxX - bottomRight, y: rect.maxY),
+                        radius: bottomRight)
+            path.addLine(to: CGPoint(x: rect.minX + bottomLeft, y: rect.maxY))
+            path.addArc(tangent1End: CGPoint(x: rect.minX, y: rect.maxY),
+                        tangent2End: CGPoint(x: rect.minX, y: rect.maxY - bottomLeft),
+                        radius: bottomLeft)
+            path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + topLeft))
+            path.addArc(tangent1End: CGPoint(x: rect.minX, y: rect.minY),
+                        tangent2End: CGPoint(x: rect.minX + topLeft, y: rect.minY),
+                        radius: topLeft)
         }
     }
 }

@@ -1038,7 +1038,10 @@ class CalendarViewModel: ObservableObject {
 
     private func dateKey(_ date: Date) -> String {
         let components = calendar.dateComponents([.year, .month, .day], from: date)
-        return "\(components.year!)-\(components.month!)-\(components.day!)"
+        let year = components.year ?? 0
+        let month = components.month ?? 0
+        let day = components.day ?? 0
+        return "\(year)-\(month)-\(day)"
     }
 
     func eventsForDate(_ date: Date) -> [CalendarEvent] {

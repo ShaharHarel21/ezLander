@@ -158,7 +158,10 @@ class ClaudeService {
             "messages": messages
         ]
 
-        var request = URLRequest(url: URL(string: baseURL)!)
+        guard let url = URL(string: baseURL) else {
+            throw ClaudeError.invalidResponse
+        }
+        var request = URLRequest(url: url, timeoutInterval: 60)
         request.httpMethod = "POST"
         try await setAuthHeaders(on: &request)
         request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
@@ -182,7 +185,9 @@ class ClaudeService {
             throw ClaudeError.apiError(statusCode: httpResponse.statusCode, message: errorBody)
         }
 
-        let responseJSON = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        guard let responseJSON = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw ClaudeError.invalidResponse
+        }
 
         // Parse response
         return try await parseResponse(responseJSON, originalMessages: messages)
@@ -202,9 +207,11 @@ class ClaudeService {
                 if type == "text", let text = block["text"] as? String {
                     responseText = text
                 } else if type == "tool_use" {
-                    let toolName = block["name"] as! String
-                    let toolInput = block["input"] as! [String: Any]
-                    let toolId = block["id"] as! String
+                    guard let toolName = block["name"] as? String,
+                          let toolInput = block["input"] as? [String: Any],
+                          let toolId = block["id"] as? String else {
+                        continue
+                    }
 
                     // Get the user's original message for context
                     let userMessage = originalMessages.last(where: { $0["role"] as? String == "user" })?["content"] as? String ?? ""
@@ -244,13 +251,18 @@ class ClaudeService {
                         "messages": updatedMessages
                     ]
 
-                    var request = URLRequest(url: URL(string: baseURL)!)
+                    guard let finalURL = URL(string: baseURL) else {
+                        throw ClaudeError.invalidResponse
+                    }
+                    var request = URLRequest(url: finalURL, timeoutInterval: 60)
                     request.httpMethod = "POST"
                     try await setAuthHeaders(on: &request)
                     request.httpBody = try JSONSerialization.data(withJSONObject: finalRequestBody)
 
                     let (finalData, _) = try await URLSession.shared.data(for: request)
-                    let finalJSON = try JSONSerialization.jsonObject(with: finalData) as! [String: Any]
+                    guard let finalJSON = try JSONSerialization.jsonObject(with: finalData) as? [String: Any] else {
+                        throw ClaudeError.invalidResponse
+                    }
 
                     if let finalContent = finalJSON["content"] as? [[String: Any]],
                        let textBlock = finalContent.first(where: { $0["type"] as? String == "text" }),
@@ -289,7 +301,11 @@ class ClaudeService {
         NSLog("ClaudeService: create_calendar_event called with input: \(input)")
         NSLog("ClaudeService: userMessage: \(userMessage)")
 
-        var title = input["title"] as! String
+        guard var title = input["title"] as? String,
+              let dateStr = input["date"] as? String,
+              let timeStr = input["time"] as? String else {
+            throw ClaudeError.toolExecutionFailed("Missing required fields: title, date, or time")
+        }
 
         // If the AI gave a generic title, extract a better one from the user's message
         let genericTitles = ["new event", "event", "meeting", "untitled", "calendar event", "new meeting", "new calendar event"]
@@ -297,8 +313,6 @@ class ClaudeService {
             title = extractTitleFromMessage(userMessage)
             NSLog("ClaudeService: Extracted better title: '\(title)'")
         }
-        let dateStr = input["date"] as! String
-        let timeStr = input["time"] as! String
         let duration = input["duration"] as? Int ?? 60
         let calendarType = input["calendar_type"] as? String ?? "google"
         let attendeeEmails = input["attendees"] as? [String]
@@ -349,8 +363,10 @@ class ClaudeService {
     }
 
     private func handleListCalendarEvents(_ input: [String: Any]) async throws -> String {
-        let startDate = input["start_date"] as! String
-        let endDate = input["end_date"] as! String
+        guard let startDate = input["start_date"] as? String,
+              let endDate = input["end_date"] as? String else {
+            throw ClaudeError.toolExecutionFailed("Missing required fields: start_date or end_date")
+        }
         let calendarType = input["calendar_type"] as? String ?? "both"
 
         var events: [CalendarEvent] = []
@@ -399,9 +415,11 @@ class ClaudeService {
     }
 
     private func handleSendEmail(_ input: [String: Any]) async throws -> String {
-        let to = input["to"] as! String
-        let subject = input["subject"] as! String
-        let body = input["body"] as! String
+        guard let to = input["to"] as? String,
+              let subject = input["subject"] as? String,
+              let body = input["body"] as? String else {
+            throw ClaudeError.toolExecutionFailed("Missing required fields: to, subject, or body")
+        }
 
         let email = Email(
             id: UUID().uuidString,
@@ -417,9 +435,9 @@ class ClaudeService {
     }
 
     private func handleDraftEmail(_ input: [String: Any]) -> String {
-        let to = input["to"] as! String
-        let subject = input["subject"] as! String
-        let body = input["body"] as! String
+        let to = input["to"] as? String ?? ""
+        let subject = input["subject"] as? String ?? ""
+        let body = input["body"] as? String ?? ""
 
         return """
         Draft email created:
@@ -433,7 +451,9 @@ class ClaudeService {
     }
 
     private func handleSearchEmails(_ input: [String: Any]) async throws -> String {
-        let query = input["query"] as! String
+        guard let query = input["query"] as? String else {
+            throw ClaudeError.toolExecutionFailed("Missing required field: query")
+        }
 
         let emails = try await GmailService.shared.searchEmails(query: query)
 
@@ -452,7 +472,9 @@ class ClaudeService {
     }
 
     private func handleGetMeetingPrep(_ input: [String: Any]) async throws -> String {
-        let eventTitle = input["event_title"] as! String
+        guard let eventTitle = input["event_title"] as? String else {
+            throw ClaudeError.toolExecutionFailed("Missing required field: event_title")
+        }
         let dateStr = input["date"] as? String
 
         var searchDate: Date?
@@ -579,7 +601,7 @@ class ClaudeService {
                 let cal = Calendar.current
                 parsedHour = cal.component(.hour, from: parsed)
                 parsedMinute = cal.component(.minute, from: parsed)
-                NSLog("ClaudeService: Parsed time with format '\(format)' → \(parsedHour!):\(parsedMinute)")
+                NSLog("ClaudeService: Parsed time with format '\(format)' → \(parsedHour ?? -1):\(parsedMinute)")
                 break
             }
         }
@@ -598,7 +620,7 @@ class ClaudeService {
                 if isAM && h == 12 { h = 0 }
                 parsedHour = h
                 parsedMinute = parts.count > 1 ? (Int(parts[1]) ?? 0) : 0
-                NSLog("ClaudeService: Manual time parse → \(parsedHour!):\(parsedMinute)")
+                NSLog("ClaudeService: Manual time parse → \(parsedHour ?? -1):\(parsedMinute)")
             }
         }
 

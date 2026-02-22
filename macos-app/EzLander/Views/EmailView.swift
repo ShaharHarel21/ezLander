@@ -1098,7 +1098,7 @@ struct HTMLEmailBodyView: NSViewRepresentable {
                         color: #e0e0e0;
                     }
                     a {
-                        color: #FFA94D;
+                        color: #36AAF5;
                     }
                 }
                 img {
@@ -1106,7 +1106,7 @@ struct HTMLEmailBodyView: NSViewRepresentable {
                     height: auto !important;
                 }
                 a {
-                    color: #FF6B6B;
+                    color: #0C8CE6;
                 }
                 blockquote {
                     border-left: 3px solid #ccc;
