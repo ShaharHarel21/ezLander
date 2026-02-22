@@ -1,34 +1,34 @@
 import SwiftUI
 
-// MARK: - Warm & Modern Color Theme
+// MARK: - Eden-Inspired Green Color Theme
 extension Color {
-    // Primary coral — main interactive elements, buttons, selected states
-    static let warmPrimary = Color(red: 1.0, green: 0.42, blue: 0.42)       // #FF6B6B
+    // Primary green — main interactive elements, buttons, selected states
+    static let warmPrimary = Color(red: 0.18, green: 0.49, blue: 0.32)      // #2E7D52
 
-    // Accent amber — secondary highlights, gradients
-    static let warmAccent = Color(red: 1.0, green: 0.66, blue: 0.30)        // #FFA94D
+    // Accent green — secondary highlights, gradients
+    static let warmAccent = Color(red: 0.35, green: 0.71, blue: 0.49)       // #5AB47D
 
-    // Highlight warm yellow — badges, special elements
-    static let warmHighlight = Color(red: 1.0, green: 0.85, blue: 0.24)     // #FFD93D
+    // Highlight mint — badges, special elements
+    static let warmHighlight = Color(red: 0.66, green: 0.90, blue: 0.81)    // #A8E6CF
 
-    // Soft peach — subtle backgrounds, hover states
-    static let warmSoft = Color(red: 1.0, green: 0.91, blue: 0.87)          // #FFE8DE
+    // Soft sage — subtle backgrounds, hover states
+    static let warmSoft = Color(red: 0.91, green: 0.96, blue: 0.91)         // #E8F5E9
 
-    // Gradient: coral to amber
+    // Gradient: deep green to lighter green
     static let warmGradient = LinearGradient(
         colors: [warmPrimary, warmAccent],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
 
-    // User message bubble — warm coral
-    static let userBubble = Color(red: 1.0, green: 0.42, blue: 0.42)        // #FF6B6B
+    // User message bubble — eden green
+    static let userBubble = Color(red: 0.18, green: 0.49, blue: 0.32)       // #2E7D52
 
     // Event indicator dot color
-    static let eventDot = Color(red: 1.0, green: 0.55, blue: 0.36)          // #FF8C5C
+    static let eventDot = Color(red: 0.35, green: 0.71, blue: 0.49)         // #5AB47D
 
-    // Pro badge gold
-    static let proBadge = Color(red: 1.0, green: 0.76, blue: 0.20)          // #FFC233
+    // Pro badge mint
+    static let proBadge = Color(red: 0.66, green: 0.90, blue: 0.81)         // #A8E6CF
 
     // Initialize from hex string (e.g. "#FF6B6B" or "FF6B6B")
     init(hex: String) {

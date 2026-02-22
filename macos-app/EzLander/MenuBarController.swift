@@ -24,7 +24,7 @@ class MenuBarController: NSObject {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
         if let button = statusItem.button {
-            button.image = NSImage(named: "MenuBarIcon")
+            button.image = NSImage(systemSymbolName: "sparkle", accessibilityDescription: "ezLander")
             button.image?.isTemplate = true
             button.action = #selector(handleClick)
             button.target = self
