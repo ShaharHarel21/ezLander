@@ -606,9 +606,15 @@ struct AboutDetailView: View {
             Divider()
 
             HStack(spacing: 16) {
-                Link("Website", destination: URL(string: "https://ezlander.app")!)
-                Link("Privacy Policy", destination: URL(string: "https://ezlander.app/privacy")!)
-                Link("Terms", destination: URL(string: "https://ezlander.app/terms")!)
+                if let websiteURL = URL(string: "https://ezlander.app") {
+                    Link("Website", destination: websiteURL)
+                }
+                if let privacyURL = URL(string: "https://ezlander.app/privacy") {
+                    Link("Privacy Policy", destination: privacyURL)
+                }
+                if let termsURL = URL(string: "https://ezlander.app/terms") {
+                    Link("Terms", destination: termsURL)
+                }
             }
             .font(.caption)
         }

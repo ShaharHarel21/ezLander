@@ -266,7 +266,7 @@ class CalendarQuickViewModel: ObservableObject {
         Task {
             do {
                 let now = Date()
-                let monthFromNow = Calendar.current.date(byAdding: .month, value: 1, to: now)!
+                let monthFromNow = Calendar.current.date(byAdding: .month, value: 1, to: now) ?? now.addingTimeInterval(30 * 24 * 3600)
                 logToFile("Fetching from \(now) to \(monthFromNow)")
                 let fetchedEvents = try await GoogleCalendarService.shared.listEvents(from: now, to: monthFromNow)
                 logToFile("Got \(fetchedEvents.count) events")
@@ -285,13 +285,12 @@ class CalendarQuickViewModel: ObservableObject {
     }
 
     private func logToFile(_ message: String) {
-        // Use Documents folder which is accessible in sandbox
-        guard let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
-        let logPath = documentsPath.appendingPathComponent("ezlander_calendar.log")
-
         let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
         let logMessage = "[\(timestamp)] \(message)\n"
-        if let data = logMessage.data(using: .utf8) {
+        DispatchQueue.global(qos: .background).async {
+            guard let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first,
+                  let data = logMessage.data(using: .utf8) else { return }
+            let logPath = documentsPath.appendingPathComponent("ezlander_calendar.log")
             if FileManager.default.fileExists(atPath: logPath.path) {
                 if let fileHandle = try? FileHandle(forWritingTo: logPath) {
                     fileHandle.seekToEndOfFile()

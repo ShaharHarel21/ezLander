@@ -5,7 +5,6 @@ class KeychainService {
     static let shared = KeychainService()
 
     private let service = "com.ezlander.app"
-    private let useUserDefaultsFallback = true  // Enable fallback for unsigned builds
 
     private init() {}
 
@@ -34,12 +33,6 @@ class KeychainService {
             return true
         } else {
             print("KeychainService: Failed to save key to Keychain: \(key), status: \(status)")
-            // Fallback to UserDefaults for development/unsigned builds
-            if useUserDefaultsFallback {
-                UserDefaults.standard.set(value, forKey: "secure_\(key)")
-                print("KeychainService: Saved to UserDefaults fallback: \(key)")
-                return true
-            }
             return false
         }
     }
@@ -64,14 +57,6 @@ class KeychainService {
             return string
         }
 
-        // Fallback to UserDefaults for development/unsigned builds
-        if useUserDefaultsFallback {
-            if let fallbackValue = UserDefaults.standard.string(forKey: "secure_\(key)") {
-                print("KeychainService: Retrieved key from UserDefaults fallback: \(key)")
-                return fallbackValue
-            }
-        }
-
         print("KeychainService: Key not found: \(key)")
         return nil
     }
@@ -85,11 +70,6 @@ class KeychainService {
         ]
 
         SecItemDelete(query as CFDictionary)
-
-        // Also delete from UserDefaults fallback
-        if useUserDefaultsFallback {
-            UserDefaults.standard.removeObject(forKey: "secure_\(key)")
-        }
     }
 
     // MARK: - Clear All
