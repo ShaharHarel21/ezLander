@@ -101,7 +101,7 @@ struct SettingsView: View {
         case .aiProviders:
             return viewModel.selectedAIProvider.displayName
         case .general:
-            return nil
+            return viewModel.appearanceMode.displayName
         case .keyboardShortcuts:
             return nil
         case .about:
@@ -524,6 +524,12 @@ struct GeneralDetailView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
+            Picker("Appearance", selection: $viewModel.appearanceMode) {
+                ForEach(AppearanceMode.allCases, id: \.self) { mode in
+                    Text(mode.displayName).tag(mode)
+                }
+            }
+
             Picker("Default Calendar", selection: $viewModel.defaultCalendar) {
                 Text("Google Calendar").tag(CalendarType.google)
                 Text("Apple Calendar").tag(CalendarType.apple)
@@ -862,6 +868,12 @@ class SettingsViewModel: ObservableObject {
             UserDefaults.standard.set(showNotifications, forKey: "show_notifications")
         }
     }
+    @Published var appearanceMode: AppearanceMode = .system {
+        didSet {
+            UserDefaults.standard.set(appearanceMode.rawValue, forKey: "appearance_mode")
+            appearanceMode.apply()
+        }
+    }
 
     // AI Provider settings
     @Published var selectedAIProvider: AIProvider = .claude {
@@ -916,6 +928,12 @@ class SettingsViewModel: ObservableObject {
         }
         launchAtLogin = UserDefaults.standard.bool(forKey: "launch_at_login")
         showNotifications = UserDefaults.standard.object(forKey: "show_notifications") as? Bool ?? true
+
+        // Load appearance mode
+        if let savedAppearance = UserDefaults.standard.string(forKey: "appearance_mode"),
+           let mode = AppearanceMode(rawValue: savedAppearance) {
+            appearanceMode = mode
+        }
 
         // Load AI provider settings
         selectedAIProvider = AIService.shared.currentProvider
@@ -1057,6 +1075,33 @@ class SettingsViewModel: ObservableObject {
         gmailConnected = false
     }
 
+}
+
+// MARK: - Appearance Mode
+enum AppearanceMode: String, CaseIterable {
+    case system
+    case light
+    case dark
+
+    var displayName: String {
+        switch self {
+        case .system: return "System"
+        case .light: return "Light"
+        case .dark: return "Dark"
+        }
+    }
+
+    var nsAppearance: NSAppearance? {
+        switch self {
+        case .system: return nil
+        case .light: return NSAppearance(named: .aqua)
+        case .dark: return NSAppearance(named: .darkAqua)
+        }
+    }
+
+    func apply() {
+        NSApp.appearance = nsAppearance
+    }
 }
 
 // MARK: - Types

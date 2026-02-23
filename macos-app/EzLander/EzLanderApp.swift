@@ -19,6 +19,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Show dock icon alongside menu bar
         NSApp.setActivationPolicy(.regular)
 
+        // Apply saved appearance mode (light/dark/system)
+        if let savedAppearance = UserDefaults.standard.string(forKey: "appearance_mode"),
+           let mode = AppearanceMode(rawValue: savedAppearance) {
+            mode.apply()
+        }
+
         // Initialize menu bar controller
         menuBarController = MenuBarController()
 
