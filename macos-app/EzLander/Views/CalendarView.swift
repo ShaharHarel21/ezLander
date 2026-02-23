@@ -221,6 +221,38 @@ struct CalendarView: View {
                 }
             }
 
+            // All-day events row aligned with day columns
+            let hasAllDay = viewModel.weekDays.contains { !viewModel.eventsForDate($0).filter { $0.isAllDay }.isEmpty }
+            if hasAllDay {
+                Divider()
+
+                HStack(alignment: .top, spacing: 0) {
+                    Text("All day")
+                        .font(.system(size: 9))
+                        .foregroundColor(.secondary)
+                        .frame(width: 46, alignment: .trailing)
+                        .padding(.trailing, 4)
+
+                    ForEach(viewModel.weekDays, id: \.self) { date in
+                        VStack(spacing: 1) {
+                            ForEach(viewModel.eventsForDate(date).filter { $0.isAllDay }, id: \.id) { event in
+                                Text(event.title)
+                                    .font(.system(size: 8, weight: .medium))
+                                    .lineLimit(1)
+                                    .padding(.horizontal, 2)
+                                    .padding(.vertical, 1)
+                                    .frame(maxWidth: .infinity)
+                                    .background((event.calendarColor.map { Color(hex: $0) } ?? Color.warmAccent).opacity(0.2))
+                                    .cornerRadius(2)
+                                    .onTapGesture { selectedEvent = event }
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+
             Divider()
 
             // Columnar time grid
