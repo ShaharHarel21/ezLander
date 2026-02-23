@@ -27,8 +27,8 @@ struct CalendarView: View {
                 dayView
             }
 
-            // Selected day events (hidden in day view since events are shown inline)
-            if viewModel.viewMode != .day {
+            // Selected day events (only in month view — week/day views show events inline)
+            if viewModel.viewMode == .month {
                 Divider()
                 selectedDayEvents
             }
@@ -182,47 +182,112 @@ struct CalendarView: View {
 
     // MARK: - Week View
     private var weekView: some View {
-        VStack(spacing: 0) {
-            // Day headers with dates
+        let hourHeight: CGFloat = 52
+        let totalHeight: CGFloat = hourHeight * 24
+
+        return VStack(spacing: 0) {
+            // Day column headers aligned with grid columns
             HStack(spacing: 0) {
+                Color.clear
+                    .frame(width: 46)
+
                 ForEach(viewModel.weekDays, id: \.self) { date in
                     VStack(spacing: 2) {
                         Text(viewModel.dayOfWeek(date))
                             .font(.caption2)
                             .foregroundColor(.secondary)
-                        Text(viewModel.dayNumber(date))
-                            .font(.system(size: 14, weight: viewModel.isSameDay(date, Date()) ? .bold : .regular))
-                            .foregroundColor(viewModel.isSameDay(date, Date()) ? .warmPrimary : .primary)
+
+                        ZStack {
+                            Circle()
+                                .fill(viewModel.isSameDay(date, Date()) ? Color.warmPrimary : Color.clear)
+                                .frame(width: 24, height: 24)
+
+                            Text(viewModel.dayNumber(date))
+                                .font(.system(size: 13, weight: viewModel.isSameDay(date, Date()) ? .bold : .regular))
+                                .foregroundColor(viewModel.isSameDay(date, Date()) ? .white : .primary)
+                        }
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 4)
-                    .background(viewModel.isSameDay(date, viewModel.selectedDate) ? Color.warmPrimary.opacity(0.1) : Color.clear)
+                    .background(
+                        viewModel.isSameDay(date, viewModel.selectedDate) && !viewModel.isSameDay(date, Date())
+                            ? Color.warmPrimary.opacity(0.1)
+                            : Color.clear
+                    )
                     .cornerRadius(4)
                     .onTapGesture {
                         viewModel.selectDate(date)
                     }
                 }
             }
-            .padding(.horizontal, 4)
 
             Divider()
 
-            // Week events timeline
-            ScrollView {
-                VStack(spacing: 4) {
-                    ForEach(viewModel.weekEvents, id: \.id) { event in
-                        WeekEventRow(event: event, onTap: {
-                            selectedEvent = event
-                        })
-                    }
+            // Columnar time grid
+            ScrollViewReader { proxy in
+                ScrollView {
+                    HStack(alignment: .top, spacing: 0) {
+                        // Hour labels column
+                        VStack(spacing: 0) {
+                            ForEach(0..<24, id: \.self) { hour in
+                                Text(hourLabel(hour))
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.secondary)
+                                    .frame(width: 42, height: hourHeight, alignment: .topTrailing)
+                                    .padding(.trailing, 4)
+                                    .id(hour)
+                            }
+                        }
 
-                    if viewModel.weekEvents.isEmpty && !viewModel.isLoading {
-                        Text("No events this week")
-                            .foregroundColor(.secondary)
-                            .padding()
+                        // Day columns
+                        ForEach(viewModel.weekDays, id: \.self) { date in
+                            ZStack(alignment: .topLeading) {
+                                // Hourly grid lines
+                                VStack(spacing: 0) {
+                                    ForEach(0..<24, id: \.self) { _ in
+                                        VStack(spacing: 0) {
+                                            Divider()
+                                            Spacer()
+                                        }
+                                        .frame(height: hourHeight)
+                                    }
+                                }
+
+                                // Timed events
+                                ForEach(viewModel.eventsForDate(date).filter { !$0.isAllDay }, id: \.id) { event in
+                                    WeekColumnEventBlock(event: event) {
+                                        selectedEvent = event
+                                    }
+                                    .frame(height: max(20, eventHeightForDuration(event, hourHeight: hourHeight)))
+                                    .padding(.horizontal, 1)
+                                    .offset(y: yPositionForTime(event.startDate, hourHeight: hourHeight))
+                                }
+
+                                // Current time indicator
+                                if viewModel.isSameDay(date, viewModel.currentTime) {
+                                    HStack(spacing: 0) {
+                                        Circle()
+                                            .fill(Color.red)
+                                            .frame(width: 6, height: 6)
+                                        Rectangle()
+                                            .fill(Color.red)
+                                            .frame(height: 1)
+                                    }
+                                    .offset(y: yPositionForTime(viewModel.currentTime, hourHeight: hourHeight) - 3)
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                            .frame(height: totalHeight)
+                            .clipped()
+                        }
                     }
                 }
-                .padding(.horizontal, 4)
+                .onAppear {
+                    scrollToRelevantHour(proxy: proxy)
+                }
+                .onChange(of: viewModel.selectedDate) { _ in
+                    scrollToRelevantHour(proxy: proxy)
+                }
             }
         }
     }
@@ -583,69 +648,40 @@ struct EventRow: View {
     }
 }
 
-// MARK: - Week Event Row
-struct WeekEventRow: View {
+// MARK: - Week Column Event Block
+struct WeekColumnEventBlock: View {
     let event: CalendarEvent
     let onTap: () -> Void
 
-    private let formatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "EEE, h:mm a"
-        return f
-    }()
-
     var body: some View {
-        HStack(spacing: 8) {
-            RoundedRectangle(cornerRadius: 2)
-                .fill(calendarBarColor)
+        HStack(spacing: 0) {
+            RoundedRectangle(cornerRadius: 1)
+                .fill(barColor)
                 .frame(width: 3)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 0) {
                 Text(event.title)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+                    .font(.system(size: 9, weight: .medium))
+                    .lineLimit(2)
 
-                if event.isAllDay {
-                    Text("All Day")
-                        .font(.caption)
+                if event.hasVideoCall {
+                    Image(systemName: "video.fill")
+                        .font(.system(size: 7))
                         .foregroundColor(.warmPrimary)
-                } else {
-                    Text(formatter.string(from: event.startDate))
-                        .font(.caption)
-                        .foregroundColor(.secondary)
                 }
             }
+            .padding(.leading, 2)
+            .padding(.vertical, 1)
 
-            Spacer()
-
-            // Video call indicator
-            if event.hasVideoCall {
-                Image(systemName: "video.fill")
-                    .font(.caption)
-                    .foregroundColor(.warmPrimary)
-            }
-
-            // Attendee count
-            if event.attendeeCount > 0 {
-                HStack(spacing: 2) {
-                    Image(systemName: "person.2.fill")
-                        .font(.system(size: 9))
-                    Text("\(event.attendeeCount)")
-                        .font(.caption2)
-                }
-                .foregroundColor(.secondary)
-            }
+            Spacer(minLength: 0)
         }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 8)
-        .background(Color(NSColor.controlBackgroundColor))
-        .cornerRadius(6)
-        .onTapGesture {
-            onTap()
-        }
+        .frame(maxWidth: .infinity)
+        .background(barColor.opacity(0.15))
+        .cornerRadius(3)
+        .onTapGesture { onTap() }
     }
 
-    private var calendarBarColor: Color {
+    private var barColor: Color {
         if let hex = event.calendarColor {
             return Color(hex: hex)
         }
