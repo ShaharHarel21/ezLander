@@ -369,7 +369,7 @@ struct AIActionResultView: View {
                 ),
                 summary: "Creating a new calendar event"
             ),
-            onConfirm: {},
+            onConfirm: { _ in },
             onDecline: {}
         )
 
@@ -383,7 +383,7 @@ struct AIActionResultView: View {
                 ),
                 summary: "Sending follow-up email"
             ),
-            onConfirm: {},
+            onConfirm: { _ in },
             onDecline: {}
         )
     }

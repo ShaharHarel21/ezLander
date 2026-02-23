@@ -159,11 +159,11 @@ class ClaudeService {
         let responseJSON = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
         // Parse response
-        return try await parseResponse(responseJSON, originalMessages: messages)
+        return try await parseResponse(responseJSON, originalMessages: messages, calendarContext: calendarContext)
     }
 
     // MARK: - Parse Response
-    private func parseResponse(_ json: [String: Any], originalMessages: [[String: Any]]) async throws -> ChatMessage {
+    private func parseResponse(_ json: [String: Any], originalMessages: [[String: Any]], calendarContext: String) async throws -> ChatMessage {
         guard let content = json["content"] as? [[String: Any]] else {
             throw ClaudeError.invalidResponse
         }
