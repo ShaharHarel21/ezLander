@@ -8,9 +8,6 @@ class KimiService {
     private let baseURL = "https://integrate.api.nvidia.com/v1/chat/completions"
     private let model = "moonshotai/kimi-k2.5"
 
-    // Cached calendar context
-    private var cachedCalendarContext: String = ""
-
     private init() {
         // Load API key from Keychain or environment
         if let keychainKey = KeychainService.shared.get(key: "kimi_api_key"), !keychainKey.isEmpty {
@@ -26,7 +23,7 @@ class KimiService {
     func reloadAPIKey() {
         if let keychainKey = KeychainService.shared.get(key: "kimi_api_key")?.trimmingCharacters(in: .whitespacesAndNewlines), !keychainKey.isEmpty {
             apiKey = keychainKey
-            print("KimiService: Reloaded API key, length: \(apiKey.count), prefix: \(String(apiKey.prefix(15)))...")
+            print("KimiService: Authentication configured")
         } else {
             apiKey = ""
             print("KimiService: No API key found in Keychain")
@@ -38,23 +35,16 @@ class KimiService {
         // Reload key in case it was just added
         reloadAPIKey()
 
-        // Debug: Print what we got
-        NSLog("KimiService: API key length: %d, empty: %@", apiKey.count, apiKey.isEmpty ? "YES" : "NO")
-        if !apiKey.isEmpty {
-            NSLog("KimiService: API key starts with: %@", String(apiKey.prefix(10)))
-        }
-
         guard !apiKey.isEmpty else {
-            NSLog("KimiService: No API key configured!")
             throw KimiError.noAPIKey
         }
 
-        // Refresh calendar context
-        cachedCalendarContext = await CalendarContextService.shared.buildTodayContext()
+        // Fetch calendar context via shared service (which caches internally)
+        let calendarContext = await CalendarContextService.shared.buildTodayContext()
 
         // Build messages array
         var messages: [[String: Any]] = [
-            ["role": "system", "content": systemPrompt]
+            ["role": "system", "content": SystemPromptProvider.buildSystemPrompt(calendarContext: calendarContext)]
         ]
 
         for message in conversationHistory {
@@ -86,11 +76,6 @@ class KimiService {
         NSLog("KimiService: Authorization header set with Bearer token")
 
         print("KimiService: Request URL: \(baseURL)")
-        print("KimiService: API Key empty: \(apiKey.isEmpty)")
-        if !apiKey.isEmpty {
-            print("KimiService: API Key prefix: \(String(apiKey.prefix(10)))...")
-        }
-
         let (data, response) = try await URLSession.shared.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
@@ -130,44 +115,6 @@ class KimiService {
         }
 
         return ChatMessage(role: .assistant, content: content)
-    }
-
-    // MARK: - System Prompt
-    private var systemPrompt: String {
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd"
-        let today = dateFormatter.string(from: Date())
-
-        let timeFormatter = DateFormatter()
-        timeFormatter.timeStyle = .short
-        let currentTime = timeFormatter.string(from: Date())
-
-        let calendar = Calendar.current
-        let weekday = calendar.component(.weekday, from: Date())
-        let weekdayName = DateFormatter().weekdaySymbols[weekday - 1]
-
-        return """
-        You are ezLander, a helpful AI assistant integrated into a macOS menu bar app. You help users manage their calendar and email.
-
-        Today is \(weekdayName), \(today). Current time: \(currentTime).
-
-        \(cachedCalendarContext)
-
-        You can help users with:
-        - Creating calendar events
-        - Listing upcoming events
-        - Drafting and sending emails
-        - Searching emails
-        - General questions and tasks
-
-        Guidelines:
-        - Be concise and helpful
-        - Always confirm before sending emails
-        - When creating events, clarify date/time if ambiguous
-        - Format dates and times in a human-readable way
-        - If you don't have enough information, ask for clarification
-        - When the user asks about their calendar, use the schedule information above to answer directly
-        """
     }
 
     // MARK: - Check if configured

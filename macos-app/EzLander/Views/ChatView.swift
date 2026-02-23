@@ -19,8 +19,8 @@ struct ChatView: View {
                             if message.id == viewModel.pendingActionMessageId, let action = viewModel.pendingAction {
                                 AIActionPreviewCard(
                                     action: action,
-                                    onConfirm: {
-                                        viewModel.confirmAction()
+                                    onConfirm: { editedAction in
+                                        viewModel.confirmAction(editedAction)
                                     },
                                     onDecline: {
                                         viewModel.declineAction()
@@ -360,8 +360,8 @@ class ChatViewModel: ObservableObject {
         }
     }
 
-    func confirmAction() {
-        guard let action = pendingAction else { return }
+    func confirmAction(_ editedAction: AIAction? = nil) {
+        guard let action = editedAction ?? pendingAction else { return }
         let resultMsgId = pendingActionMessageId
 
         Task {

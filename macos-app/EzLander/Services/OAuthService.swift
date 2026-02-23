@@ -16,6 +16,10 @@ class OAuthService: NSObject {
     // Apple Sign In
     private var appleSignInContinuation: CheckedContinuation<Void, Error>?
 
+    // Token refresh deduplication
+    private var isRefreshing = false
+    private var refreshWaiters: [CheckedContinuation<String, Error>] = []
+
     // User email from Google sign-in
     var userEmail: String? {
         UserDefaults.standard.string(forKey: "user_email")
@@ -213,15 +217,35 @@ class OAuthService: NSObject {
         }
 
         // Check if token is valid by making a test request
-        let url = URL(string: "https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=\(accessToken)")!
-        let (_, response) = try await URLSession.shared.data(from: url)
+        var tokenInfoRequest = URLRequest(url: URL(string: "https://www.googleapis.com/oauth2/v3/tokeninfo")!)
+        tokenInfoRequest.httpMethod = "POST"
+        tokenInfoRequest.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        let (_, response) = try await URLSession.shared.data(for: tokenInfoRequest)
 
         if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
             return accessToken
         }
 
-        // Token expired, refresh it
-        return try await refreshAccessToken()
+        // Token expired - refresh it, but deduplicate concurrent refresh calls
+        if isRefreshing {
+            return try await withCheckedThrowingContinuation { continuation in
+                refreshWaiters.append(continuation)
+            }
+        }
+
+        isRefreshing = true
+        do {
+            let newToken = try await refreshAccessToken()
+            isRefreshing = false
+            refreshWaiters.forEach { $0.resume(returning: newToken) }
+            refreshWaiters.removeAll()
+            return newToken
+        } catch {
+            isRefreshing = false
+            refreshWaiters.forEach { $0.resume(throwing: error) }
+            refreshWaiters.removeAll()
+            throw error
+        }
     }
 
     // MARK: - Sign Out

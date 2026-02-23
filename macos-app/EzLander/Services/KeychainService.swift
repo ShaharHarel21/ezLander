@@ -5,7 +5,11 @@ class KeychainService {
     static let shared = KeychainService()
 
     private let service = "com.ezlander.app"
+#if DEBUG
     private let useUserDefaultsFallback = true  // Enable fallback for unsigned builds
+#else
+    private let useUserDefaultsFallback = false
+#endif
 
     private init() {}
 

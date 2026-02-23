@@ -6,9 +6,6 @@ class OpenAIService {
     private var apiKey: String = ""
     private let baseURL = "https://api.openai.com/v1/chat/completions"
 
-    // Cached calendar context
-    private var cachedCalendarContext: String = ""
-
     private init() {
         reloadAPIKey()
     }
@@ -50,11 +47,11 @@ class OpenAIService {
             throw OpenAIError.noAPIKey
         }
 
-        // Refresh calendar context
-        cachedCalendarContext = await CalendarContextService.shared.buildTodayContext()
+        // Fetch calendar context via shared service (which caches internally)
+        let calendarContext = await CalendarContextService.shared.buildTodayContext()
 
         var messages: [[String: Any]] = [
-            ["role": "system", "content": systemPrompt]
+            ["role": "system", "content": SystemPromptProvider.buildSystemPrompt(calendarContext: calendarContext)]
         ]
 
         for message in conversationHistory {
@@ -99,31 +96,6 @@ class OpenAIService {
         }
 
         return ChatMessage(role: .assistant, content: content)
-    }
-
-    private var systemPrompt: String {
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd"
-        let today = dateFormatter.string(from: Date())
-
-        let timeFormatter = DateFormatter()
-        timeFormatter.timeStyle = .short
-        let currentTime = timeFormatter.string(from: Date())
-
-        let calendar = Calendar.current
-        let weekday = calendar.component(.weekday, from: Date())
-        let weekdayName = DateFormatter().weekdaySymbols[weekday - 1]
-
-        return """
-        You are ezLander, a helpful AI assistant integrated into a macOS menu bar app. You help users manage their calendar and email.
-
-        Today is \(weekdayName), \(today). Current time: \(currentTime).
-
-        \(cachedCalendarContext)
-
-        Be concise and helpful. Format responses in a readable way.
-        When the user asks about their calendar, use the schedule information above to answer directly.
-        """
     }
 }
 

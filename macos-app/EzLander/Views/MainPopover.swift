@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MainPopover: View {
     @StateObject private var viewModel = MainPopoverViewModel()
+    @ObservedObject private var aiService = AIService.shared
     @State private var selectedTab: Tab = .chat
 
     enum Tab: String {
@@ -52,6 +53,14 @@ struct MainPopover: View {
             }
 
             Spacer()
+
+            Button(action: { selectedTab = .settings }) {
+                Text(aiService.currentProvider.displayName)
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+            }
+            .buttonStyle(.plain)
+            .padding(.trailing, 6)
 
             if viewModel.isSubscribed {
                 Label("Pro", systemImage: "crown.fill")

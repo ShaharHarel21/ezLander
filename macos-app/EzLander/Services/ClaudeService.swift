@@ -7,9 +7,6 @@ class ClaudeService {
     private let baseURL = "https://api.anthropic.com/v1/messages"
     private let model = "claude-sonnet-4-20250514"
 
-    // Cached calendar context (refreshed on each sendMessage call)
-    private var cachedCalendarContext: String = ""
-
     private init() {
         // Load API key from: 1) Keychain, 2) Environment variable, 3) Empty (will fail gracefully)
         if let keychainKey = KeychainService.shared.get(key: "anthropic_api_key"), !keychainKey.isEmpty {
@@ -123,8 +120,8 @@ class ClaudeService {
 
     // MARK: - Send Message
     func sendMessage(_ text: String, conversationHistory: [ChatMessage]) async throws -> ChatMessage {
-        // Refresh calendar context before each message
-        cachedCalendarContext = await CalendarContextService.shared.buildTodayContext()
+        // Fetch calendar context via shared service (which caches internally)
+        let calendarContext = await CalendarContextService.shared.buildTodayContext()
 
         // Build messages array
         var messages: [[String: Any]] = conversationHistory.map { message in
@@ -136,7 +133,7 @@ class ClaudeService {
         let requestBody: [String: Any] = [
             "model": model,
             "max_tokens": 4096,
-            "system": systemPrompt,
+            "system": buildSystemPrompt(calendarContext: calendarContext),
             "tools": tools,
             "messages": messages
         ]
@@ -216,7 +213,7 @@ class ClaudeService {
                     let finalRequestBody: [String: Any] = [
                         "model": model,
                         "max_tokens": 4096,
-                        "system": systemPrompt,
+                        "system": buildSystemPrompt(calendarContext: calendarContext),
                         "tools": tools,
                         "messages": updatedMessages
                     ]
@@ -627,25 +624,12 @@ class ClaudeService {
     }
 
     // MARK: - System Prompt
-    private var systemPrompt: String {
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd"
-        let today = dateFormatter.string(from: Date())
+    private func buildSystemPrompt(calendarContext: String) -> String {
+        let base = SystemPromptProvider.buildSystemPrompt(calendarContext: calendarContext)
 
-        let timeFormatter = DateFormatter()
-        timeFormatter.timeStyle = .short
-        let currentTime = timeFormatter.string(from: Date())
+        // Claude-specific additions: tool use instructions
+        let toolInstructions = """
 
-        let calendar = Calendar.current
-        let weekday = calendar.component(.weekday, from: Date())
-        let weekdayName = DateFormatter().weekdaySymbols[weekday - 1]
-
-        return """
-        You are ezLander, a helpful AI assistant integrated into a macOS menu bar app. You help users manage their calendar and email.
-
-        Today is \(weekdayName), \(today). Current time: \(currentTime).
-
-        \(cachedCalendarContext)
 
         You have access to the following tools:
         - create_calendar_event: Create new calendar events (supports attendees and Google Meet video calls)
@@ -677,13 +661,9 @@ class ClaudeService {
         IMPORTANT — Meeting prep:
         - When the user asks to prepare for a meeting, use the get_meeting_prep tool to get detailed context.
         - Provide a concise briefing: who's attending, their RSVP status, key topics from recent emails, and the video call link.
-
-        General guidelines:
-        - Be concise and helpful
-        - Always confirm before sending emails
-        - Format dates and times in a human-readable way
-        - If you don't have enough information, ask for clarification
         """
+
+        return base + toolInstructions
     }
 }
 

@@ -5,8 +5,26 @@ class CalendarContextService {
 
     private init() {}
 
+    // MARK: - Context Cache
+    private var cachedContext: String = ""
+    private var lastCacheTime: Date?
+    private let cacheDuration: TimeInterval = 300 // 5 minutes
+
     // MARK: - Build Today Context (for AI system prompt injection)
     func buildTodayContext() async -> String {
+        // Return cached context if still fresh
+        if let lastTime = lastCacheTime, Date().timeIntervalSince(lastTime) < cacheDuration, !cachedContext.isEmpty {
+            return cachedContext
+        }
+        // Otherwise fetch fresh
+        let context = await fetchFreshContext()
+        cachedContext = context
+        lastCacheTime = Date()
+        return context
+    }
+
+    // MARK: - Fetch Fresh Context
+    private func fetchFreshContext() async -> String {
         guard GoogleCalendarService.shared.isAuthorized else {
             return "Calendar: Not connected to Google Calendar."
         }
