@@ -75,15 +75,11 @@ class OpenAIService {
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw OpenAIError.invalidResponse
-        }
+        let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
 
         guard httpResponse.statusCode == 200 else {
-            let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
-            throw OpenAIError.apiError(statusCode: httpResponse.statusCode, message: errorBody)
+            let message = APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: data)
+            throw OpenAIError.apiError(statusCode: httpResponse.statusCode, message: message)
         }
 
         let responseJSON = try JSONSerialization.jsonObject(with: data) as! [String: Any]

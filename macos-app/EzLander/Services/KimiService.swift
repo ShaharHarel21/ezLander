@@ -72,36 +72,11 @@ class KimiService {
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
 
-        NSLog("KimiService: Sending request to %@", baseURL)
-        NSLog("KimiService: Authorization header set with Bearer token")
-
-        print("KimiService: Request URL: \(baseURL)")
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            print("Kimi API: Invalid response type")
-            throw KimiError.invalidResponse
-        }
-
-        print("Kimi API Response Status: \(httpResponse.statusCode)")
+        let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
 
         guard httpResponse.statusCode == 200 else {
-            let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
-            NSLog("KimiService: API Error %d: %@", httpResponse.statusCode, errorBody)
-
-            // Parse error for better message
-            var errorMessage = "Status \(httpResponse.statusCode)"
-            if let errorData = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                if let detail = errorData["detail"] as? String {
-                    errorMessage = detail
-                } else if let message = errorData["message"] as? String {
-                    errorMessage = message
-                } else if let title = errorData["title"] as? String {
-                    errorMessage = title
-                }
-            }
-
-            throw KimiError.apiError(statusCode: httpResponse.statusCode, message: errorMessage)
+            let message = APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: data)
+            throw KimiError.apiError(statusCode: httpResponse.statusCode, message: message)
         }
 
         let responseJSON = try JSONSerialization.jsonObject(with: data) as! [String: Any]

@@ -47,7 +47,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        print("App received URL: \(url)")
+        print("App received URL callback (scheme: \(url.scheme ?? "nil"))")
 
         // Handle OAuth callback
         if url.scheme == "com.ezlander.app" {

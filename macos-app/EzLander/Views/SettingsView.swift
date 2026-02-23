@@ -3,50 +3,134 @@ import SwiftUI
 struct SettingsView: View {
     @StateObject private var viewModel = SettingsViewModel()
     @StateObject private var updateService = UpdateService.shared
+    @State private var selectedSettingsTab: SettingsTab = .account
+
+    enum SettingsTab: String, CaseIterable {
+        case account
+        case ai
+        case integrations
+        case general
+
+        var label: String {
+            switch self {
+            case .account: return "Account"
+            case .ai: return "AI"
+            case .integrations: return "Integrations"
+            case .general: return "General"
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .account: return "person.crop.circle"
+            case .ai: return "cpu"
+            case .integrations: return "link"
+            case .general: return "gearshape"
+            }
+        }
+    }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                // Account Section
-                SettingsSection(title: "Account") {
-                    if viewModel.isSignedIn {
-                        signedInView
-                    } else {
-                        signInButtons
+        VStack(spacing: 0) {
+            // Tab picker
+            HStack(spacing: 0) {
+                ForEach(SettingsTab.allCases, id: \.self) { tab in
+                    Button(action: { selectedSettingsTab = tab }) {
+                        VStack(spacing: 4) {
+                            Image(systemName: tab.icon)
+                                .font(.system(size: 14))
+                            Text(tab.label)
+                                .font(.system(size: 10, weight: .medium))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .foregroundColor(selectedSettingsTab == tab ? .warmPrimary : .secondary)
                     }
-                }
-
-                // Subscription Section
-                SettingsSection(title: "Subscription") {
-                    subscriptionView
-                }
-
-                // Integrations Section
-                SettingsSection(title: "Integrations") {
-                    integrationsView
-                }
-
-                // AI Provider Section
-                SettingsSection(title: "AI Provider") {
-                    aiProviderView
-                }
-
-                // Preferences Section
-                SettingsSection(title: "Preferences") {
-                    preferencesView
-                }
-
-                // Keyboard Shortcuts Section
-                SettingsSection(title: "Keyboard Shortcuts") {
-                    keyboardShortcutsView
-                }
-
-                // About Section
-                SettingsSection(title: "About") {
-                    aboutView
+                    .buttonStyle(.plain)
                 }
             }
-            .padding()
+            .padding(.horizontal, 8)
+            .overlay(alignment: .bottom) {
+                // Active tab underline
+                GeometryReader { geo in
+                    let tabWidth = geo.size.width / CGFloat(SettingsTab.allCases.count)
+                    let tabIndex = CGFloat(SettingsTab.allCases.firstIndex(of: selectedSettingsTab) ?? 0)
+                    Rectangle()
+                        .fill(Color.warmPrimary)
+                        .frame(width: tabWidth * 0.6, height: 2)
+                        .cornerRadius(1)
+                        .offset(x: tabWidth * tabIndex + tabWidth * 0.2)
+                        .animation(.easeInOut(duration: 0.2), value: selectedSettingsTab)
+                }
+                .frame(height: 2)
+            }
+
+            Divider()
+
+            // Tab content
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    switch selectedSettingsTab {
+                    case .account:
+                        accountTabContent
+                    case .ai:
+                        aiTabContent
+                    case .integrations:
+                        integrationsTabContent
+                    case .general:
+                        generalTabContent
+                    }
+                }
+                .padding()
+            }
+        }
+    }
+
+    // MARK: - Account Tab
+    private var accountTabContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            SettingsSection(title: "Account") {
+                if viewModel.isSignedIn {
+                    signedInView
+                } else {
+                    signInButtons
+                }
+            }
+
+            SettingsSection(title: "Subscription") {
+                subscriptionView
+            }
+        }
+    }
+
+    // MARK: - AI Tab
+    private var aiTabContent: some View {
+        SettingsSection(title: "AI Provider") {
+            aiProviderView
+        }
+    }
+
+    // MARK: - Integrations Tab
+    private var integrationsTabContent: some View {
+        SettingsSection(title: "Integrations") {
+            integrationsView
+        }
+    }
+
+    // MARK: - General Tab
+    private var generalTabContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            SettingsSection(title: "Preferences") {
+                preferencesView
+            }
+
+            SettingsSection(title: "Keyboard Shortcuts") {
+                keyboardShortcutsView
+            }
+
+            SettingsSection(title: "About") {
+                aboutView
+            }
         }
     }
 

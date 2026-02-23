@@ -486,67 +486,100 @@ struct EmailListRow: View {
             }
 
             // Main row content
-            HStack(spacing: 12) {
-                // Sender avatar
-                SenderAvatarView(
-                    email: email.senderEmail,
-                    name: email.senderName,
-                    size: 40,
-                    isRead: email.isRead
-                )
+            HStack(spacing: 0) {
+                // Unread indicator bar
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(email.isRead ? Color.clear : Color.warmPrimary)
+                    .frame(width: 3)
+                    .padding(.vertical, 4)
 
-                // Email content
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text(email.senderName)
-                            .font(.subheadline)
-                            .fontWeight(email.isRead ? .regular : .semibold)
-                            .lineLimit(1)
+                HStack(spacing: 12) {
+                    // Sender avatar
+                    SenderAvatarView(
+                        email: email.senderEmail,
+                        name: email.senderName,
+                        size: 40,
+                        isRead: email.isRead
+                    )
 
-                        Spacer()
+                    // Email content
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack {
+                            Text(email.senderName)
+                                .font(.subheadline)
+                                .fontWeight(email.isRead ? .regular : .semibold)
+                                .lineLimit(1)
 
-                        Text(email.formattedDate)
-                            .font(.caption2)
+                            Spacer()
+
+                            // Attachment indicator
+                            if !email.attachments.isEmpty {
+                                HStack(spacing: 2) {
+                                    Image(systemName: "paperclip")
+                                        .font(.system(size: 10))
+                                    if email.attachments.count > 1 {
+                                        Text("\(email.attachments.count)")
+                                            .font(.system(size: 9))
+                                    }
+                                }
+                                .foregroundColor(.secondary)
+                            }
+
+                            Text(email.formattedDate)
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+
+                        HStack(spacing: 4) {
+                            Text(email.subject)
+                                .font(.subheadline)
+                                .foregroundColor(email.isRead ? .secondary : .primary)
+                                .lineLimit(1)
+
+                            // Thread indicator
+                            if email.threadId != nil {
+                                Image(systemName: "bubble.left.and.bubble.right")
+                                    .font(.system(size: 9))
+                                    .foregroundColor(.secondary.opacity(0.7))
+                            }
+                        }
+
+                        Text(email.snippet)
+                            .font(.caption)
                             .foregroundColor(.secondary)
+                            .lineLimit(2)
                     }
 
-                    Text(email.subject)
-                        .font(.subheadline)
-                        .foregroundColor(email.isRead ? .secondary : .primary)
-                        .lineLimit(1)
+                    // Quick actions on hover
+                    if isHovered && swipeOffset == 0 {
+                        HStack(spacing: 8) {
+                            Button(action: onArchive) {
+                                Image(systemName: "archivebox")
+                                    .font(.caption)
+                            }
+                            .buttonStyle(.borderless)
+                            .help("Archive")
 
-                    Text(email.snippet)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                }
-
-                // Quick actions on hover
-                if isHovered && swipeOffset == 0 {
-                    HStack(spacing: 8) {
-                        Button(action: onArchive) {
-                            Image(systemName: "archivebox")
-                                .font(.caption)
+                            Button(action: onDelete) {
+                                Image(systemName: "trash")
+                                    .font(.caption)
+                            }
+                            .buttonStyle(.borderless)
+                            .foregroundColor(.red)
+                            .help("Delete")
                         }
-                        .buttonStyle(.borderless)
-                        .help("Archive")
-
-                        Button(action: onDelete) {
-                            Image(systemName: "trash")
-                                .font(.caption)
-                        }
-                        .buttonStyle(.borderless)
-                        .foregroundColor(.red)
-                        .help("Delete")
                     }
                 }
+                .padding(.leading, 8)
+                .padding(.trailing)
             }
-            .padding(.horizontal)
             .padding(.vertical, 10)
             .background(
                 isSelected
                     ? Color.warmPrimary.opacity(0.12)
-                    : (isHovered && swipeOffset == 0 ? Color(NSColor.controlBackgroundColor) : Color(NSColor.windowBackgroundColor))
+                    : (isHovered && swipeOffset == 0
+                        ? Color(NSColor.controlBackgroundColor)
+                        : (!email.isRead ? Color.warmSoft.opacity(0.15) : Color(NSColor.windowBackgroundColor)))
             )
             .offset(x: swipeOffset)
             .gesture(
@@ -1475,7 +1508,6 @@ class EmailViewModel: ObservableObject {
         Task {
             do {
                 NSLog("EmailViewModel: Sending reply to email \(email.id)")
-                NSLog("EmailViewModel: Original from: \(email.from ?? "nil"), threadId: \(email.threadId ?? "nil")")
                 try await GmailService.shared.replyToEmail(originalEmail: email, replyBody: body)
                 await MainActor.run {
                     NSLog("EmailViewModel: Reply sent successfully")

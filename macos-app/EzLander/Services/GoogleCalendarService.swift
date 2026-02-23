@@ -26,26 +26,36 @@ class GoogleCalendarService {
 
     // MARK: - List Events
     func listEvents(from startDate: Date, to endDate: Date) async throws -> [CalendarEvent] {
+        #if DEBUG
         NSLog("GoogleCalendarService: Fetching events from \(startDate) to \(endDate)")
+        #endif
 
         // First check if we have a token
         guard oauthService.isSignedInWithGoogle else {
+            #if DEBUG
             NSLog("GoogleCalendarService: Not signed in with Google!")
+            #endif
             throw GoogleCalendarError.notAuthenticated
         }
 
         let accessToken = try await oauthService.getValidAccessToken()
-        NSLog("GoogleCalendarService: Got access token: \(String(accessToken.prefix(20)))...")
+        #if DEBUG
+        NSLog("GoogleCalendarService: Got access token (redacted)")
+        #endif
 
         // Fetch all calendars first
         let calendars = try await listCalendars(accessToken: accessToken)
+        #if DEBUG
         NSLog("GoogleCalendarService: Found \(calendars.count) calendars")
+        #endif
 
         var allEvents: [CalendarEvent] = []
 
         // Fetch events from ALL calendars, converting inside the loop
         for calendar in calendars {
+            #if DEBUG
             NSLog("GoogleCalendarService: Fetching events from calendar: \(calendar.summary ?? calendar.id)")
+            #endif
             do {
                 let calEvents = try await fetchEventsFromCalendar(
                     calendarId: calendar.id,
@@ -53,7 +63,9 @@ class GoogleCalendarService {
                     from: startDate,
                     to: endDate
                 )
+                #if DEBUG
                 NSLog("GoogleCalendarService: Found \(calEvents.count) events in \(calendar.summary ?? calendar.id)")
+                #endif
 
                 // Convert GoogleEvent -> CalendarEvent with calendar metadata
                 let converted = calEvents.compactMap { googleEvent -> CalendarEvent? in
@@ -127,15 +139,20 @@ class GoogleCalendarService {
 
                 allEvents.append(contentsOf: converted)
             } catch {
+                #if DEBUG
                 NSLog("GoogleCalendarService: Error fetching from \(calendar.summary ?? calendar.id): \(error)")
+                #endif
                 // Continue with other calendars
             }
         }
 
+        #if DEBUG
         NSLog("GoogleCalendarService: Total events from all calendars: \(allEvents.count)")
+        #endif
 
         let sortedEvents = allEvents.sorted { $0.startDate < $1.startDate }
 
+        #if DEBUG
         // Log events by date for debugging
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd"
@@ -145,16 +162,21 @@ class GoogleCalendarService {
             eventsByDate[dateKey, default: 0] += 1
         }
         NSLog("GoogleCalendarService: Events by date: \(eventsByDate)")
+        #endif
 
         return sortedEvents
     }
 
     // MARK: - Create Event
     func createEvent(_ event: CalendarEvent) async throws {
+        #if DEBUG
         NSLog("GoogleCalendarService: Creating event '\(event.title)' from \(event.startDate) to \(event.endDate)")
+        #endif
 
         guard oauthService.isSignedInWithGoogle else {
+            #if DEBUG
             NSLog("GoogleCalendarService: Not signed in with Google!")
+            #endif
             throw GoogleCalendarError.notAuthenticated
         }
 
@@ -199,28 +221,44 @@ class GoogleCalendarService {
 
         request.httpBody = try JSONEncoder().encode(googleEvent)
 
+        #if DEBUG
         if let bodyString = String(data: request.httpBody!, encoding: .utf8) {
             NSLog("GoogleCalendarService: Request body: \(bodyString)")
         }
+        #endif
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
 
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw GoogleCalendarError.invalidResponse
+        // Handle token expiry — refresh and retry once
+        if httpResponse.statusCode == 401 {
+            let newToken = try await oauthService.refreshAccessToken()
+            request.setValue("Bearer \(newToken)", forHTTPHeaderField: "Authorization")
+            let (retryData, retryResponse) = try await APIRetryHelper.performRequest(request, maxRetries: 0)
+            guard retryResponse.statusCode == 200 || retryResponse.statusCode == 201 else {
+                let message = APIRetryHelper.userFriendlyMessage(statusCode: retryResponse.statusCode, data: retryData)
+                throw GoogleCalendarError.apiErrorWithMessage(statusCode: retryResponse.statusCode, message: message)
+            }
+            #if DEBUG
+            NSLog("GoogleCalendarService: Event created successfully (after token refresh)")
+            #endif
+            return
         }
 
         guard httpResponse.statusCode == 200 || httpResponse.statusCode == 201 else {
-            let responseBody = String(data: data, encoding: .utf8) ?? "No response body"
-            NSLog("GoogleCalendarService: Create event failed with status \(httpResponse.statusCode): \(responseBody)")
-            throw GoogleCalendarError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: responseBody)
+            let message = APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: data)
+            throw GoogleCalendarError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: message)
         }
 
+        #if DEBUG
         NSLog("GoogleCalendarService: Event created successfully")
+        #endif
     }
 
     // MARK: - Update Event
     func updateEvent(_ event: CalendarEvent) async throws {
+        #if DEBUG
         NSLog("GoogleCalendarService: Updating event '\(event.title)' (\(event.id))")
+        #endif
 
         let accessToken = try await oauthService.getValidAccessToken()
 
@@ -243,24 +281,38 @@ class GoogleCalendarService {
 
         request.httpBody = try JSONEncoder().encode(googleEvent)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
 
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw GoogleCalendarError.invalidResponse
+        // Handle token expiry — refresh and retry once
+        if httpResponse.statusCode == 401 {
+            let newToken = try await oauthService.refreshAccessToken()
+            request.setValue("Bearer \(newToken)", forHTTPHeaderField: "Authorization")
+            let (retryData, retryResponse) = try await APIRetryHelper.performRequest(request, maxRetries: 0)
+            guard retryResponse.statusCode == 200 else {
+                let message = APIRetryHelper.userFriendlyMessage(statusCode: retryResponse.statusCode, data: retryData)
+                throw GoogleCalendarError.apiErrorWithMessage(statusCode: retryResponse.statusCode, message: message)
+            }
+            #if DEBUG
+            NSLog("GoogleCalendarService: Event updated successfully (after token refresh)")
+            #endif
+            return
         }
 
         guard httpResponse.statusCode == 200 else {
-            let responseBody = String(data: data, encoding: .utf8) ?? "No response body"
-            NSLog("GoogleCalendarService: Update event failed with status \(httpResponse.statusCode): \(responseBody)")
-            throw GoogleCalendarError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: responseBody)
+            let message = APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: data)
+            throw GoogleCalendarError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: message)
         }
 
+        #if DEBUG
         NSLog("GoogleCalendarService: Event updated successfully")
+        #endif
     }
 
     // MARK: - Delete Event
     func deleteEvent(id: String) async throws {
+        #if DEBUG
         NSLog("GoogleCalendarService: Deleting event \(id)")
+        #endif
 
         let accessToken = try await oauthService.getValidAccessToken()
 
@@ -270,19 +322,31 @@ class GoogleCalendarService {
         request.httpMethod = "DELETE"
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
 
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw GoogleCalendarError.invalidResponse
+        // Handle token expiry — refresh and retry once
+        if httpResponse.statusCode == 401 {
+            let newToken = try await oauthService.refreshAccessToken()
+            request.setValue("Bearer \(newToken)", forHTTPHeaderField: "Authorization")
+            let (retryData, retryResponse) = try await APIRetryHelper.performRequest(request, maxRetries: 0)
+            guard retryResponse.statusCode == 204 || retryResponse.statusCode == 200 else {
+                let message = APIRetryHelper.userFriendlyMessage(statusCode: retryResponse.statusCode, data: retryData)
+                throw GoogleCalendarError.apiErrorWithMessage(statusCode: retryResponse.statusCode, message: message)
+            }
+            #if DEBUG
+            NSLog("GoogleCalendarService: Event deleted successfully (after token refresh)")
+            #endif
+            return
         }
 
         guard httpResponse.statusCode == 204 || httpResponse.statusCode == 200 else {
-            let responseBody = String(data: data, encoding: .utf8) ?? "No response body"
-            NSLog("GoogleCalendarService: Delete event failed with status \(httpResponse.statusCode): \(responseBody)")
-            throw GoogleCalendarError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: responseBody)
+            let message = APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: data)
+            throw GoogleCalendarError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: message)
         }
 
+        #if DEBUG
         NSLog("GoogleCalendarService: Event deleted successfully")
+        #endif
     }
 
     // MARK: - List All Calendars
@@ -292,9 +356,9 @@ class GoogleCalendarService {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
 
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+        guard httpResponse.statusCode == 200 else {
             return []
         }
 
@@ -326,15 +390,13 @@ class GoogleCalendarService {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            return []
-        }
+        let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
 
         if httpResponse.statusCode != 200 {
             if let errorString = String(data: data, encoding: .utf8) {
+                #if DEBUG
                 NSLog("GoogleCalendarService: Error fetching calendar \(calendarId): \(errorString)")
+                #endif
             }
             return []
         }
@@ -359,7 +421,9 @@ class GoogleCalendarService {
                 return date
             }
 
+            #if DEBUG
             NSLog("GoogleCalendarService: Failed to parse dateTime: \(dateTimeStr)")
+            #endif
             return Date()
         } else if let dateStr = dateTime.date {
             // All-day events: "2026-02-17" — parse in local timezone

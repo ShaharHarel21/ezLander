@@ -38,6 +38,9 @@
 		1A0000000000000000000061 /* EventDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A000000000000000000003F /* EventDetailView.swift */; };
 		1A0000000000000000000062 /* CalendarContextService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000047 /* CalendarContextService.swift */; };
 		1A0000000000000000000064 /* SystemPromptProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000063 /* SystemPromptProvider.swift */; };
+		1A0000000000000000000066 /* APIRetryHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000065 /* APIRetryHelper.swift */; };
+		1A0000000000000000000068 /* EventParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000067 /* EventParser.swift */; };
+		1A000000000000000000006A /* EmailParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000069 /* EmailParser.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -75,6 +78,9 @@
 		1A000000000000000000003F /* EventDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventDetailView.swift; sourceTree = "<group>"; };
 		1A0000000000000000000047 /* CalendarContextService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarContextService.swift; sourceTree = "<group>"; };
 		1A0000000000000000000063 /* SystemPromptProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemPromptProvider.swift; sourceTree = "<group>"; };
+		1A0000000000000000000065 /* APIRetryHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIRetryHelper.swift; sourceTree = "<group>"; };
+		1A0000000000000000000067 /* EventParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventParser.swift; sourceTree = "<group>"; };
+		1A0000000000000000000069 /* EmailParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmailParser.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -154,6 +160,9 @@
 				1A000000000000000000003C /* KeyboardShortcutService.swift */,
 				1A0000000000000000000047 /* CalendarContextService.swift */,
 				1A0000000000000000000063 /* SystemPromptProvider.swift */,
+				1A0000000000000000000065 /* APIRetryHelper.swift */,
+				1A0000000000000000000067 /* EventParser.swift */,
+				1A0000000000000000000069 /* EmailParser.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -275,6 +284,9 @@
 				1A0000000000000000000061 /* EventDetailView.swift in Sources */,
 				1A0000000000000000000062 /* CalendarContextService.swift in Sources */,
 				1A0000000000000000000064 /* SystemPromptProvider.swift in Sources */,
+				1A0000000000000000000066 /* APIRetryHelper.swift in Sources */,
+				1A0000000000000000000068 /* EventParser.swift in Sources */,
+				1A000000000000000000006A /* EmailParser.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -407,7 +419,7 @@
 				CODE_SIGN_ENTITLEMENTS = EzLander/EzLander.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 14;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -418,7 +430,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.3.1;
+				MARKETING_VERSION = 1.10.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ezlander.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -434,7 +446,7 @@
 				CODE_SIGN_ENTITLEMENTS = EzLander/EzLander.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 14;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -445,7 +457,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.3.1;
+				MARKETING_VERSION = 1.10.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ezlander.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

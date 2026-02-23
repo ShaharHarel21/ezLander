@@ -17,15 +17,18 @@ struct CalendarView: View {
             // View mode toggle
             viewModeToggle
 
-            // Calendar content
-            switch viewModel.viewMode {
-            case .month:
-                monthView
-            case .week:
-                weekView
-            case .day:
-                dayView
+            // Calendar content with animated transitions
+            Group {
+                switch viewModel.viewMode {
+                case .month:
+                    monthView
+                case .week:
+                    weekView
+                case .day:
+                    dayView
+                }
             }
+            .animation(.easeInOut(duration: 0.25), value: viewModel.viewMode)
 
             // Selected day events (hidden in day view since events are shown inline)
             if viewModel.viewMode != .day {
@@ -170,6 +173,7 @@ struct CalendarView: View {
                         isToday: viewModel.isSameDay(date, Date()),
                         isCurrentMonth: viewModel.isCurrentMonth(date),
                         eventCount: viewModel.eventCountForDate(date),
+                        events: viewModel.eventsForDate(date),
                         onTap: {
                             viewModel.selectDate(date)
                         }
@@ -431,34 +435,76 @@ struct DayCell: View {
     let isToday: Bool
     let isCurrentMonth: Bool
     let eventCount: Int
+    let events: [CalendarEvent]
     let onTap: () -> Void
 
-    var body: some View {
-        VStack(spacing: 2) {
-            Text("\(Calendar.current.component(.day, from: date))")
-                .font(.system(size: 12, weight: isToday ? .bold : .regular))
-                .foregroundColor(textColor)
+    @State private var isHovered = false
 
-            // Event indicators (max 3 dots)
-            HStack(spacing: 2) {
-                ForEach(0..<min(eventCount, 3), id: \.self) { _ in
+    var body: some View {
+        VStack(spacing: 1) {
+            // Day number with today circle
+            ZStack {
+                if isToday && !isSelected {
                     Circle()
-                        .fill(isSelected ? Color.white.opacity(0.8) : Color.eventDot)
-                        .frame(width: 4, height: 4)
+                        .fill(Color.warmPrimary)
+                        .frame(width: 22, height: 22)
+                }
+                Text("\(Calendar.current.component(.day, from: date))")
+                    .font(.system(size: 12, weight: isToday ? .bold : .regular))
+                    .foregroundColor(todayCircleTextColor)
+            }
+            .frame(height: 22)
+
+            // Mini event bars (max 2, with "+N" overflow)
+            VStack(spacing: 1) {
+                ForEach(Array(events.prefix(2).enumerated()), id: \.element.id) { _, event in
+                    HStack(spacing: 0) {
+                        RoundedRectangle(cornerRadius: 1)
+                            .fill(eventBarColor(event))
+                            .frame(height: 3)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+
+                if eventCount > 2 {
+                    Text("+\(eventCount - 2)")
+                        .font(.system(size: 7, weight: .medium))
+                        .foregroundColor(isSelected ? .white.opacity(0.8) : .secondary)
+                        .frame(height: 8)
+                } else if eventCount <= 2 {
+                    // Spacer to keep consistent height
+                    Color.clear.frame(height: eventCount == 0 ? 14 : 8)
                 }
             }
-            .frame(height: 6)
+            .padding(.horizontal, 2)
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 36)
+        .frame(height: 48)
         .background(backgroundColor)
         .cornerRadius(4)
+        .overlay(
+            RoundedRectangle(cornerRadius: 4)
+                .stroke(isHovered && !isSelected ? Color.warmPrimary.opacity(0.3) : Color.clear, lineWidth: 1)
+        )
         .onTapGesture {
             onTap()
         }
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovered = hovering
+            }
+        }
     }
 
-    private var textColor: Color {
+    private func eventBarColor(_ event: CalendarEvent) -> Color {
+        if isSelected { return .white.opacity(0.7) }
+        if let hex = event.calendarColor {
+            return Color(hex: hex)
+        }
+        return .eventDot
+    }
+
+    private var todayCircleTextColor: Color {
         if !isCurrentMonth {
             return .secondary.opacity(0.5)
         }
@@ -466,7 +512,7 @@ struct DayCell: View {
             return .white
         }
         if isToday {
-            return .warmPrimary
+            return .white // White text on coral circle
         }
         return .primary
     }
@@ -475,8 +521,9 @@ struct DayCell: View {
         if isSelected {
             return .warmPrimary
         }
-        if isToday {
-            return .warmPrimary.opacity(0.1)
+        // Busy day tint: subtle warm background for days with 3+ events
+        if isCurrentMonth && eventCount >= 3 {
+            return Color.warmSoft.opacity(0.4)
         }
         return .clear
     }
@@ -886,7 +933,7 @@ struct EventEditorView: View {
 }
 
 // MARK: - View Model
-enum CalendarViewMode {
+enum CalendarViewMode: Equatable {
     case month
     case week
     case day

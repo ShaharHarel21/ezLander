@@ -42,14 +42,10 @@ class GmailService {
         let body: [String: Any] = ["raw": encodedMessage]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (_, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw GmailError.invalidResponse
-        }
+        let (responseData, httpResponse) = try await APIRetryHelper.performRequest(request)
 
         guard httpResponse.statusCode == 200 else {
-            throw GmailError.apiError(statusCode: httpResponse.statusCode)
+            throw GmailError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: responseData))
         }
     }
 
@@ -75,14 +71,10 @@ class GmailService {
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw GmailError.invalidResponse
-        }
+        let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
 
         guard httpResponse.statusCode == 200 else {
-            throw GmailError.apiError(statusCode: httpResponse.statusCode)
+            throw GmailError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: data))
         }
 
         let draftResponse = try JSONSerialization.jsonObject(with: data) as! [String: Any]
@@ -99,14 +91,10 @@ class GmailService {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw GmailError.invalidResponse
-        }
+        let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
 
         guard httpResponse.statusCode == 200 else {
-            throw GmailError.apiError(statusCode: httpResponse.statusCode)
+            throw GmailError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: data))
         }
 
         let listResponse = try JSONSerialization.jsonObject(with: data) as! [String: Any]
@@ -136,14 +124,10 @@ class GmailService {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw GmailError.invalidResponse
-        }
+        let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
 
         guard httpResponse.statusCode == 200 else {
-            throw GmailError.apiError(statusCode: httpResponse.statusCode)
+            throw GmailError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: data))
         }
 
         let messageResponse = try JSONSerialization.jsonObject(with: data) as! [String: Any]
@@ -164,14 +148,10 @@ class GmailService {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw GmailError.invalidResponse
-        }
+        let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
 
         guard httpResponse.statusCode == 200 else {
-            throw GmailError.apiError(statusCode: httpResponse.statusCode)
+            throw GmailError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: data))
         }
 
         let listResponse = try JSONSerialization.jsonObject(with: data) as! [String: Any]
@@ -200,14 +180,10 @@ class GmailService {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw GmailError.invalidResponse
-        }
+        let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
 
         guard httpResponse.statusCode == 200 else {
-            throw GmailError.apiError(statusCode: httpResponse.statusCode)
+            throw GmailError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: data))
         }
 
         let messageResponse = try JSONSerialization.jsonObject(with: data) as! [String: Any]
@@ -223,14 +199,10 @@ class GmailService {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw GmailError.invalidResponse
-        }
+        let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
 
         guard httpResponse.statusCode == 200 else {
-            throw GmailError.apiError(statusCode: httpResponse.statusCode)
+            throw GmailError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: data))
         }
 
         let messageResponse = try JSONSerialization.jsonObject(with: data) as! [String: Any]
@@ -253,14 +225,10 @@ class GmailService {
         request.httpMethod = "POST"
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
-        let (_, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw GmailError.invalidResponse
-        }
+        let (responseData, httpResponse) = try await APIRetryHelper.performRequest(request)
 
         guard httpResponse.statusCode == 200 else {
-            throw GmailError.apiError(statusCode: httpResponse.statusCode)
+            throw GmailError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: responseData))
         }
     }
 
@@ -278,14 +246,10 @@ class GmailService {
         let body: [String: Any] = ["removeLabelIds": ["INBOX"]]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (_, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw GmailError.invalidResponse
-        }
+        let (responseData, httpResponse) = try await APIRetryHelper.performRequest(request)
 
         guard httpResponse.statusCode == 200 else {
-            throw GmailError.apiError(statusCode: httpResponse.statusCode)
+            throw GmailError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: responseData))
         }
     }
 
@@ -303,14 +267,10 @@ class GmailService {
         let body: [String: Any] = ["removeLabelIds": ["UNREAD"]]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (_, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw GmailError.invalidResponse
-        }
+        let (responseData, httpResponse) = try await APIRetryHelper.performRequest(request)
 
         guard httpResponse.statusCode == 200 else {
-            throw GmailError.apiError(statusCode: httpResponse.statusCode)
+            throw GmailError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: responseData))
         }
     }
 
@@ -328,14 +288,10 @@ class GmailService {
         let body: [String: Any] = ["addLabelIds": ["UNREAD"]]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (_, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw GmailError.invalidResponse
-        }
+        let (responseData, httpResponse) = try await APIRetryHelper.performRequest(request)
 
         guard httpResponse.statusCode == 200 else {
-            throw GmailError.apiError(statusCode: httpResponse.statusCode)
+            throw GmailError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: responseData))
         }
     }
 
@@ -348,14 +304,10 @@ class GmailService {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw GmailError.invalidResponse
-        }
+        let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
 
         guard httpResponse.statusCode == 200 else {
-            throw GmailError.apiError(statusCode: httpResponse.statusCode)
+            throw GmailError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: data))
         }
 
         let labelsResponse = try JSONSerialization.jsonObject(with: data) as! [String: Any]
@@ -391,14 +343,10 @@ class GmailService {
         }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (_, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw GmailError.invalidResponse
-        }
+        let (responseData, httpResponse) = try await APIRetryHelper.performRequest(request)
 
         guard httpResponse.statusCode == 200 else {
-            throw GmailError.apiError(statusCode: httpResponse.statusCode)
+            throw GmailError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: responseData))
         }
     }
 
@@ -406,13 +354,16 @@ class GmailService {
     func replyToEmail(originalEmail: Email, replyBody: String) async throws {
         let accessToken = try await oauthService.getValidAccessToken()
 
+        #if DEBUG
         NSLog("GmailService: Starting reply to email ID: \(originalEmail.id)")
-        NSLog("GmailService: Original email from: \(originalEmail.from ?? "nil")")
         NSLog("GmailService: Original email threadId: \(originalEmail.threadId ?? "nil")")
+        #endif
 
         // First, get the Message-ID header from the original email
         let messageId = try await getMessageIdHeader(emailId: originalEmail.id, accessToken: accessToken)
+        #if DEBUG
         NSLog("GmailService: Got Message-ID header: \(messageId ?? "nil")")
+        #endif
 
         let url = URL(string: "\(baseURL)/users/me/messages/send")!
 
@@ -422,8 +373,9 @@ class GmailService {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         let rawMessage = try buildReplyMessage(originalEmail: originalEmail, replyBody: replyBody, messageId: messageId)
+        #if DEBUG
         NSLog("GmailService: Built reply message, length: \(rawMessage.count)")
-        NSLog("GmailService: Raw message preview:\n\(String(rawMessage.prefix(500)))")
+        #endif
 
         let encodedMessage = rawMessage.data(using: .utf8)!.base64EncodedString()
             .replacingOccurrences(of: "+", with: "-")
@@ -435,32 +387,35 @@ class GmailService {
         let hasThreadId = originalEmail.threadId != nil
         if let threadId = originalEmail.threadId {
             body["threadId"] = threadId
+            #if DEBUG
             NSLog("GmailService: Including threadId: \(threadId)")
+            #endif
         }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        var (data, response) = try await URLSession.shared.data(for: request)
-
-        guard var httpResponse = response as? HTTPURLResponse else {
-            throw GmailError.invalidResponse
-        }
+        var (data, httpResponse) = try await APIRetryHelper.performRequest(request)
 
         // If 404 with threadId, retry without it (thread may have been deleted)
         if httpResponse.statusCode == 404 && hasThreadId {
+            #if DEBUG
             NSLog("GmailService: Got 404 with threadId, retrying without threadId...")
+            #endif
             body.removeValue(forKey: "threadId")
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
-            (data, response) = try await URLSession.shared.data(for: request)
-            httpResponse = response as! HTTPURLResponse
+            (data, httpResponse) = try await APIRetryHelper.performRequest(request)
         }
 
         if httpResponse.statusCode != 200 {
-            let errorBody = String(data: data, encoding: .utf8) ?? "Unknown"
-            NSLog("GmailService: Reply failed with status \(httpResponse.statusCode): \(errorBody)")
-            throw GmailError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: errorBody)
+            let message = APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: data)
+            #if DEBUG
+            NSLog("GmailService: Reply failed with status \(httpResponse.statusCode)")
+            #endif
+            throw GmailError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: message)
         }
 
+        #if DEBUG
         NSLog("GmailService: Reply sent successfully")
+        #endif
     }
 
     private func getMessageIdHeader(emailId: String, accessToken: String) async throws -> String? {
@@ -469,9 +424,9 @@ class GmailService {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
 
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+        guard httpResponse.statusCode == 200 else {
             return nil
         }
 
@@ -494,36 +449,45 @@ class GmailService {
         // Get user email from OAuth or UserDefaults - MUST exist
         guard let userEmail = OAuthService.shared.userEmail ?? UserDefaults.standard.string(forKey: "user_email"),
               !userEmail.isEmpty else {
+            #if DEBUG
             NSLog("GmailService: ERROR - No user email found, cannot send reply")
+            #endif
             throw GmailError.notAuthorized
         }
 
         // Get the sender's email - MUST exist to reply
         guard let replyToFull = originalEmail.from, !replyToFull.isEmpty else {
+            #if DEBUG
             NSLog("GmailService: ERROR - Original email has no 'from' field, cannot reply")
+            #endif
             throw GmailError.invalidResponse
         }
 
-        let userName = UserDefaults.standard.string(forKey: "user_name") ?? ""
-        let replyToEmail = extractEmailAddress(from: replyToFull)
+        let userName = sanitizeHeaderValue(UserDefaults.standard.string(forKey: "user_name") ?? "")
+        let safeUserEmail = sanitizeHeaderValue(userEmail)
+        let replyToEmail = sanitizeHeaderValue(EmailParser.extractEmailAddress(from: replyToFull))
 
-        NSLog("GmailService: Building reply - From: \(userEmail), To: \(replyToEmail)")
+        #if DEBUG
+        NSLog("GmailService: Building reply to thread")
+        #endif
 
-        let subject = originalEmail.subject.hasPrefix("Re:") ? originalEmail.subject : "Re: \(originalEmail.subject)"
+        let rawSubject = originalEmail.subject.hasPrefix("Re:") ? originalEmail.subject : "Re: \(originalEmail.subject)"
+        let subject = sanitizeHeaderValue(rawSubject)
 
         var message = ""
         if !userName.isEmpty {
-            message += "From: \(userName) <\(userEmail)>\r\n"
+            message += "From: \(userName) <\(safeUserEmail)>\r\n"
         } else {
-            message += "From: \(userEmail)\r\n"
+            message += "From: \(safeUserEmail)\r\n"
         }
         message += "To: \(replyToEmail)\r\n"
         message += "Subject: \(subject)\r\n"
 
         // Add threading headers if we have the message ID
         if let msgId = messageId {
-            message += "In-Reply-To: \(msgId)\r\n"
-            message += "References: \(msgId)\r\n"
+            let safeMsgId = sanitizeHeaderValue(msgId)
+            message += "In-Reply-To: \(safeMsgId)\r\n"
+            message += "References: \(safeMsgId)\r\n"
         }
 
         message += "MIME-Version: 1.0\r\n"
@@ -532,17 +496,6 @@ class GmailService {
         message += replyBody
 
         return message
-    }
-
-    private func extractEmailAddress(from string: String) -> String {
-        // Handle "Name <email@example.com>" format
-        if let start = string.firstIndex(of: "<"),
-           let end = string.firstIndex(of: ">") {
-            let emailStart = string.index(after: start)
-            return String(string[emailStart..<end])
-        }
-        // Already just an email
-        return string.trimmingCharacters(in: .whitespaces)
     }
 
     private func parseFullEmailFromResponse(_ response: [String: Any]) -> Email {
@@ -571,7 +524,7 @@ class GmailService {
                     case "to":
                         to = value
                     case "date":
-                        date = parseEmailDate(value)
+                        date = EmailParser.parseEmailDate(value)
                     default:
                         break
                     }
@@ -732,14 +685,21 @@ class GmailService {
         text = text.replacingOccurrences(of: "\n\\s*\n\\s*\n", with: "\n\n", options: .regularExpression)
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
+    /// Strip CR/LF characters to prevent email header injection
+    private func sanitizeHeaderValue(_ value: String) -> String {
+        value.replacingOccurrences(of: "\r", with: "").replacingOccurrences(of: "\n", with: "")
+    }
+
     private func buildRawMessage(_ email: Email) -> String {
-        let userEmail = UserDefaults.standard.string(forKey: "user_email") ?? ""
-        let userName = UserDefaults.standard.string(forKey: "user_name") ?? ""
+        let userEmail = sanitizeHeaderValue(UserDefaults.standard.string(forKey: "user_email") ?? "")
+        let userName = sanitizeHeaderValue(UserDefaults.standard.string(forKey: "user_name") ?? "")
+        let to = sanitizeHeaderValue(email.to)
+        let subject = sanitizeHeaderValue(email.subject)
 
         var message = ""
         message += "From: \(userName) <\(userEmail)>\r\n"
-        message += "To: \(email.to)\r\n"
-        message += "Subject: \(email.subject)\r\n"
+        message += "To: \(to)\r\n"
+        message += "Subject: \(subject)\r\n"
         message += "MIME-Version: 1.0\r\n"
         message += "Content-Type: text/plain; charset=\"UTF-8\"\r\n"
         message += "\r\n"
@@ -772,7 +732,7 @@ class GmailService {
                 case "to":
                     to = value
                 case "date":
-                    date = parseEmailDate(value)
+                    date = EmailParser.parseEmailDate(value)
                 default:
                     break
                 }
@@ -792,11 +752,6 @@ class GmailService {
         )
     }
 
-    private func parseEmailDate(_ dateString: String) -> Date {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss Z"
-        return formatter.date(from: dateString) ?? Date()
-    }
 }
 
 // MARK: - Gmail Label

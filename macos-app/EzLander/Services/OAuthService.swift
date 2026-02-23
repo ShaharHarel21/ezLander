@@ -5,7 +5,13 @@ import CommonCrypto
 class OAuthService: NSObject {
     static let shared = OAuthService()
 
-    private let googleClientId = "224322597988-josm6rg0hukmuv12ip4qfdbo1f0mkmni.apps.googleusercontent.com"
+    private let googleClientId: String = {
+        if let clientId = Bundle.main.object(forInfoDictionaryKey: "GOOGLE_CLIENT_ID") as? String, !clientId.isEmpty {
+            return clientId
+        }
+        // Default client ID — move to Info.plist GOOGLE_CLIENT_ID for production builds
+        return "224322597988-josm6rg0hukmuv12ip4qfdbo1f0mkmni.apps.googleusercontent.com"
+    }()
     private let googleRedirectURI = "com.ezlander.app:/oauth2callback"
 
     private var authSession: ASWebAuthenticationSession?
@@ -27,7 +33,7 @@ class OAuthService: NSObject {
 
     // MARK: - Handle URL Callback
     func handleCallback(url: URL) {
-        print("OAuthService: Received callback URL: \(url)")
+        print("OAuthService: Received callback URL (scheme: \(url.scheme ?? "nil"))")
         authContinuation?.resume(returning: url)
         authContinuation = nil
     }
@@ -145,15 +151,10 @@ class OAuthService: NSObject {
         let body = bodyParams.map { "\($0.key)=\($0.value)" }.joined(separator: "&")
         request.httpBody = body.data(using: .utf8)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw OAuthError.tokenExchangeFailed
-        }
+        let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
 
         if httpResponse.statusCode != 200 {
-            let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
-            print("OAuthService: Token exchange failed: \(errorBody)")
+            print("OAuthService: Token exchange failed with status \(httpResponse.statusCode)")
             throw OAuthError.tokenExchangeFailed
         }
 
@@ -197,10 +198,9 @@ class OAuthService: NSObject {
 
         request.httpBody = body.data(using: .utf8)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
 
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else {
+        guard httpResponse.statusCode == 200 else {
             throw OAuthError.tokenRefreshFailed
         }
 
@@ -365,7 +365,7 @@ extension OAuthService: ASAuthorizationControllerDelegate {
                 UserDefaults.standard.set(name.isEmpty ? "Apple User" : name, forKey: "user_name")
             }
 
-            print("OAuthService: Apple Sign In successful for user: \(userIdentifier)")
+            print("OAuthService: Apple Sign In successful")
             appleSignInContinuation?.resume(returning: ())
             appleSignInContinuation = nil
         }

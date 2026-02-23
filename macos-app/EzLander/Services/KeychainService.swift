@@ -39,9 +39,11 @@ class KeychainService {
         } else {
             print("KeychainService: Failed to save key to Keychain: \(key), status: \(status)")
             // Fallback to UserDefaults for development/unsigned builds
+            // WARNING: UserDefaults is NOT secure — tokens stored here are readable by other processes.
+            // This fallback is only active in DEBUG builds for unsigned development.
             if useUserDefaultsFallback {
                 UserDefaults.standard.set(value, forKey: "secure_\(key)")
-                print("KeychainService: Saved to UserDefaults fallback: \(key)")
+                print("⚠️ KeychainService: INSECURE FALLBACK - Saved to UserDefaults (DEBUG only): \(key)")
                 return true
             }
             return false
@@ -71,7 +73,7 @@ class KeychainService {
         // Fallback to UserDefaults for development/unsigned builds
         if useUserDefaultsFallback {
             if let fallbackValue = UserDefaults.standard.string(forKey: "secure_\(key)") {
-                print("KeychainService: Retrieved key from UserDefaults fallback: \(key)")
+                print("⚠️ KeychainService: INSECURE FALLBACK - Retrieved from UserDefaults (DEBUG only): \(key)")
                 return fallbackValue
             }
         }
