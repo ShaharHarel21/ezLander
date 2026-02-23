@@ -54,13 +54,10 @@ struct MainPopover: View {
 
             Spacer()
 
-            Button(action: { selectedTab = .settings }) {
-                Text(aiService.currentProvider.displayName)
-                    .font(.system(size: 11))
-                    .foregroundColor(.secondary)
-            }
-            .buttonStyle(.plain)
-            .padding(.trailing, 6)
+            Text(aiService.currentProvider.displayName)
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+                .padding(.trailing, 6)
 
             if viewModel.isSubscribed {
                 Label("Pro", systemImage: "crown.fill")
@@ -84,16 +81,20 @@ struct MainPopover: View {
 
     @ViewBuilder
     private var contentView: some View {
-        switch selectedTab {
-        case .chat:
-            ChatView()
-        case .calendar:
-            CalendarView()
-        case .email:
-            EmailView()
-        case .settings:
-            SettingsView()
+        Group {
+            switch selectedTab {
+            case .chat:
+                ChatView()
+            case .calendar:
+                CalendarView()
+            case .email:
+                EmailView()
+            case .settings:
+                SettingsView()
+            }
         }
+        .transition(.opacity)
+        .animation(.easeInOut(duration: 0.2), value: selectedTab)
     }
 
     private var tabBar: some View {

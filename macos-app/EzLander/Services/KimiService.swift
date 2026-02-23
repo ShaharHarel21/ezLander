@@ -79,7 +79,9 @@ class KimiService {
             throw KimiError.apiError(statusCode: httpResponse.statusCode, message: message)
         }
 
-        let responseJSON = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        guard let responseJSON = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw KimiError.invalidResponse
+        }
 
         // Parse response (OpenAI-compatible format)
         guard let choices = responseJSON["choices"] as? [[String: Any]],

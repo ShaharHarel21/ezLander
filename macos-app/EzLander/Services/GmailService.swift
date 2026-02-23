@@ -77,7 +77,9 @@ class GmailService {
             throw GmailError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: data))
         }
 
-        let draftResponse = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        guard let draftResponse = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw GmailError.invalidResponse
+        }
         return draftResponse["id"] as? String ?? ""
     }
 
@@ -97,19 +99,27 @@ class GmailService {
             throw GmailError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: data))
         }
 
-        let listResponse = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        guard let listResponse = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw GmailError.invalidResponse
+        }
         guard let messages = listResponse["messages"] as? [[String: Any]] else {
             return []
         }
 
-        // Fetch full message details for each
-        var emails: [Email] = []
-        for message in messages.prefix(maxResults) {
-            if let messageId = message["id"] as? String {
-                if let email = try? await getEmail(id: messageId) {
-                    emails.append(email)
+        // Fetch full message details in parallel using TaskGroup
+        let messageIds = messages.prefix(maxResults).compactMap { $0["id"] as? String }
+        let emails: [Email] = await withTaskGroup(of: (Int, Email?).self) { group in
+            for (index, messageId) in messageIds.enumerated() {
+                group.addTask {
+                    let email = try? await self.getEmail(id: messageId)
+                    return (index, email)
                 }
             }
+            var results = [(Int, Email?)]()
+            for await result in group {
+                results.append(result)
+            }
+            return results.sorted { $0.0 < $1.0 }.compactMap { $0.1 }
         }
 
         return emails
@@ -130,7 +140,9 @@ class GmailService {
             throw GmailError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: data))
         }
 
-        let messageResponse = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        guard let messageResponse = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw GmailError.invalidResponse
+        }
         return parseEmailFromResponse(messageResponse)
     }
 
@@ -154,18 +166,27 @@ class GmailService {
             throw GmailError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: data))
         }
 
-        let listResponse = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        guard let listResponse = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw GmailError.invalidResponse
+        }
         guard let messages = listResponse["messages"] as? [[String: Any]] else {
             return []
         }
 
-        var emails: [Email] = []
-        for message in messages.prefix(maxResults) {
-            if let messageId = message["id"] as? String {
-                if let email = try? await getEmail(id: messageId) {
-                    emails.append(email)
+        // Fetch full message details in parallel using TaskGroup
+        let messageIds = messages.prefix(maxResults).compactMap { $0["id"] as? String }
+        let emails: [Email] = await withTaskGroup(of: (Int, Email?).self) { group in
+            for (index, messageId) in messageIds.enumerated() {
+                group.addTask {
+                    let email = try? await self.getEmail(id: messageId)
+                    return (index, email)
                 }
             }
+            var results = [(Int, Email?)]()
+            for await result in group {
+                results.append(result)
+            }
+            return results.sorted { $0.0 < $1.0 }.compactMap { $0.1 }
         }
 
         return emails
@@ -186,7 +207,9 @@ class GmailService {
             throw GmailError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: data))
         }
 
-        let messageResponse = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        guard let messageResponse = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw GmailError.invalidResponse
+        }
         return parseFullEmailFromResponse(messageResponse)
     }
 
@@ -205,7 +228,9 @@ class GmailService {
             throw GmailError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: data))
         }
 
-        let messageResponse = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        guard let messageResponse = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return ("", nil)
+        }
 
         if let payload = messageResponse["payload"] as? [String: Any] {
             let (plain, html) = extractBothBodiesFromPayload(payload)
@@ -295,6 +320,16 @@ class GmailService {
         }
     }
 
+    // MARK: - Star Email
+    func starEmail(id: String) async throws {
+        try await moveEmail(id: id, addLabelIds: ["STARRED"], removeLabelIds: [])
+    }
+
+    // MARK: - Unstar Email
+    func unstarEmail(id: String) async throws {
+        try await moveEmail(id: id, addLabelIds: [], removeLabelIds: ["STARRED"])
+    }
+
     // MARK: - List Labels
     func listLabels() async throws -> [GmailLabel] {
         let accessToken = try await oauthService.getValidAccessToken()
@@ -310,7 +345,9 @@ class GmailService {
             throw GmailError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: data))
         }
 
-        let labelsResponse = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        guard let labelsResponse = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw GmailError.invalidResponse
+        }
         guard let labels = labelsResponse["labels"] as? [[String: Any]] else {
             return []
         }

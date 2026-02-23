@@ -22,7 +22,8 @@ class OAuthService: NSObject {
     // Apple Sign In
     private var appleSignInContinuation: CheckedContinuation<Void, Error>?
 
-    // Token refresh deduplication
+    // Token refresh deduplication — access synchronized via refreshLock
+    private let refreshLock = NSLock()
     private var isRefreshing = false
     private var refreshWaiters: [CheckedContinuation<String, Error>] = []
 
@@ -114,8 +115,9 @@ class OAuthService: NSObject {
         // Exchange code for tokens
         let tokens = try await exchangeCodeForTokens(code: code)
 
-        // Save tokens
+        // Save tokens and expiry
         KeychainService.shared.save(key: "google_access_token", value: tokens.accessToken)
+        UserDefaults.standard.set(Date().timeIntervalSince1970 + Double(tokens.expiresIn), forKey: "google_token_expiry")
         if let refreshToken = tokens.refreshToken {
             KeychainService.shared.save(key: "google_refresh_token", value: refreshToken)
         }
@@ -206,6 +208,7 @@ class OAuthService: NSObject {
 
         let tokens = try JSONDecoder().decode(TokenResponse.self, from: data)
         KeychainService.shared.save(key: "google_access_token", value: tokens.accessToken)
+        UserDefaults.standard.set(Date().timeIntervalSince1970 + Double(tokens.expiresIn), forKey: "google_token_expiry")
 
         return tokens.accessToken
     }
@@ -216,10 +219,19 @@ class OAuthService: NSObject {
             throw OAuthError.notSignedIn
         }
 
-        // Check if token is valid by making a test request
-        var tokenInfoRequest = URLRequest(url: URL(string: "https://www.googleapis.com/oauth2/v3/tokeninfo")!)
-        tokenInfoRequest.httpMethod = "POST"
-        tokenInfoRequest.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        // Check locally stored expiry first to avoid unnecessary network call
+        let expiryTime = UserDefaults.standard.double(forKey: "google_token_expiry")
+        if expiryTime > 0 && Date().timeIntervalSince1970 < expiryTime - 60 {
+            // Token still valid (with 60s safety margin)
+            return accessToken
+        }
+
+        // Token may be expired — verify with Google's tokeninfo endpoint
+        guard let tokenInfoURL = URL(string: "https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=\(accessToken)") else {
+            // URL construction failed (e.g. bad token chars) — treat as expired and refresh
+            return try await refreshAccessToken()
+        }
+        let tokenInfoRequest = URLRequest(url: tokenInfoURL)
         let (_, response) = try await URLSession.shared.data(for: tokenInfoRequest)
 
         if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
@@ -227,23 +239,40 @@ class OAuthService: NSObject {
         }
 
         // Token expired - refresh it, but deduplicate concurrent refresh calls
-        if isRefreshing {
+        let shouldWait: Bool = refreshLock.withLock {
+            if isRefreshing {
+                return true
+            }
+            isRefreshing = true
+            return false
+        }
+
+        if shouldWait {
             return try await withCheckedThrowingContinuation { continuation in
-                refreshWaiters.append(continuation)
+                refreshLock.withLock {
+                    refreshWaiters.append(continuation)
+                }
             }
         }
 
-        isRefreshing = true
         do {
             let newToken = try await refreshAccessToken()
-            isRefreshing = false
-            refreshWaiters.forEach { $0.resume(returning: newToken) }
-            refreshWaiters.removeAll()
+            let waiters: [CheckedContinuation<String, Error>] = refreshLock.withLock {
+                isRefreshing = false
+                let w = refreshWaiters
+                refreshWaiters.removeAll()
+                return w
+            }
+            waiters.forEach { $0.resume(returning: newToken) }
             return newToken
         } catch {
-            isRefreshing = false
-            refreshWaiters.forEach { $0.resume(throwing: error) }
-            refreshWaiters.removeAll()
+            let waiters: [CheckedContinuation<String, Error>] = refreshLock.withLock {
+                isRefreshing = false
+                let w = refreshWaiters
+                refreshWaiters.removeAll()
+                return w
+            }
+            waiters.forEach { $0.resume(throwing: error) }
             throw error
         }
     }
@@ -253,6 +282,7 @@ class OAuthService: NSObject {
         // Clear Google tokens
         KeychainService.shared.delete(key: "google_access_token")
         KeychainService.shared.delete(key: "google_refresh_token")
+        UserDefaults.standard.removeObject(forKey: "google_token_expiry")
         // Clear Apple Sign In
         KeychainService.shared.delete(key: "apple_user_id")
         // Clear user info

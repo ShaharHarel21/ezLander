@@ -1,6 +1,27 @@
 import SwiftUI
 import AppKit
 
+// MARK: - Menu Bar Icon Options
+enum MenuBarIconOption: String, CaseIterable, Identifiable {
+    case starFill = "star.fill"
+    case sparkle = "sparkle"
+    case boltFill = "bolt.fill"
+    case wandAndStars = "wand.and.stars"
+    case paperplaneFill = "paperplane.fill"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .starFill: return "Star"
+        case .sparkle: return "Sparkle"
+        case .boltFill: return "Bolt"
+        case .wandAndStars: return "Wand"
+        case .paperplaneFill: return "Plane"
+        }
+    }
+}
+
 class MenuBarController: NSObject {
     private var statusItem: NSStatusItem!
     private var popover: NSPopover!
@@ -24,11 +45,31 @@ class MenuBarController: NSObject {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
         if let button = statusItem.button {
-            button.image = NSImage(named: "MenuBarIcon")
-            button.image?.isTemplate = true
+            updateMenuBarIcon(button: button)
             button.action = #selector(handleClick)
             button.target = self
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        }
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(menuBarIconChanged),
+            name: Notification.Name("MenuBarIconChanged"),
+            object: nil
+        )
+    }
+
+    private func updateMenuBarIcon(button: NSStatusBarButton) {
+        let iconName = UserDefaults.standard.string(forKey: "menu_bar_icon") ?? MenuBarIconOption.starFill.rawValue
+        let config = NSImage.SymbolConfiguration(pointSize: 16, weight: .medium)
+        let image = NSImage(systemSymbolName: iconName, accessibilityDescription: "ezLander")?.withSymbolConfiguration(config)
+        image?.isTemplate = true
+        button.image = image
+    }
+
+    @objc private func menuBarIconChanged() {
+        if let button = statusItem.button {
+            updateMenuBarIcon(button: button)
         }
     }
 

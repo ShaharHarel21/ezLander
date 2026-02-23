@@ -105,7 +105,9 @@ class GeminiService {
             throw GeminiError.apiError(statusCode: httpResponse.statusCode, message: message)
         }
 
-        let responseJSON = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        guard let responseJSON = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw GeminiError.invalidResponse
+        }
 
         guard let candidates = responseJSON["candidates"] as? [[String: Any]],
               let firstCandidate = candidates.first,

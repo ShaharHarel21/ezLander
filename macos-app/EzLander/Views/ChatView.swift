@@ -7,6 +7,23 @@ struct ChatView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // Chat header with clear button
+            HStack {
+                Spacer()
+                Button(action: { viewModel.clearConversation() }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "trash")
+                            .font(.caption)
+                        Text("New Chat")
+                            .font(.caption)
+                    }
+                    .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, 12)
+                .padding(.top, 6)
+            }
+
             // Messages
             ScrollViewReader { proxy in
                 ScrollView {

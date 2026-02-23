@@ -2,6 +2,47 @@ import SwiftUI
 import WebKit
 import CryptoKit
 
+// MARK: - Email Swipe Action
+enum EmailSwipeAction: String, CaseIterable, Identifiable {
+    case archive
+    case delete
+    case markReadUnread
+    case star
+    case none
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .archive: return "Archive"
+        case .delete: return "Delete"
+        case .markReadUnread: return "Read/Unread"
+        case .star: return "Star"
+        case .none: return "None"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .archive: return "archivebox.fill"
+        case .delete: return "trash.fill"
+        case .markReadUnread: return "envelope.badge"
+        case .star: return "star.fill"
+        case .none: return "minus"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .archive: return .warmAccent
+        case .delete: return .red
+        case .markReadUnread: return .blue
+        case .star: return .warmHighlight
+        case .none: return .gray
+        }
+    }
+}
+
 struct EmailView: View {
     @StateObject private var viewModel = EmailViewModel.shared
     @State private var selectedEmail: Email?
@@ -298,6 +339,9 @@ struct EmailView: View {
                                 viewModel.markAsRead(email)
                             }
                         },
+                        onStar: {
+                            viewModel.starEmail(email)
+                        },
                         onMove: { label in
                             viewModel.moveEmail(email, to: label)
                         },
@@ -354,9 +398,87 @@ struct EmailView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
+
+                // Summarize button
+                if AIService.shared.hasAnyProviderConfigured {
+                    Button(action: { viewModel.summarizeEmail(email) }) {
+                        Label("Summarize", systemImage: "sparkles")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(viewModel.isSummarizing)
+                }
             }
             .padding()
             .background(Color(NSColor.controlBackgroundColor))
+
+            // AI Summary section
+            if viewModel.isSummarizing {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                    Text("Summarizing...")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.warmPrimary.opacity(0.06))
+                .cornerRadius(8)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+            }
+
+            if let summary = viewModel.emailSummary {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "sparkles")
+                        .font(.caption)
+                        .foregroundColor(.warmPrimary)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("AI Summary")
+                            .font(.caption2)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.warmPrimary)
+                        Text(summary)
+                            .font(.caption)
+                            .foregroundColor(.primary)
+                    }
+                    Spacer()
+                    Button(action: {
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            viewModel.emailSummary = nil
+                        }
+                    }) {
+                        Image(systemName: "xmark")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(10)
+                .background(Color.warmPrimary.opacity(0.08))
+                .cornerRadius(8)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+
+            if let summaryErr = viewModel.summaryError {
+                HStack(spacing: 6) {
+                    Text(summaryErr)
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                    Spacer()
+                    Button(action: { viewModel.summaryError = nil }) {
+                        Image(systemName: "xmark")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 4)
+            }
 
             Divider()
 
@@ -435,8 +557,12 @@ struct EmailListRow: View {
     let onArchive: () -> Void
     let onDelete: () -> Void
     let onMarkRead: () -> Void
+    var onStar: (() -> Void)?
     var onMove: ((GmailLabel) -> Void)?
     var availableLabels: [GmailLabel] = []
+
+    @AppStorage("swipe_right_action") private var swipeRightRaw: String = EmailSwipeAction.archive.rawValue
+    @AppStorage("swipe_left_action") private var swipeLeftRaw: String = EmailSwipeAction.delete.rawValue
 
     @State private var isHovered = false
     @State private var swipeOffset: CGFloat = 0
@@ -444,45 +570,66 @@ struct EmailListRow: View {
 
     private let swipeThreshold: CGFloat = 80
 
+    private var swipeRightAction: EmailSwipeAction {
+        EmailSwipeAction(rawValue: swipeRightRaw) ?? .archive
+    }
+    private var swipeLeftAction: EmailSwipeAction {
+        EmailSwipeAction(rawValue: swipeLeftRaw) ?? .delete
+    }
+
+    private func executeSwipeAction(_ action: EmailSwipeAction) {
+        switch action {
+        case .archive: onArchive()
+        case .delete: onDelete()
+        case .markReadUnread: onMarkRead()
+        case .star: onStar?()
+        case .none: break
+        }
+    }
+
     var body: some View {
         ZStack {
             // Background actions revealed by swipe
             HStack(spacing: 0) {
-                // Right swipe background (Archive)
-                HStack {
-                    Image(systemName: "archivebox.fill")
-                        .font(.system(size: 18))
-                        .foregroundColor(.white)
-                    if swipeOffset > swipeThreshold {
-                        Text("Archive")
-                            .font(.caption)
-                            .fontWeight(.medium)
+                // Right swipe background
+                if swipeRightAction != .none {
+                    HStack {
+                        Image(systemName: swipeRightAction.icon)
+                            .font(.system(size: 18))
                             .foregroundColor(.white)
+                        if swipeOffset > swipeThreshold {
+                            Text(swipeRightAction.displayName)
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundColor(.white)
+                        }
                     }
+                    .frame(width: max(swipeOffset, 0))
+                    .frame(maxHeight: .infinity)
+                    .background(swipeRightAction.color)
+                    .clipped()
                 }
-                .frame(width: max(swipeOffset, 0))
-                .frame(maxHeight: .infinity)
-                .background(Color.warmAccent)
-                .clipped()
 
                 Spacer()
 
-                // Left swipe background (Delete)
-                HStack {
-                    if swipeOffset < -swipeThreshold {
-                        Text("Delete")
-                            .font(.caption)
-                            .fontWeight(.medium)
+                // Left swipe background
+                if swipeLeftAction != .none {
+                    HStack {
+                        if swipeOffset < -swipeThreshold {
+                            Text(swipeLeftAction.displayName)
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundColor(.white)
+                        }
+                        Image(systemName: swipeLeftAction.icon)
+                            .font(.system(size: 18))
                             .foregroundColor(.white)
                     }
-                    Image(systemName: "trash.fill")
-                        .font(.system(size: 18))
-                        .foregroundColor(.white)
+                    .frame(width: max(-swipeOffset, 0))
+                    .frame(maxHeight: .infinity)
+                    .background(swipeLeftAction.color)
+                    .clipped()
                 }
-                .frame(width: max(-swipeOffset, 0))
-                .frame(maxHeight: .infinity)
-                .background(Color.red)
-                .clipped()
             }
 
             // Main row content
@@ -594,21 +741,21 @@ struct EmailListRow: View {
                     }
                     .onEnded { value in
                         let velocity = value.predictedEndTranslation.width - value.translation.width
-                        if swipeOffset > swipeThreshold || velocity > 200 {
-                            // Swipe right — Archive
+                        if swipeRightAction != .none && (swipeOffset > swipeThreshold || velocity > 200) {
+                            // Swipe right — configured action
                             withAnimation(.easeOut(duration: 0.2)) {
                                 swipeOffset = 400
                             }
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                                onArchive()
+                                executeSwipeAction(swipeRightAction)
                             }
-                        } else if swipeOffset < -swipeThreshold || velocity < -200 {
-                            // Swipe left — Delete
+                        } else if swipeLeftAction != .none && (swipeOffset < -swipeThreshold || velocity < -200) {
+                            // Swipe left — configured action
                             withAnimation(.easeOut(duration: 0.2)) {
                                 swipeOffset = -400
                             }
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                                onDelete()
+                                executeSwipeAction(swipeLeftAction)
                             }
                         } else {
                             // Snap back
@@ -764,6 +911,8 @@ struct ReplyEmailView: View {
     let onCancel: () -> Void
 
     @State private var replyBody: String = ""
+    @State private var isGeneratingReply = false
+    @State private var replyError: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -820,6 +969,71 @@ struct ReplyEmailView: View {
 
                 Divider()
 
+                // AI Smart Reply
+                if AIService.shared.hasAnyProviderConfigured {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "sparkles")
+                                .font(.caption)
+                                .foregroundColor(.warmPrimary)
+                            Text("AI Reply")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundColor(.warmPrimary)
+                        }
+
+                        if isGeneratingReply {
+                            HStack(spacing: 6) {
+                                ProgressView()
+                                    .scaleEffect(0.6)
+                                Text("Generating reply...")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        } else {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 8) {
+                                    ForEach(ReplyTone.allCases) { tone in
+                                        Button(action: { generateReply(tone: tone) }) {
+                                            HStack(spacing: 4) {
+                                                Image(systemName: tone.icon)
+                                                    .font(.caption2)
+                                                Text(tone.displayName)
+                                                    .font(.caption)
+                                            }
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 5)
+                                            .background(Color.warmPrimary.opacity(0.1))
+                                            .foregroundColor(.warmPrimary)
+                                            .cornerRadius(14)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                            }
+                        }
+
+                        if let err = replyError {
+                            HStack(spacing: 4) {
+                                Text(err)
+                                    .font(.caption2)
+                                    .foregroundColor(.orange)
+                                Spacer()
+                                Button(action: { replyError = nil }) {
+                                    Image(systemName: "xmark")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+
+                    Divider()
+                }
+
                 TextEditor(text: $replyBody)
                     .font(.body)
                     .padding(8)
@@ -842,7 +1056,31 @@ struct ReplyEmailView: View {
                 .background(Color(NSColor.controlBackgroundColor))
             }
         }
-        .frame(width: 380, height: 450)
+        .frame(width: 380, height: 500)
+    }
+
+    private func generateReply(tone: ReplyTone) {
+        isGeneratingReply = true
+        replyError = nil
+
+        Task {
+            do {
+                let reply = try await AIService.shared.suggestReply(
+                    to: originalEmail.subject,
+                    body: originalEmail.body,
+                    tone: tone
+                )
+                await MainActor.run {
+                    replyBody = reply
+                    isGeneratingReply = false
+                }
+            } catch {
+                await MainActor.run {
+                    replyError = error.localizedDescription
+                    isGeneratingReply = false
+                }
+            }
+        }
     }
 }
 
@@ -1244,6 +1482,9 @@ class EmailViewModel: ObservableObject {
     @Published var browsableLabels: [GmailLabel] = []
     @Published var selectedFolder: GmailLabel?
     @Published var showUndoBanner = false
+    @Published var emailSummary: String?
+    @Published var isSummarizing = false
+    @Published var summaryError: String?
 
     private var hasLoadedOnce = false
     private var pendingDeleteEmail: Email?
@@ -1325,6 +1566,8 @@ class EmailViewModel: ObservableObject {
         loadingEmailId = email.id
         fullEmailBody = nil
         fullEmailHtml = nil
+        emailSummary = nil
+        summaryError = nil
 
         Task {
             do {
@@ -1451,6 +1694,58 @@ class EmailViewModel: ObservableObject {
                 }
             } catch {
                 // Silently fail for mark as unread
+            }
+        }
+    }
+
+    func starEmail(_ email: Email) {
+        let isStarred = email.labels.contains("STARRED")
+        Task {
+            do {
+                if isStarred {
+                    try await GmailService.shared.unstarEmail(id: email.id)
+                } else {
+                    try await GmailService.shared.starEmail(id: email.id)
+                }
+                await MainActor.run {
+                    if let index = self.emails.firstIndex(where: { $0.id == email.id }) {
+                        if isStarred {
+                            self.emails[index].labels.removeAll { $0 == "STARRED" }
+                        } else {
+                            self.emails[index].labels.append("STARRED")
+                        }
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    self.error = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    func summarizeEmail(_ email: Email) {
+        isSummarizing = true
+        summaryError = nil
+        emailSummary = nil
+
+        Task {
+            do {
+                let body = fullEmailBody ?? email.body
+                let summary = try await AIService.shared.summarizeEmail(subject: email.subject, body: body)
+                await MainActor.run {
+                    withAnimation(.easeOut(duration: 0.25)) {
+                        self.emailSummary = summary
+                        self.isSummarizing = false
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    withAnimation(.easeOut(duration: 0.25)) {
+                        self.summaryError = error.localizedDescription
+                        self.isSummarizing = false
+                    }
+                }
             }
         }
     }

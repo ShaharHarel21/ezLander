@@ -124,6 +124,14 @@ struct SettingsView: View {
                 preferencesView
             }
 
+            SettingsSection(title: "Menu Bar Icon") {
+                menuBarIconPicker
+            }
+
+            SettingsSection(title: "Email Swipe Actions") {
+                swipeActionsView
+            }
+
             SettingsSection(title: "Keyboard Shortcuts") {
                 keyboardShortcutsView
             }
@@ -187,22 +195,34 @@ struct SettingsView: View {
         VStack(spacing: 12) {
             Button(action: viewModel.signInWithGoogle) {
                 HStack {
-                    Image(systemName: "globe")
+                    if viewModel.isSigningIn {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                    } else {
+                        Image(systemName: "globe")
+                    }
                     Text("Sign in with Google")
                 }
                 .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
+            .disabled(viewModel.isSigningIn)
 
             Button(action: viewModel.signInWithApple) {
                 HStack {
-                    Image(systemName: "apple.logo")
+                    if viewModel.isSigningIn {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                    } else {
+                        Image(systemName: "apple.logo")
+                    }
                     Text("Sign in with Apple")
                 }
                 .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
             .tint(.black)
+            .disabled(viewModel.isSigningIn)
         }
     }
 
@@ -329,6 +349,64 @@ struct SettingsView: View {
             Toggle("Launch at Login", isOn: $viewModel.launchAtLogin)
 
             Toggle("Show Notifications", isOn: $viewModel.showNotifications)
+        }
+    }
+
+    // MARK: - Menu Bar Icon Picker
+    private var menuBarIconPicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Choose an icon for the menu bar")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            HStack(spacing: 12) {
+                ForEach(MenuBarIconOption.allCases) { option in
+                    Button(action: { viewModel.selectedMenuBarIcon = option }) {
+                        VStack(spacing: 4) {
+                            Image(systemName: option.rawValue)
+                                .font(.system(size: 20))
+                                .frame(width: 40, height: 40)
+                                .background(
+                                    viewModel.selectedMenuBarIcon == option
+                                        ? Color.warmPrimary.opacity(0.15)
+                                        : Color.clear
+                                )
+                                .cornerRadius(8)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(
+                                            viewModel.selectedMenuBarIcon == option
+                                                ? Color.warmPrimary
+                                                : Color.clear,
+                                            lineWidth: 2
+                                        )
+                                )
+                            Text(option.displayName)
+                                .font(.system(size: 9))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(viewModel.selectedMenuBarIcon == option ? .warmPrimary : .primary)
+                }
+            }
+        }
+    }
+
+    // MARK: - Swipe Actions View
+    private var swipeActionsView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Picker("Swipe Right", selection: $viewModel.swipeRightAction) {
+                ForEach(EmailSwipeAction.allCases) { action in
+                    Label(action.displayName, systemImage: action.icon).tag(action)
+                }
+            }
+
+            Picker("Swipe Left", selection: $viewModel.swipeLeftAction) {
+                ForEach(EmailSwipeAction.allCases) { action in
+                    Label(action.displayName, systemImage: action.icon).tag(action)
+                }
+            }
         }
     }
 
@@ -482,6 +560,7 @@ struct APIKeyRow: View {
     let onSaveKey: () -> Void
     let onRemoveKey: () -> Void
     let onGetKey: () -> Void
+    @State private var showSaveSuccess = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -495,7 +574,15 @@ struct APIKeyRow: View {
 
                 Spacer()
 
-                if isConfigured {
+                if showSaveSuccess {
+                    HStack(spacing: 4) {
+                        Image(systemName: "checkmark.circle.fill")
+                        Text("Saved")
+                    }
+                    .font(.caption)
+                    .foregroundColor(.green)
+                    .transition(.opacity)
+                } else if isConfigured {
                     Text("Active")
                         .font(.caption)
                         .foregroundColor(.green)
@@ -525,6 +612,14 @@ struct APIKeyRow: View {
                         .textFieldStyle(.roundedBorder)
                     Button("Save") {
                         onSaveKey()
+                        withAnimation {
+                            showSaveSuccess = true
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            withAnimation {
+                                showSaveSuccess = false
+                            }
+                        }
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
@@ -539,6 +634,7 @@ struct APIKeyRow: View {
 // MARK: - View Model
 class SettingsViewModel: ObservableObject {
     @Published var isSignedIn: Bool = false
+    @Published var isSigningIn: Bool = false
     @Published var userEmail: String = ""
     @Published var userName: String = ""
     @Published var userPicture: String? = nil
@@ -559,6 +655,22 @@ class SettingsViewModel: ObservableObject {
     @Published var showNotifications: Bool = true {
         didSet {
             UserDefaults.standard.set(showNotifications, forKey: "show_notifications")
+        }
+    }
+    @Published var selectedMenuBarIcon: MenuBarIconOption = .starFill {
+        didSet {
+            UserDefaults.standard.set(selectedMenuBarIcon.rawValue, forKey: "menu_bar_icon")
+            NotificationCenter.default.post(name: Notification.Name("MenuBarIconChanged"), object: nil)
+        }
+    }
+    @Published var swipeRightAction: EmailSwipeAction = .archive {
+        didSet {
+            UserDefaults.standard.set(swipeRightAction.rawValue, forKey: "swipe_right_action")
+        }
+    }
+    @Published var swipeLeftAction: EmailSwipeAction = .delete {
+        didSet {
+            UserDefaults.standard.set(swipeLeftAction.rawValue, forKey: "swipe_left_action")
         }
     }
 
@@ -599,6 +711,10 @@ class SettingsViewModel: ObservableObject {
         googleCalendarConnected = OAuthService.shared.isSignedInWithGoogle
         gmailConnected = OAuthService.shared.isSignedInWithGoogle
 
+        // Check Apple Calendar: persisted disconnect flag + actual OS authorization
+        let intentionallyDisconnected = UserDefaults.standard.bool(forKey: "apple_calendar_disconnected")
+        appleCalendarConnected = !intentionallyDisconnected && AppleCalendarService.shared.isAuthorized
+
         // Load preferences
         if let savedCalendar = UserDefaults.standard.string(forKey: "default_calendar"),
            let calType = CalendarType(rawValue: savedCalendar) {
@@ -606,6 +722,22 @@ class SettingsViewModel: ObservableObject {
         }
         launchAtLogin = UserDefaults.standard.bool(forKey: "launch_at_login")
         showNotifications = UserDefaults.standard.object(forKey: "show_notifications") as? Bool ?? true
+
+        // Load menu bar icon preference
+        if let savedIcon = UserDefaults.standard.string(forKey: "menu_bar_icon"),
+           let icon = MenuBarIconOption(rawValue: savedIcon) {
+            selectedMenuBarIcon = icon
+        }
+
+        // Load swipe action preferences
+        if let savedRight = UserDefaults.standard.string(forKey: "swipe_right_action"),
+           let action = EmailSwipeAction(rawValue: savedRight) {
+            swipeRightAction = action
+        }
+        if let savedLeft = UserDefaults.standard.string(forKey: "swipe_left_action"),
+           let action = EmailSwipeAction(rawValue: savedLeft) {
+            swipeLeftAction = action
+        }
 
         // Load AI provider settings
         selectedAIProvider = AIService.shared.currentProvider
@@ -632,26 +764,36 @@ class SettingsViewModel: ObservableObject {
     }
 
     func signInWithGoogle() {
+        isSigningIn = true
         Task {
             do {
                 try await OAuthService.shared.signInWithGoogle()
                 await MainActor.run {
+                    isSigningIn = false
                     loadSettings()
                 }
             } catch {
+                await MainActor.run {
+                    isSigningIn = false
+                }
                 print("Google sign in error: \(error)")
             }
         }
     }
 
     func signInWithApple() {
+        isSigningIn = true
         Task {
             do {
                 try await OAuthService.shared.signInWithApple()
                 await MainActor.run {
+                    isSigningIn = false
                     loadSettings()
                 }
             } catch {
+                await MainActor.run {
+                    isSigningIn = false
+                }
                 print("Apple sign in error: \(error)")
             }
         }
@@ -692,6 +834,7 @@ class SettingsViewModel: ObservableObject {
     }
 
     func connectAppleCalendar() {
+        UserDefaults.standard.set(false, forKey: "apple_calendar_disconnected")
         AppleCalendarService.shared.requestAccess { [weak self] granted in
             DispatchQueue.main.async {
                 self?.appleCalendarConnected = granted
@@ -700,6 +843,7 @@ class SettingsViewModel: ObservableObject {
     }
 
     func disconnectAppleCalendar() {
+        UserDefaults.standard.set(true, forKey: "apple_calendar_disconnected")
         appleCalendarConnected = false
     }
 
