@@ -240,12 +240,48 @@ enum EventParser {
         return ""
     }
 
-    /// Extract an event title from the user's original message by stripping action phrases and time references.
+    // MARK: - Pronoun / filler detection
+
+    /// Words that are never valid standalone event titles.
+    /// Used by extractTitleFromUserMessage and callers in ClaudeService to reject bad AI-generated titles.
+    static let pronounsAndFillers: Set<String> = [
+        "that", "this", "it", "those", "these",
+        "that's", "this is", "it's",
+        // Singular and plural vague fillers (BUG-3 fix: added plural forms)
+        "thing", "things", "stuff", "something",
+        // Common compound filler phrases
+        "that thing", "these things", "those things",
+    ]
+
+    /// Returns true if `candidate` is entirely a pronoun or vague filler word
+    /// (case-insensitive, whitespace-trimmed).
+    static func isPronounOrFiller(_ candidate: String) -> Bool {
+        let normalized = candidate.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        return pronounsAndFillers.contains(normalized)
+    }
+
+    /// Extract an event title from the user's original message by stripping action phrases,
+    /// leading pronouns, and time references.
+    ///
+    /// Design contract:
+    ///   - Returns an empty string whenever the remaining text is a pronoun, a vague filler, or
+    ///     too short to be a meaningful title. The caller is responsible for asking the user for
+    ///     clarification in that case.
+    ///
+    /// Examples:
+    ///   "Schedule that"                         → ""
+    ///   "Remind me about that thing tomorrow"   → ""
+    ///   "Schedule my dentist appointment"       → "my dentist appointment"  (caller capitalises)
+    ///   "Add a team standup on Monday"          → "team standup"
+    ///   "I need to schedule a dentist appt"     → "dentist appt"
     static func extractTitleFromUserMessage(_ message: String) -> String {
         guard !message.isEmpty else { return "" }
 
         var text = message.trimmingCharacters(in: .whitespacesAndNewlines)
 
+        // --- Step 1: Strip leading action-verb phrases ---
+        // Ordered longest → shortest so greedier matches win (e.g. "create a new event for"
+        // before "create a").
         let prefixes = [
             "create a new event for ", "create an event for ", "create event for ",
             "create a new event called ", "create an event called ",
@@ -259,6 +295,7 @@ enum EventParser {
             "new event for ", "new event called ", "new event ",
             "remind me about ", "remind me to ", "remind me of ",
             "i have a ", "i have an ", "i have ",
+            "i need to schedule a ", "i need to schedule an ", "i need to schedule ",
             "i need a ", "i need an ", "i need to ",
             "put a ", "put an ", "put ",
             "make a ", "make an ", "make ",
@@ -274,16 +311,28 @@ enum EventParser {
             }
         }
 
+        // --- Step 2: Strip leading pronouns / fillers ---
+        // After removing the action prefix the remainder might start with "that", "this", etc.
+        // Strip those so "Schedule that" and "Remind me about that thing" both yield "".
+        let leadingPronounPattern = "^(that's|this is|it's|that|this|it|those|these)\\b\\s*"
+        if let regex = try? NSRegularExpression(pattern: leadingPronounPattern, options: .caseInsensitive) {
+            let range = NSRange(text.startIndex..<text.endIndex, in: text)
+            text = regex.stringByReplacingMatches(in: text, range: range, withTemplate: "")
+        }
+
+        // --- Step 3: Strip trailing time / date references ---
         let timePatterns = [
-            " at \\d{1,2}(:\\d{2})?\\s*(am|pm|AM|PM)?.*$",
-            " on (monday|tuesday|wednesday|thursday|friday|saturday|sunday).*$",
-            " on \\d{1,2}(/|-)\\d{1,2}.*$",
-            " tomorrow.*$",
-            " today.*$",
-            " next (monday|tuesday|wednesday|thursday|friday|saturday|sunday|week|month).*$",
-            " this (monday|tuesday|wednesday|thursday|friday|saturday|sunday|week|month).*$",
-            " for \\d+ (minutes|hours|hour|min).*$",
-            " from \\d{1,2}.*$",
+            "\\s+at\\s+\\d{1,2}(:\\d{2})?\\s*(am|pm|AM|PM)?.*$",
+            "\\s+on\\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday).*$",
+            "\\s+on\\s+\\d{1,2}(/|-)\\d{1,2}.*$",
+            "\\s+tomorrow.*$",
+            "\\s+today.*$",
+            "\\s+next\\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday|week|month).*$",
+            "\\s+this\\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday|week|month).*$",
+            // BUG-4 fix: "for <day-of-week|today|tomorrow|date>" is a time reference, not part of the title
+            "\\s+for\\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow|\\d{1,2}).*$",
+            "\\s+for\\s+\\d+\\s+(minutes|hours|hour|min).*$",
+            "\\s+from\\s+\\d{1,2}.*$",
         ]
 
         for pattern in timePatterns {
@@ -293,10 +342,27 @@ enum EventParser {
             }
         }
 
+        // --- Step 3b: Strip trailing prepositions left behind by time-suffix stripping ---
+        // e.g. "project review meeting for" (after "next week" was removed) → "project review meeting"
+        // BUG-2 fix: trim any dangling preposition that time-pattern removal leaves at the end.
+        let trailingPrepPattern = "\\s+(for|with|at|on|in|to|of|and)$"
+        if let regex = try? NSRegularExpression(pattern: trailingPrepPattern, options: .caseInsensitive) {
+            let range = NSRange(text.startIndex..<text.endIndex, in: text)
+            text = regex.stringByReplacingMatches(in: text, range: range, withTemplate: "")
+        }
+
         text = text.trimmingCharacters(in: .whitespacesAndNewlines)
             .trimmingCharacters(in: CharacterSet(charactersIn: ".,!?"))
             .trimmingCharacters(in: .whitespaces)
 
+        // --- Step 4: Final pronoun / filler guard ---
+        // If what remains is still only a pronoun or vague word, signal "no title found"
+        // so the caller can ask the user for clarification.
+        if isPronounOrFiller(text) {
+            return ""
+        }
+
+        // Require at least 2 characters to be considered a valid candidate.
         return text.count >= 2 ? text : ""
     }
 }

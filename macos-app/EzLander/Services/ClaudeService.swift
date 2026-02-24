@@ -39,11 +39,15 @@ class ClaudeService {
     private let tools: [[String: Any]] = [
         [
             "name": "create_calendar_event",
-            "description": "Create a new calendar event. Extract a descriptive, specific title from the user's message — never use generic titles like 'New Event' or 'Event'.",
+            // Strengthened description: explicitly forbids pronouns as titles and instructs
+            // Claude to ask for clarification when the user's message is too vague.
+            "description": "Create a new calendar event. You MUST extract a descriptive, specific title from the user's message. NEVER use pronouns (that, this, it, those, these) or vague words (thing, stuff, something) as the event title. NEVER use generic titles like 'New Event' or 'Event'. If the user's message is too vague to extract a clear title (e.g. 'schedule that', 'remind me about this'), do NOT call this tool — instead respond asking the user for the event name.",
             "input_schema": [
                 "type": "object",
                 "properties": [
-                    "title": ["type": "string", "description": "A descriptive event title extracted from the user's message. Examples: 'Dentist Appointment', 'Team Standup Meeting', 'Lunch with Sarah', 'Flight to NYC'. Never use generic titles like 'New Event'."],
+                    // Richer description that mirrors the system-prompt examples and explicitly
+                    // calls out pronoun prohibition so the model sees it at schema-read time too.
+                    "title": ["type": "string", "description": "A descriptive event title extracted from the user's message. Must be a noun phrase (e.g. 'Dentist Appointment', 'Team Standup Meeting', 'Lunch with Sarah', 'Flight to NYC'). NEVER use pronouns (that, this, it, those, these) or vague words (thing, stuff, something) as the title. NEVER use generic placeholders like 'New Event'."],
                     "date": ["type": "string", "description": "Event date in YYYY-MM-DD format"],
                     "time": ["type": "string", "description": "Event start time in HH:MM format (24-hour)"],
                     "duration": ["type": "integer", "description": "Duration in minutes (default 60)"],
@@ -274,11 +278,41 @@ class ClaudeService {
             throw ClaudeError.invalidResponse
         }
 
-        // If the AI gave a generic title, extract a better one from the user's message
-        let genericTitles = ["new event", "event", "meeting", "untitled", "calendar event", "new meeting", "new calendar event"]
-        if genericTitles.contains(title.lowercased().trimmingCharacters(in: .whitespaces)) && !userMessage.isEmpty {
-            title = EventParser.extractTitleFromUserMessage(userMessage)
-            if title.isEmpty { title = "New Event" }
+        // Expanded list of titles that Claude should never use verbatim.
+        // Includes generic placeholders AND pronouns/fillers that Claude occasionally
+        // returns when the user's request is vague (e.g. "schedule that").
+        let badTitles: Set<String> = [
+            // Generic placeholders
+            "new event", "event", "meeting", "untitled",
+            "calendar event", "new meeting", "new calendar event",
+            // Pronouns — Claude must not use these as titles (see tool description / system prompt)
+            "that", "this", "it", "those", "these",
+            "that's", "this is", "it's",
+            // Vague fillers — singular and plural forms (BUG-3 fix: added plural/compound forms)
+            "thing", "things", "stuff", "something",
+            "that thing", "these things", "those things",
+        ]
+
+        let normalizedTitle = title.lowercased().trimmingCharacters(in: .whitespaces)
+        let isBadTitle = badTitles.contains(normalizedTitle)
+            || EventParser.isPronounOrFiller(normalizedTitle)
+
+        if isBadTitle {
+            // Attempt to recover a better title from the user's original message.
+            let recovered = userMessage.isEmpty
+                ? ""
+                : EventParser.extractTitleFromUserMessage(userMessage)
+
+            if recovered.isEmpty {
+                // The user's message is too vague — ask for clarification instead of
+                // creating an event with a meaningless title.
+                return "I couldn't determine a title for this event. Could you tell me what you'd like to call it?"
+            }
+
+            // Capitalise the recovered title (Title Case).
+            title = recovered.split(separator: " ").map { word in
+                word.prefix(1).uppercased() + word.dropFirst()
+            }.joined(separator: " ")
         }
         guard let dateStr = input["date"] as? String,
               let timeStr = input["time"] as? String else {
@@ -483,12 +517,18 @@ class ClaudeService {
 
         IMPORTANT — Creating calendar events:
         - Always extract a specific, descriptive title from the user's message. NEVER use generic titles like "New Event", "Event", or "Meeting".
-        - Examples of good title extraction:
+        - NEVER use pronouns (that, this, it, those, these) or vague words (thing, stuff, something) as the event title.
+        - If the user's message is too vague to identify a clear event name — for example "schedule that", "remind me about this", or "add that thing" — do NOT call create_calendar_event. Instead, reply asking the user: "What would you like to call this event?"
+        - Examples of GOOD title extraction:
           - User says "schedule a dentist appointment tomorrow at 3pm" → title: "Dentist Appointment"
           - User says "remind me about the team standup at 9am" → title: "Team Standup"
           - User says "add lunch with Sarah on Friday" → title: "Lunch with Sarah"
           - User says "I have a flight to NYC next Monday at 6am" → title: "Flight to NYC"
           - User says "book a haircut for Saturday 2pm" → title: "Haircut"
+        - Examples of messages where you must ask for clarification BEFORE creating the event:
+          - "Schedule that" → ask: "What would you like to call this event?"
+          - "Remind me about that thing tomorrow" → ask: "What is the event you'd like me to add?"
+          - "Add this on Monday" → ask: "Could you give me a name for this event?"
         - Resolve relative dates like "tomorrow", "next Monday", "this Friday" using today's date.
         - If the user doesn't specify a duration, default to 60 minutes. Use shorter durations for quick things (haircut: 30min) and longer for things like flights.
         - If the date or time is ambiguous, ask for clarification before creating the event.
