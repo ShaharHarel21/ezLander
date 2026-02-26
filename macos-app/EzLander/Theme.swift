@@ -53,6 +53,154 @@ extension Color {
     }
 }
 
+// MARK: - Liquid Glass Tokens
+extension Color {
+    static let glassCoralTint    = Color.warmPrimary.opacity(0.08)
+    static let glassAmberTint    = Color.warmAccent.opacity(0.07)
+    static let glassPeachTint    = Color.warmSoft.opacity(0.12)
+    static let glassSpecular     = Color.white.opacity(0.18)
+    static let glassBorder       = Color.white.opacity(0.10)
+    static let glassHover        = Color.warmPrimary.opacity(0.06)
+    static let glassPressed      = Color.warmPrimary.opacity(0.14)
+}
+
+// MARK: - Glass Infrastructure
+
+struct VisualEffectBlur: NSViewRepresentable {
+    var material: NSVisualEffectView.Material = .popover
+    var blendingMode: NSVisualEffectView.BlendingMode = .behindWindow
+
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = material
+        view.blendingMode = blendingMode
+        view.state = .active
+        return view
+    }
+
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
+        nsView.material = material
+        nsView.blendingMode = blendingMode
+    }
+}
+
+struct GlassPanelBackground: View {
+    var cornerRadius: CGFloat = 12
+    var tint: Color = .clear
+    var thickness: GlassThickness = .regular
+    @Environment(\.colorScheme) var colorScheme
+
+    enum GlassThickness { case thin, regular, thick }
+
+    private var tintOpacity: Double { colorScheme == .dark ? 1.0 : 0.7 }
+    private var edgeOpacity: Double { colorScheme == .dark ? 0.25 : 0.45 }
+
+    var body: some View {
+        if #available(macOS 26, *) {
+            nativeGlass
+        } else {
+            fallbackGlass
+        }
+    }
+
+    @available(macOS 26, *)
+    private var nativeGlass: some View {
+        ZStack {
+            if tint != .clear {
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .fill(tint.opacity(tintOpacity))
+            }
+        }
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: cornerRadius))
+    }
+
+    private var fallbackGlass: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: cornerRadius).fill(.ultraThinMaterial)
+            if tint != .clear {
+                RoundedRectangle(cornerRadius: cornerRadius).fill(tint.opacity(tintOpacity))
+            }
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .fill(RadialGradient(
+                    colors: [.white.opacity(0.18), .white.opacity(0)],
+                    center: UnitPoint(x: 0.2, y: 0.12),
+                    startRadius: 0, endRadius: 140
+                ))
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [
+                            .white.opacity(edgeOpacity),
+                            .white.opacity(edgeOpacity * 0.22),
+                            .white.opacity(edgeOpacity * 0.12),
+                            .white.opacity(edgeOpacity * 0.40)
+                        ],
+                        startPoint: .topLeading, endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1.0
+                )
+        }
+    }
+}
+
+struct LiquidShadow: ViewModifier {
+    var radius: CGFloat = 12
+    var opacity: Double = 0.12
+    func body(content: Content) -> some View {
+        content
+            .shadow(color: .black.opacity(opacity), radius: radius, x: 0, y: 4)
+            .shadow(color: .black.opacity(opacity * 0.6), radius: 2, x: 0, y: 1)
+    }
+}
+
+struct GlassCard: ViewModifier {
+    var tint: Color = .glassCoralTint
+    var cornerRadius: CGFloat = 16
+    func body(content: Content) -> some View {
+        content
+            .background(GlassPanelBackground(cornerRadius: cornerRadius, tint: tint))
+            .modifier(LiquidShadow())
+    }
+}
+
+struct ShimmerModifier: ViewModifier {
+    @State private var phase: CGFloat = -1
+    func body(content: Content) -> some View {
+        content.overlay(
+            LinearGradient(
+                stops: [
+                    .init(color: .clear, location: phase - 0.3),
+                    .init(color: .white.opacity(0.18), location: phase),
+                    .init(color: .clear, location: phase + 0.3)
+                ],
+                startPoint: .topLeading, endPoint: .bottomTrailing
+            )
+            .onAppear { withAnimation(.linear(duration: 1.4).repeatForever(autoreverses: false)) { phase = 2 } }
+        )
+    }
+}
+
+struct LiquidPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
+            .brightness(configuration.isPressed ? -0.03 : 0)
+            .animation(.spring(response: 0.20, dampingFraction: 0.50), value: configuration.isPressed)
+    }
+}
+
+extension View {
+    func glassCard(tint: Color = .glassCoralTint, cornerRadius: CGFloat = 16) -> some View {
+        modifier(GlassCard(tint: tint, cornerRadius: cornerRadius))
+    }
+    func liquidShadow(radius: CGFloat = 12, opacity: Double = 0.12) -> some View {
+        modifier(LiquidShadow(radius: radius, opacity: opacity))
+    }
+    func shimmer() -> some View {
+        modifier(ShimmerModifier())
+    }
+}
+
 // MARK: - Warm Gradient Button Style
 struct WarmGradientButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
@@ -60,15 +208,24 @@ struct WarmGradientButtonStyle: ButtonStyle {
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
             .background(
-                LinearGradient(
-                    colors: [Color.warmPrimary, Color.warmAccent],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
+                ZStack {
+                    LinearGradient(
+                        colors: [Color.warmPrimary, Color.warmAccent],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    LinearGradient(
+                        colors: [.white.opacity(0.20), .white.opacity(0.05), .clear],
+                        startPoint: .top,
+                        endPoint: .center
+                    )
+                }
             )
             .foregroundColor(.white)
-            .cornerRadius(8)
-            .opacity(configuration.isPressed ? 0.85 : 1.0)
+            .cornerRadius(12)
+            .shadow(color: Color.warmPrimary.opacity(0.28), radius: 10, x: 0, y: 3)
+            .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
+            .animation(.spring(response: 0.2, dampingFraction: 0.5), value: configuration.isPressed)
     }
 }
 

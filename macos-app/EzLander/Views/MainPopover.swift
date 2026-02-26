@@ -14,18 +14,29 @@ struct MainPopover: View {
             // Header
             headerView
 
-            Divider()
+            Rectangle()
+                .fill(Color.white.opacity(0.10))
+                .frame(height: 0.5)
 
             // Content
             contentView
 
-            Divider()
+            Rectangle()
+                .fill(Color.white.opacity(0.10))
+                .frame(height: 0.5)
 
             // Tab bar
             tabBar
         }
         .frame(width: 400, height: 500)
-        .background(Color(NSColor.windowBackgroundColor))
+        .background {
+            if #available(macOS 26, *) {
+                Color.clear
+            } else {
+                VisualEffectBlur(material: .popover, blendingMode: .behindWindow)
+                    .overlay(Color.warmSoft.opacity(0.05))
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: MenuBarController.switchTabNotification)) { notification in
             if let tabName = notification.object as? String,
                let tab = Tab(rawValue: tabName) {
@@ -65,8 +76,14 @@ struct MainPopover: View {
                     .foregroundColor(.proBadge)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(Color.proBadge.opacity(0.15))
-                    .cornerRadius(8)
+                    .background(
+                        ZStack {
+                            Capsule().fill(.ultraThinMaterial)
+                            Capsule().fill(Color.proBadge.opacity(0.18))
+                            Capsule().strokeBorder(Color.proBadge.opacity(0.35), lineWidth: 0.5)
+                        }
+                        .shadow(color: Color.warmHighlight.opacity(0.2), radius: 6)
+                    )
             }
 
             Button(action: { selectedTab = .settings }) {
@@ -75,8 +92,12 @@ struct MainPopover: View {
                     .foregroundColor(selectedTab == .settings ? .warmPrimary : .secondary)
             }
             .buttonStyle(.plain)
+            .background(Circle().fill(Color.warmPrimary.opacity(0.0)))
         }
         .padding()
+        .background(
+            GlassPanelBackground(cornerRadius: 0, tint: Color.warmSoft, thickness: .thick)
+        )
     }
 
     @ViewBuilder
@@ -93,8 +114,11 @@ struct MainPopover: View {
                 SettingsView()
             }
         }
-        .transition(.opacity)
-        .animation(.easeInOut(duration: 0.2), value: selectedTab)
+        .transition(.asymmetric(
+            insertion: .opacity.combined(with: .scale(scale: 0.97, anchor: .center)),
+            removal: .opacity.combined(with: .scale(scale: 1.02, anchor: .center))
+        ))
+        .animation(.spring(response: 0.30, dampingFraction: 0.78), value: selectedTab)
     }
 
     private var tabBar: some View {
@@ -104,6 +128,9 @@ struct MainPopover: View {
             tabButton(tab: .email, icon: "envelope.fill", label: "Email")
         }
         .padding(.vertical, 8)
+        .background(
+            GlassPanelBackground(cornerRadius: 0, tint: Color.warmSoft, thickness: .thick)
+        )
     }
 
     private func tabButton(tab: Tab, icon: String, label: String) -> some View {
@@ -111,11 +138,25 @@ struct MainPopover: View {
             VStack(spacing: 4) {
                 Image(systemName: icon)
                     .font(.system(size: 20))
+                    .scaleEffect(selectedTab == tab ? 1.12 : 1.0)
+                    .animation(.spring(response: 0.25, dampingFraction: 0.55), value: selectedTab)
                 Text(label)
                     .font(.caption2)
             }
             .frame(maxWidth: .infinity)
             .foregroundColor(selectedTab == tab ? .warmPrimary : .secondary)
+            .padding(.vertical, 6)
+            .background {
+                if selectedTab == tab {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(.ultraThinMaterial)
+                        .overlay(RoundedRectangle(cornerRadius: 12).fill(Color.warmPrimary.opacity(0.16)))
+                        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.warmPrimary.opacity(0.28), lineWidth: 0.75))
+                        .shadow(color: Color.warmPrimary.opacity(0.20), radius: 8)
+                        .animation(.spring(response: 0.35, dampingFraction: 0.72), value: selectedTab)
+                }
+            }
+            .padding(.horizontal, 8)
         }
         .buttonStyle(.plain)
     }

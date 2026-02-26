@@ -45,25 +45,23 @@ struct SettingsView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 8)
                         .foregroundColor(selectedSettingsTab == tab ? .warmPrimary : .secondary)
+                        .background(
+                            Group {
+                                if selectedSettingsTab == tab {
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .fill(.ultraThinMaterial)
+                                        .overlay(RoundedRectangle(cornerRadius: 10).fill(Color.warmPrimary.opacity(0.14)))
+                                        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.warmPrimary.opacity(0.25), lineWidth: 0.75))
+                                        .shadow(color: Color.warmPrimary.opacity(0.12), radius: 6)
+                                }
+                            }
+                        )
+                        .animation(.spring(response: 0.25, dampingFraction: 0.70), value: selectedSettingsTab)
                     }
                     .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, 8)
-            .overlay(alignment: .bottom) {
-                // Active tab underline
-                GeometryReader { geo in
-                    let tabWidth = geo.size.width / CGFloat(SettingsTab.allCases.count)
-                    let tabIndex = CGFloat(SettingsTab.allCases.firstIndex(of: selectedSettingsTab) ?? 0)
-                    Rectangle()
-                        .fill(Color.warmPrimary)
-                        .frame(width: tabWidth * 0.6, height: 2)
-                        .cornerRadius(1)
-                        .offset(x: tabWidth * tabIndex + tabWidth * 0.2)
-                        .animation(.easeInOut(duration: 0.2), value: selectedSettingsTab)
-                }
-                .frame(height: 2)
-            }
 
             Divider()
 
@@ -82,6 +80,8 @@ struct SettingsView: View {
                     }
                 }
                 .padding()
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
+                .animation(.spring(response: 0.28, dampingFraction: 0.82), value: selectedSettingsTab)
             }
         }
     }
@@ -246,8 +246,13 @@ struct SettingsView: View {
                         .foregroundColor(.green)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
-                        .background(Color.green.opacity(0.12))
-                        .cornerRadius(4)
+                        .background(
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 8).fill(.ultraThinMaterial)
+                                RoundedRectangle(cornerRadius: 8).fill(Color.green.opacity(0.14))
+                                RoundedRectangle(cornerRadius: 8).strokeBorder(Color.green.opacity(0.22), lineWidth: 0.5)
+                            }
+                        )
                 }
             }
 
@@ -255,7 +260,8 @@ struct SettingsView: View {
                 Button("Upgrade to Pro") {
                     viewModel.openSubscriptionPage()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(WarmGradientButtonStyle())
+                .shadow(color: Color.warmPrimary.opacity(0.30), radius: 12)
             } else {
                 Button("Manage Subscription") {
                     viewModel.openCustomerPortal()
@@ -347,8 +353,26 @@ struct SettingsView: View {
             }
 
             Toggle("Launch at Login", isOn: $viewModel.launchAtLogin)
+                .tint(Color.warmPrimary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(.ultraThinMaterial)
+                        .overlay(RoundedRectangle(cornerRadius: 10).fill(Color.warmSoft.opacity(0.04)))
+                )
+                .padding(.vertical, 2)
 
             Toggle("Show Notifications", isOn: $viewModel.showNotifications)
+                .tint(Color.warmPrimary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(.ultraThinMaterial)
+                        .overlay(RoundedRectangle(cornerRadius: 10).fill(Color.warmSoft.opacity(0.04)))
+                )
+                .padding(.vertical, 2)
         }
     }
 
@@ -361,33 +385,35 @@ struct SettingsView: View {
 
             HStack(spacing: 12) {
                 ForEach(MenuBarIconOption.allCases) { option in
+                    let isSelected = viewModel.selectedMenuBarIcon == option
                     Button(action: { viewModel.selectedMenuBarIcon = option }) {
                         VStack(spacing: 4) {
                             Image(systemName: option.rawValue)
                                 .font(.system(size: 20))
                                 .frame(width: 40, height: 40)
                                 .background(
-                                    viewModel.selectedMenuBarIcon == option
-                                        ? Color.warmPrimary.opacity(0.15)
-                                        : Color.clear
+                                    Group {
+                                        if isSelected {
+                                            ZStack {
+                                                RoundedRectangle(cornerRadius: 10).fill(.ultraThinMaterial)
+                                                RoundedRectangle(cornerRadius: 10).fill(Color.warmPrimary.opacity(0.16))
+                                                RoundedRectangle(cornerRadius: 10).strokeBorder(Color.warmPrimary.opacity(0.30), lineWidth: 0.75)
+                                            }
+                                            .shadow(color: Color.warmPrimary.opacity(0.18), radius: 8)
+                                        } else {
+                                            Color.clear
+                                        }
+                                    }
                                 )
-                                .cornerRadius(8)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(
-                                            viewModel.selectedMenuBarIcon == option
-                                                ? Color.warmPrimary
-                                                : Color.clear,
-                                            lineWidth: 2
-                                        )
-                                )
+                                .scaleEffect(isSelected ? 1.05 : 1.0)
+                                .animation(.spring(response: 0.25, dampingFraction: 0.65), value: isSelected)
                             Text(option.displayName)
                                 .font(.system(size: 9))
                                 .foregroundColor(.secondary)
                         }
                     }
                     .buttonStyle(.plain)
-                    .foregroundColor(viewModel.selectedMenuBarIcon == option ? .warmPrimary : .primary)
+                    .foregroundColor(isSelected ? .warmPrimary : .primary)
                 }
             }
         }
@@ -458,6 +484,17 @@ struct SettingsView: View {
                         .buttonStyle(.borderedProminent)
                     }
                 }
+                .padding(10)
+                .background(
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 12).fill(.ultraThinMaterial)
+                        RoundedRectangle(cornerRadius: 12).fill(Color.green.opacity(0.10))
+                        HStack {
+                            RoundedRectangle(cornerRadius: 1.5).fill(Color.green).frame(width: 3)
+                            Spacer()
+                        }.clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
+                )
             } else {
                 HStack {
                     Button("Check for Updates") {
@@ -504,8 +541,14 @@ struct SettingsSection<Content: View>: View {
 
             content
                 .padding()
-                .background(Color(NSColor.controlBackgroundColor))
-                .cornerRadius(8)
+                .background(
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 14).fill(.ultraThinMaterial)
+                        RoundedRectangle(cornerRadius: 14).fill(Color.warmSoft.opacity(0.06))
+                        RoundedRectangle(cornerRadius: 14).strokeBorder(Color.white.opacity(0.12), lineWidth: 0.75)
+                    }
+                    .shadow(color: .black.opacity(0.06), radius: 10, x: 0, y: 2)
+                )
         }
     }
 }
@@ -532,6 +575,15 @@ struct IntegrationRow: View {
                     Text("Connected")
                         .font(.caption)
                         .foregroundColor(.green)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 8).fill(.ultraThinMaterial)
+                                RoundedRectangle(cornerRadius: 8).fill(Color.green.opacity(0.12))
+                                RoundedRectangle(cornerRadius: 8).strokeBorder(Color.green.opacity(0.20), lineWidth: 0.5)
+                            }
+                        )
 
                     Button("Disconnect") {
                         onDisconnect()
@@ -547,6 +599,16 @@ struct IntegrationRow: View {
                 .controlSize(.small)
             }
         }
+        .padding(.vertical, 4)
+        .padding(.horizontal, 8)
+        .background(
+            ZStack {
+                RoundedRectangle(cornerRadius: 10).fill(.ultraThinMaterial)
+                RoundedRectangle(cornerRadius: 10).fill(Color.warmSoft.opacity(0.04))
+            }
+            .shadow(color: .black.opacity(0.04), radius: 4)
+        )
+        .padding(.vertical, 2)
     }
 }
 
@@ -589,7 +651,16 @@ struct APIKeyRow: View {
                     Button("Remove") {
                         onRemoveKey()
                     }
-                    .buttonStyle(.bordered)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 8).fill(.ultraThinMaterial)
+                            RoundedRectangle(cornerRadius: 8).fill(Color.red.opacity(0.08))
+                        }
+                    )
+                    .buttonStyle(.plain)
+                    .foregroundColor(.red)
                     .controlSize(.small)
                 } else {
                     Button("Get Key") {
@@ -601,7 +672,7 @@ struct APIKeyRow: View {
                     Button("Add Key") {
                         onAddKey()
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(WarmGradientButtonStyle())
                     .controlSize(.small)
                 }
             }
@@ -609,7 +680,14 @@ struct APIKeyRow: View {
             if showInput {
                 HStack {
                     SecureField(provider.keyPlaceholder, text: $keyInput)
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.plain)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(.ultraThinMaterial)
+                                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5))
+                        )
                     Button("Save") {
                         onSaveKey()
                         withAnimation {
@@ -627,7 +705,15 @@ struct APIKeyRow: View {
                 }
             }
         }
-        .padding(.vertical, 4)
+        .padding()
+        .background(
+            ZStack {
+                RoundedRectangle(cornerRadius: 10).fill(.ultraThinMaterial)
+                RoundedRectangle(cornerRadius: 10).fill(Color.warmSoft.opacity(0.04))
+            }
+            .shadow(color: .black.opacity(0.04), radius: 4)
+        )
+        .padding(.vertical, 2)
     }
 }
 

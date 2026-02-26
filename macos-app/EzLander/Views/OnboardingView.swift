@@ -36,8 +36,18 @@ struct OnboardingView: View {
             HStack(spacing: 8) {
                 ForEach(0..<steps.count, id: \.self) { index in
                     Circle()
-                        .fill(index <= currentStep ? Color.warmPrimary : Color.secondary.opacity(0.3))
-                        .frame(width: 8, height: 8)
+                        .fill(index < currentStep ? Color.warmPrimary :
+                              index == currentStep ? Color.warmPrimary.opacity(0.70) :
+                              Color.secondary.opacity(0.20))
+                        .frame(width: index == currentStep ? 11 : 8,
+                               height: index == currentStep ? 11 : 8)
+                        .overlay(
+                            index == currentStep ?
+                                AnyView(Circle().strokeBorder(Color.warmPrimary.opacity(0.50), lineWidth: 0.75)) :
+                                AnyView(EmptyView())
+                        )
+                        .shadow(color: index <= currentStep ? Color.warmPrimary.opacity(0.40) : .clear, radius: 5)
+                        .animation(.spring(response: 0.30, dampingFraction: 0.55), value: currentStep)
                 }
             }
             .padding(.top, 20)
@@ -46,23 +56,48 @@ struct OnboardingView: View {
 
             // Step content
             VStack(spacing: 24) {
-                if currentStep == 0 {
-                    Image(nsImage: NSApp.applicationIconImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: 80, height: 80)
-                        .cornerRadius(16)
-                } else {
-                    Image(systemName: steps[currentStep].icon)
-                        .font(.system(size: 64))
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [Color.warmPrimary, Color.warmAccent],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
+                // Icon area with glass container
+                ZStack {
+                    // Concentric rings (outermost first, behind glass circle)
+                    Circle()
+                        .strokeBorder(Color.warmAccent.opacity(0.15), lineWidth: 1.0)
+                        .frame(width: 136, height: 136)
+                    Circle()
+                        .strokeBorder(Color.warmPrimary.opacity(0.25), lineWidth: 1.5)
+                        .frame(width: 118, height: 118)
+
+                    // Glass background circle
+                    Circle()
+                        .fill(.ultraThinMaterial)
+                        .overlay(Circle().fill(Color.warmSoft.opacity(0.10)))
+                        .overlay(Circle().strokeBorder(Color.white.opacity(0.20), lineWidth: 1.0))
+                        .frame(width: 100, height: 100)
+                        .shadow(color: Color.warmPrimary.opacity(0.15), radius: 20)
+
+                    // Icon on top
+                    if currentStep == 0 {
+                        Image(nsImage: NSApp.applicationIconImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 64, height: 64)
+                            .cornerRadius(12)
+                    } else {
+                        Image(systemName: steps[currentStep].icon)
+                            .font(.system(size: 40))
+                            .foregroundStyle(
+                                LinearGradient(
+                                    colors: [Color.warmPrimary, Color.warmAccent],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
                             )
-                        )
+                    }
                 }
+                .transition(.asymmetric(
+                    insertion: .move(edge: .trailing).combined(with: .opacity),
+                    removal: .move(edge: .leading).combined(with: .opacity)
+                ))
+                .animation(.spring(response: 0.45, dampingFraction: 0.72), value: currentStep)
 
                 Text(steps[currentStep].title)
                     .font(.title2)
@@ -79,6 +114,16 @@ struct OnboardingView: View {
                     actionButton(for: action)
                 }
             }
+            .padding(.vertical, 24)
+            .background(
+                ZStack {
+                    RoundedRectangle(cornerRadius: 20).fill(.ultraThinMaterial)
+                    RoundedRectangle(cornerRadius: 20).fill(Color.warmSoft.opacity(0.06))
+                    RoundedRectangle(cornerRadius: 20).strokeBorder(Color.white.opacity(0.12), lineWidth: 0.75)
+                }
+                .shadow(color: .black.opacity(0.10), radius: 20)
+            )
+            .padding(.horizontal, 16)
 
             Spacer()
 
@@ -90,7 +135,15 @@ struct OnboardingView: View {
                             currentStep -= 1
                         }
                     }
-                    .buttonStyle(.bordered)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(.ultraThinMaterial)
+                            .overlay(RoundedRectangle(cornerRadius: 12).fill(Color.warmSoft.opacity(0.06)))
+                    )
+                    .buttonStyle(.plain)
+                    .foregroundColor(.secondary)
                 }
 
                 Spacer()
@@ -109,17 +162,20 @@ struct OnboardingView: View {
                             currentStep += 1
                         }
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(WarmGradientButtonStyle())
+                    .shadow(color: Color.warmPrimary.opacity(0.30), radius: 12)
                 } else {
                     Button("Get Started") {
                         completeOnboarding()
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(WarmGradientButtonStyle())
+                    .shadow(color: Color.warmPrimary.opacity(0.30), radius: 12)
                 }
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 24)
         }
+        .background(VisualEffectBlur(material: .underWindowBackground, blendingMode: .behindWindow))
         .frame(width: 400, height: 500)
     }
 
@@ -134,8 +190,17 @@ struct OnboardingView: View {
                         Text("Connect Google Calendar")
                     }
                     .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
                 }
-                .buttonStyle(.bordered)
+                .background(
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 14).fill(.ultraThinMaterial)
+                        RoundedRectangle(cornerRadius: 14).fill(Color.warmSoft.opacity(0.10))
+                        RoundedRectangle(cornerRadius: 14).strokeBorder(Color.white.opacity(0.18), lineWidth: 0.75)
+                    }
+                )
+                .buttonStyle(.plain)
+                .foregroundColor(.primary)
 
                 Button(action: connectAppleCalendar) {
                     HStack {
@@ -143,8 +208,17 @@ struct OnboardingView: View {
                         Text("Connect Apple Calendar")
                     }
                     .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
                 }
-                .buttonStyle(.bordered)
+                .background(
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 14).fill(.ultraThinMaterial)
+                        RoundedRectangle(cornerRadius: 14).fill(Color.warmSoft.opacity(0.10))
+                        RoundedRectangle(cornerRadius: 14).strokeBorder(Color.white.opacity(0.18), lineWidth: 0.75)
+                    }
+                )
+                .buttonStyle(.plain)
+                .foregroundColor(.primary)
             }
             .padding(.horizontal, 48)
 
@@ -155,8 +229,17 @@ struct OnboardingView: View {
                     Text("Connect Gmail")
                 }
                 .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
             }
-            .buttonStyle(.bordered)
+            .background(
+                ZStack {
+                    RoundedRectangle(cornerRadius: 14).fill(.ultraThinMaterial)
+                    RoundedRectangle(cornerRadius: 14).fill(Color.warmSoft.opacity(0.10))
+                    RoundedRectangle(cornerRadius: 14).strokeBorder(Color.white.opacity(0.18), lineWidth: 0.75)
+                }
+            )
+            .buttonStyle(.plain)
+            .foregroundColor(.primary)
             .padding(.horizontal, 48)
 
         case .startTrial:
@@ -167,7 +250,8 @@ struct OnboardingView: View {
                 }
                 .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(WarmGradientButtonStyle())
+            .shadow(color: Color.warmPrimary.opacity(0.30), radius: 12)
             .padding(.horizontal, 48)
         }
     }

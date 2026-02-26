@@ -74,7 +74,21 @@ struct EmailView: View {
                     .buttonStyle(.borderless)
                 }
                 .padding(8)
-                .background(Color.orange.opacity(0.1))
+                .background(
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 10).fill(.ultraThinMaterial)
+                        RoundedRectangle(cornerRadius: 10).fill(Color.orange.opacity(0.12))
+                        HStack {
+                            RoundedRectangle(cornerRadius: 1.5).fill(Color.orange).frame(width: 3)
+                            Spacer()
+                        }.clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                )
+                .transition(.asymmetric(
+                    insertion: .move(edge: .top).combined(with: .opacity),
+                    removal: .move(edge: .top).combined(with: .opacity)
+                ))
+                .animation(.spring(response: 0.35, dampingFraction: 0.75), value: showingError)
             }
 
             // Success banner
@@ -87,7 +101,21 @@ struct EmailView: View {
                     Spacer()
                 }
                 .padding(8)
-                .background(Color.green.opacity(0.1))
+                .background(
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 10).fill(.ultraThinMaterial)
+                        RoundedRectangle(cornerRadius: 10).fill(Color.green.opacity(0.12))
+                        HStack {
+                            RoundedRectangle(cornerRadius: 1.5).fill(Color.green).frame(width: 3)
+                            Spacer()
+                        }.clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                )
+                .transition(.asymmetric(
+                    insertion: .move(edge: .top).combined(with: .opacity),
+                    removal: .move(edge: .top).combined(with: .opacity)
+                ))
+                .animation(.spring(response: 0.35, dampingFraction: 0.75), value: showingSuccess)
                 .onAppear {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                         showingSuccess = false
@@ -113,8 +141,21 @@ struct EmailView: View {
                     .foregroundColor(.warmPrimary)
                 }
                 .padding(8)
-                .background(Color.red.opacity(0.1))
-                .transition(.move(edge: .top).combined(with: .opacity))
+                .background(
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 10).fill(.ultraThinMaterial)
+                        RoundedRectangle(cornerRadius: 10).fill(Color.red.opacity(0.12))
+                        HStack {
+                            RoundedRectangle(cornerRadius: 1.5).fill(Color.red).frame(width: 3)
+                            Spacer()
+                        }.clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                )
+                .transition(.asymmetric(
+                    insertion: .move(edge: .top).combined(with: .opacity),
+                    removal: .move(edge: .top).combined(with: .opacity)
+                ))
+                .animation(.spring(response: 0.35, dampingFraction: 0.75), value: viewModel.showUndoBanner)
             }
 
             // Header
@@ -197,18 +238,29 @@ struct EmailView: View {
 
             Button(action: { showingCompose = true }) {
                 Image(systemName: "square.and.pencil")
+                    .background(Circle().fill(.ultraThinMaterial).overlay(Circle().fill(Color.warmPrimary.opacity(0.08))))
+                    .frame(width: 28, height: 28)
             }
             .buttonStyle(.borderless)
             .help("Compose")
 
             Button(action: { viewModel.refresh() }) {
                 Image(systemName: "arrow.clockwise")
+                    .background(Circle().fill(.ultraThinMaterial).overlay(Circle().fill(Color.warmPrimary.opacity(0.08))))
+                    .frame(width: 28, height: 28)
             }
             .buttonStyle(.borderless)
             .disabled(viewModel.isLoading)
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
+        .background(
+            ZStack {
+                Rectangle().fill(.ultraThinMaterial)
+                Rectangle().fill(Color.warmPrimary.opacity(0.04))
+                Rectangle().fill(Color.white.opacity(0.10)).frame(height: 0.5).frame(maxHeight: .infinity, alignment: .bottom)
+            }
+        )
     }
 
     // MARK: - Folder Menu
@@ -266,6 +318,14 @@ struct EmailView: View {
                     .font(.caption2)
                     .foregroundColor(.secondary)
             }
+            .background(
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10).fill(.ultraThinMaterial)
+                    RoundedRectangle(cornerRadius: 10).fill(Color.warmPrimary.opacity(0.08))
+                    RoundedRectangle(cornerRadius: 10).strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
+                }
+            )
+            .padding(.horizontal, 4).padding(.vertical, 2)
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
@@ -293,6 +353,15 @@ struct EmailView: View {
             }
             .buttonStyle(.borderedProminent)
         }
+        .background(
+            ZStack {
+                RoundedRectangle(cornerRadius: 20).fill(.ultraThinMaterial)
+                RoundedRectangle(cornerRadius: 20).fill(Color.warmSoft.opacity(0.08))
+                RoundedRectangle(cornerRadius: 20).strokeBorder(Color.white.opacity(0.12), lineWidth: 0.75)
+            }
+        )
+        .padding()
+        .shadow(color: .black.opacity(0.08), radius: 16)
         .frame(maxHeight: .infinity)
     }
 
@@ -347,7 +416,9 @@ struct EmailView: View {
                         },
                         availableLabels: viewModel.availableLabels
                     )
-                    Divider()
+                    Rectangle()
+                        .fill(Color.white.opacity(0.06))
+                        .frame(height: 0.5)
                         .padding(.leading, 50)
                 }
 
@@ -410,7 +481,13 @@ struct EmailView: View {
                 }
             }
             .padding()
-            .background(Color(NSColor.controlBackgroundColor))
+            .background(
+                ZStack {
+                    Rectangle().fill(.ultraThinMaterial)
+                    Rectangle().fill(Color.warmSoft.opacity(0.08))
+                    Rectangle().fill(Color.white.opacity(0.10)).frame(height: 0.5).frame(maxHeight: .infinity, alignment: .bottom)
+                }
+            )
 
             // AI Summary section
             if viewModel.isSummarizing {
@@ -456,8 +533,17 @@ struct EmailView: View {
                     .buttonStyle(.plain)
                 }
                 .padding(10)
-                .background(Color.warmPrimary.opacity(0.08))
-                .cornerRadius(8)
+                .background(
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 12).fill(.ultraThinMaterial)
+                        RoundedRectangle(cornerRadius: 12).fill(Color.warmPrimary.opacity(0.06))
+                        HStack {
+                            RoundedRectangle(cornerRadius: 1.5).fill(Color.warmPrimary).frame(width: 3)
+                            Spacer()
+                        }.clipShape(RoundedRectangle(cornerRadius: 12))
+                        RoundedRectangle(cornerRadius: 12).strokeBorder(Color.warmPrimary.opacity(0.15), lineWidth: 0.5)
+                    }
+                )
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
                 .transition(.opacity.combined(with: .move(edge: .top)))
@@ -502,6 +588,12 @@ struct EmailView: View {
                 }) {
                     Label("Reply", systemImage: "arrowshape.turn.up.left")
                 }
+                .background(
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 8).fill(.ultraThinMaterial)
+                        RoundedRectangle(cornerRadius: 8).fill(Color.warmPrimary.opacity(0.08))
+                    }
+                )
                 .buttonStyle(.bordered)
 
                 Button(action: {
@@ -518,6 +610,12 @@ struct EmailView: View {
                 }) {
                     Label("Delete", systemImage: "trash")
                 }
+                .background(
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 8).fill(.ultraThinMaterial)
+                        RoundedRectangle(cornerRadius: 8).fill(Color.red.opacity(0.08))
+                    }
+                )
                 .buttonStyle(.bordered)
 
                 if !viewModel.availableLabels.isEmpty {
@@ -539,7 +637,13 @@ struct EmailView: View {
                 Spacer()
             }
             .padding()
-            .background(Color(NSColor.controlBackgroundColor))
+            .background(
+                ZStack {
+                    Rectangle().fill(.regularMaterial)
+                    Rectangle().fill(Color.warmSoft.opacity(0.06))
+                    Rectangle().fill(Color.white.opacity(0.10)).frame(height: 0.5).frame(maxHeight: .infinity, alignment: .top)
+                }
+            )
         }
         .onAppear {
             viewModel.loadFullEmail(email)
@@ -722,11 +826,23 @@ struct EmailListRow: View {
             }
             .padding(.vertical, 10)
             .background(
-                isSelected
-                    ? Color.warmPrimary.opacity(0.12)
-                    : (isHovered && swipeOffset == 0
-                        ? Color(NSColor.controlBackgroundColor)
-                        : (!email.isRead ? Color.warmSoft.opacity(0.15) : Color(NSColor.windowBackgroundColor)))
+                Group {
+                    if isSelected {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(.ultraThinMaterial)
+                            .overlay(RoundedRectangle(cornerRadius: 12).fill(Color.warmPrimary.opacity(0.12)))
+                            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.warmPrimary.opacity(0.22), lineWidth: 0.75))
+                            .shadow(color: Color.warmPrimary.opacity(0.12), radius: 8)
+                    } else if !email.isRead {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(.ultraThinMaterial)
+                            .overlay(RoundedRectangle(cornerRadius: 12).fill(Color.warmPrimary.opacity(0.04)))
+                            .shadow(color: .black.opacity(0.04), radius: 4)
+                    } else {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(isHovered && swipeOffset == 0 ? Color.warmSoft.opacity(0.06) : Color.clear)
+                    }
+                }
             )
             .offset(x: swipeOffset)
             .gesture(
@@ -1053,7 +1169,11 @@ struct ReplyEmailView: View {
                 }
                 .padding()
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(NSColor.controlBackgroundColor))
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(.ultraThinMaterial)
+                        .overlay(RoundedRectangle(cornerRadius: 8).fill(Color.warmSoft.opacity(0.06)))
+                )
             }
         }
         .frame(width: 380, height: 500)
@@ -1123,13 +1243,15 @@ struct SenderAvatarView: View {
                     .clipShape(Circle())
             } else {
                 // Fallback: colored circle with initial (consistent per-sender color)
-                Circle()
-                    .fill(isRead ? senderColor.opacity(0.15) : senderColor.opacity(0.2))
+                Text(String(name.prefix(1)).uppercased())
+                    .font(.system(size: size * 0.4, weight: .medium))
+                    .foregroundColor(isRead ? senderColor.opacity(0.6) : senderColor)
                     .frame(width: size, height: size)
-                    .overlay(
-                        Text(String(name.prefix(1)).uppercased())
-                            .font(.system(size: size * 0.4, weight: .medium))
-                            .foregroundColor(isRead ? senderColor.opacity(0.6) : senderColor)
+                    .background(
+                        Circle().fill(.ultraThinMaterial)
+                            .overlay(Circle().fill(Color.warmPrimary.opacity(0.15)))
+                            .overlay(Circle().strokeBorder(Color.warmPrimary.opacity(0.30), lineWidth: 0.75))
+                            .shadow(color: Color.warmPrimary.opacity(0.15), radius: 4)
                     )
             }
         }
