@@ -91,6 +91,7 @@ struct CalendarEvent: Identifiable, Codable {
     var organizer: EventAttendee?
     var calendarColor: String?
     var calendarName: String?
+    var googleCalendarId: String?
     var conferenceData: ConferenceData?
     var htmlLink: String?
 

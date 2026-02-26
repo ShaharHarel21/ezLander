@@ -77,9 +77,20 @@ struct EmailActionData: Codable {
 // MARK: - AI Action Preview Card
 struct AIActionPreviewCard: View {
     let action: AIAction
-    let onConfirm: () -> Void
+    let onConfirm: (AIAction) -> Void
     let onDecline: () -> Void
     @State private var isProcessing = false
+    @State private var isEditing = false
+
+    // Editable event fields
+    @State private var editableEventTitle: String = ""
+    @State private var editableEventLocation: String = ""
+    @State private var editableEventDescription: String = ""
+
+    // Editable email fields
+    @State private var editableEmailTo: String = ""
+    @State private var editableEmailSubject: String = ""
+    @State private var editableEmailBody: String = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -108,10 +119,8 @@ struct AIActionPreviewCard: View {
             Divider()
 
             // Action buttons
-            HStack(spacing: 12) {
-                Button(action: {
-                    onDecline()
-                }) {
+            HStack(spacing: 8) {
+                Button(action: { onDecline() }) {
                     Text("Decline")
                         .frame(maxWidth: .infinity)
                 }
@@ -119,8 +128,20 @@ struct AIActionPreviewCard: View {
                 .disabled(isProcessing)
 
                 Button(action: {
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        isEditing.toggle()
+                    }
+                }) {
+                    Label(isEditing ? "Done" : "Edit",
+                          systemImage: isEditing ? "checkmark" : "pencil")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .disabled(isProcessing)
+
+                Button(action: {
                     isProcessing = true
-                    onConfirm()
+                    onConfirm(buildEditedAction())
                 }) {
                     if isProcessing {
                         ProgressView()
@@ -143,14 +164,53 @@ struct AIActionPreviewCard: View {
             RoundedRectangle(cornerRadius: 12)
                 .stroke(Color.warmPrimary.opacity(0.3), lineWidth: 1)
         )
+        .onAppear {
+            if let e = action.eventData {
+                editableEventTitle = e.title
+                editableEventLocation = e.location ?? ""
+                editableEventDescription = e.description ?? ""
+            }
+            if let m = action.emailData {
+                editableEmailTo = m.to
+                editableEmailSubject = m.subject
+                editableEmailBody = m.body
+            }
+        }
+    }
+
+    // Builds a new AIAction from the current (possibly edited) field values
+    private func buildEditedAction() -> AIAction {
+        let newEventData = action.eventData.map { original in
+            EventActionData(
+                title: editableEventTitle.isEmpty ? original.title : editableEventTitle,
+                startDate: original.startDate,
+                endDate: original.endDate,
+                location: editableEventLocation.isEmpty ? nil : editableEventLocation,
+                description: editableEventDescription.isEmpty ? nil : editableEventDescription
+            )
+        }
+        let newEmailData = action.emailData.map { _ in
+            EmailActionData(
+                to: editableEmailTo,
+                subject: editableEmailSubject,
+                body: editableEmailBody
+            )
+        }
+        return AIAction(
+            id: action.id,
+            type: action.type,
+            eventData: newEventData,
+            emailData: newEmailData,
+            summary: action.summary
+        )
     }
 
     @ViewBuilder
     private var actionContent: some View {
         switch action.type {
         case .createEvent, .updateEvent:
-            if let eventData = action.eventData {
-                eventPreview(eventData)
+            if action.eventData != nil {
+                eventPreview
             }
         case .deleteEvent:
             if let eventData = action.eventData {
@@ -165,37 +225,50 @@ struct AIActionPreviewCard: View {
                 }
             }
         case .sendEmail, .draftEmail:
-            if let emailData = action.emailData {
-                emailPreview(emailData)
+            if action.emailData != nil {
+                emailPreview
             }
         }
     }
 
-    private func eventPreview(_ data: EventActionData) -> some View {
+    private var eventPreview: some View {
         VStack(alignment: .leading, spacing: 8) {
             LabeledContent("Title") {
-                Text(data.title)
-                    .fontWeight(.medium)
-            }
-
-            LabeledContent("When") {
-                VStack(alignment: .trailing) {
-                    Text(formatDate(data.startDate))
-                    Text(formatTime(data.startDate) + " - " + formatTime(data.endDate))
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                if isEditing {
+                    TextField("Title", text: $editableEventTitle)
+                        .textFieldStyle(.roundedBorder)
+                } else {
+                    Text(editableEventTitle)
+                        .fontWeight(.medium)
                 }
             }
 
-            if let location = data.location, !location.isEmpty {
-                LabeledContent("Where") {
-                    Text(location)
+            if let data = action.eventData {
+                LabeledContent("When") {
+                    VStack(alignment: .trailing) {
+                        Text(formatDate(data.startDate))
+                        Text(formatTime(data.startDate) + " - " + formatTime(data.endDate))
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 }
             }
 
-            if let description = data.description, !description.isEmpty {
-                LabeledContent("Notes") {
-                    Text(description)
+            LabeledContent("Where") {
+                if isEditing {
+                    TextField("Location (optional)", text: $editableEventLocation)
+                        .textFieldStyle(.roundedBorder)
+                } else if !editableEventLocation.isEmpty {
+                    Text(editableEventLocation)
+                }
+            }
+
+            LabeledContent("Notes") {
+                if isEditing {
+                    TextField("Notes (optional)", text: $editableEventDescription)
+                        .textFieldStyle(.roundedBorder)
+                } else if !editableEventDescription.isEmpty {
+                    Text(editableEventDescription)
                         .lineLimit(2)
                 }
             }
@@ -203,27 +276,46 @@ struct AIActionPreviewCard: View {
         .font(.subheadline)
     }
 
-    private func emailPreview(_ data: EmailActionData) -> some View {
+    private var emailPreview: some View {
         VStack(alignment: .leading, spacing: 8) {
             LabeledContent("To") {
-                Text(data.to)
-                    .fontWeight(.medium)
+                if isEditing {
+                    TextField("Recipient", text: $editableEmailTo)
+                        .textFieldStyle(.roundedBorder)
+                } else {
+                    Text(editableEmailTo)
+                        .fontWeight(.medium)
+                }
             }
 
             LabeledContent("Subject") {
-                Text(data.subject)
+                if isEditing {
+                    TextField("Subject", text: $editableEmailSubject)
+                        .textFieldStyle(.roundedBorder)
+                } else {
+                    Text(editableEmailSubject)
+                }
             }
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("Message")
                     .font(.caption)
                     .foregroundColor(.secondary)
-                Text(data.body)
-                    .font(.subheadline)
-                    .lineLimit(4)
-                    .padding(8)
-                    .background(Color(NSColor.textBackgroundColor))
-                    .cornerRadius(6)
+                if isEditing {
+                    TextEditor(text: $editableEmailBody)
+                        .font(.subheadline)
+                        .frame(minHeight: 72)
+                        .padding(4)
+                        .background(Color(NSColor.textBackgroundColor))
+                        .cornerRadius(6)
+                } else {
+                    Text(editableEmailBody)
+                        .font(.subheadline)
+                        .lineLimit(4)
+                        .padding(8)
+                        .background(Color(NSColor.textBackgroundColor))
+                        .cornerRadius(6)
+                }
             }
         }
         .font(.subheadline)
@@ -277,7 +369,7 @@ struct AIActionResultView: View {
                 ),
                 summary: "Creating a new calendar event"
             ),
-            onConfirm: {},
+            onConfirm: { _ in },
             onDecline: {}
         )
 
@@ -291,7 +383,7 @@ struct AIActionResultView: View {
                 ),
                 summary: "Sending follow-up email"
             ),
-            onConfirm: {},
+            onConfirm: { _ in },
             onDecline: {}
         )
     }

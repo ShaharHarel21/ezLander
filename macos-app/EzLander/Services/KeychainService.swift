@@ -5,6 +5,11 @@ class KeychainService {
     static let shared = KeychainService()
 
     private let service = "com.ezlander.app"
+#if DEBUG
+    private let useUserDefaultsFallback = true  // Enable fallback for unsigned builds
+#else
+    private let useUserDefaultsFallback = false
+#endif
 
     private init() {}
 
@@ -33,6 +38,14 @@ class KeychainService {
             return true
         } else {
             print("KeychainService: Failed to save key to Keychain: \(key), status: \(status)")
+            // Fallback to UserDefaults for development/unsigned builds
+            // WARNING: UserDefaults is NOT secure — tokens stored here are readable by other processes.
+            // This fallback is only active in DEBUG builds for unsigned development.
+            if useUserDefaultsFallback {
+                UserDefaults.standard.set(value, forKey: "secure_\(key)")
+                print("⚠️ KeychainService: INSECURE FALLBACK - Saved to UserDefaults (DEBUG only): \(key)")
+                return true
+            }
             return false
         }
     }
@@ -57,6 +70,14 @@ class KeychainService {
             return string
         }
 
+        // Fallback to UserDefaults for development/unsigned builds
+        if useUserDefaultsFallback {
+            if let fallbackValue = UserDefaults.standard.string(forKey: "secure_\(key)") {
+                print("⚠️ KeychainService: INSECURE FALLBACK - Retrieved from UserDefaults (DEBUG only): \(key)")
+                return fallbackValue
+            }
+        }
+
         print("KeychainService: Key not found: \(key)")
         return nil
     }
@@ -70,6 +91,11 @@ class KeychainService {
         ]
 
         SecItemDelete(query as CFDictionary)
+
+        // Also delete from UserDefaults fallback
+        if useUserDefaultsFallback {
+            UserDefaults.standard.removeObject(forKey: "secure_\(key)")
+        }
     }
 
     // MARK: - Clear All

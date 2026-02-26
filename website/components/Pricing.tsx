@@ -129,11 +129,16 @@ export default function Pricing() {
                 </h3>
                 <div className="mt-4">
                   <span className="text-5xl font-bold">
-                    ${isYearly && plan.name === 'Yearly' ? plan.price : plan.price}
+                    ${isYearly && plan.name === 'Yearly' ? (plan.price / 12).toFixed(2) : plan.price}
                   </span>
                   <span className={`${plan.popular ? 'text-white/80' : 'text-gray-500 dark:text-gray-400'}`}>
-                    /{plan.period}
+                    /{isYearly && plan.name === 'Yearly' ? 'month' : plan.period}
                   </span>
+                  {isYearly && plan.name === 'Yearly' && (
+                    <span className={`block text-sm mt-1 ${plan.popular ? 'text-white/70' : 'text-gray-500 dark:text-gray-400'}`}>
+                      Billed ${plan.price}/year
+                    </span>
+                  )}
                 </div>
                 <p className={`mt-2 ${plan.popular ? 'text-white/80' : 'text-gray-600 dark:text-gray-400'}`}>
                   {plan.description}

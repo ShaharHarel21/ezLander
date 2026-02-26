@@ -5,7 +5,13 @@ import CommonCrypto
 class OAuthService: NSObject {
     static let shared = OAuthService()
 
-    private let googleClientId = "224322597988-josm6rg0hukmuv12ip4qfdbo1f0mkmni.apps.googleusercontent.com"
+    private let googleClientId: String = {
+        if let clientId = Bundle.main.object(forInfoDictionaryKey: "GOOGLE_CLIENT_ID") as? String, !clientId.isEmpty {
+            return clientId
+        }
+        // Default client ID — move to Info.plist GOOGLE_CLIENT_ID for production builds
+        return "224322597988-josm6rg0hukmuv12ip4qfdbo1f0mkmni.apps.googleusercontent.com"
+    }()
     private let googleRedirectURI = "com.ezlander.app:/oauth2callback"
 
     private var authSession: ASWebAuthenticationSession?
@@ -16,6 +22,11 @@ class OAuthService: NSObject {
     // Apple Sign In
     private var appleSignInContinuation: CheckedContinuation<Void, Error>?
 
+    // Token refresh deduplication — access synchronized via refreshLock
+    private let refreshLock = NSLock()
+    private var isRefreshing = false
+    private var refreshWaiters: [CheckedContinuation<String, Error>] = []
+
     // User email from Google sign-in
     var userEmail: String? {
         UserDefaults.standard.string(forKey: "user_email")
@@ -23,7 +34,7 @@ class OAuthService: NSObject {
 
     // MARK: - Handle URL Callback
     func handleCallback(url: URL) {
-        print("OAuthService: Received callback URL: \(url)")
+        print("OAuthService: Received callback URL (scheme: \(url.scheme ?? "nil"))")
         authContinuation?.resume(returning: url)
         authContinuation = nil
     }
@@ -104,8 +115,9 @@ class OAuthService: NSObject {
         // Exchange code for tokens
         let tokens = try await exchangeCodeForTokens(code: code)
 
-        // Save tokens
+        // Save tokens and expiry
         KeychainService.shared.save(key: "google_access_token", value: tokens.accessToken)
+        UserDefaults.standard.set(Date().timeIntervalSince1970 + Double(tokens.expiresIn), forKey: "google_token_expiry")
         if let refreshToken = tokens.refreshToken {
             KeychainService.shared.save(key: "google_refresh_token", value: refreshToken)
         }
@@ -138,18 +150,14 @@ class OAuthService: NSObject {
             bodyParams["code_verifier"] = verifier
         }
 
-        let body = bodyParams.map { "\($0.key)=\($0.value)" }.joined(separator: "&")
-        request.httpBody = body.data(using: .utf8)
+        var components = URLComponents()
+        components.queryItems = bodyParams.map { URLQueryItem(name: $0.key, value: $0.value) }
+        request.httpBody = components.percentEncodedQuery?.data(using: .utf8)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw OAuthError.tokenExchangeFailed
-        }
+        let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
 
         if httpResponse.statusCode != 200 {
-            let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
-            print("OAuthService: Token exchange failed: \(errorBody)")
+            print("OAuthService: Token exchange failed with status \(httpResponse.statusCode)")
             throw OAuthError.tokenExchangeFailed
         }
 
@@ -185,23 +193,23 @@ class OAuthService: NSObject {
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
 
-        let body = [
-            "client_id": googleClientId,
-            "refresh_token": refreshToken,
-            "grant_type": "refresh_token"
-        ].map { "\($0.key)=\($0.value)" }.joined(separator: "&")
+        var components = URLComponents()
+        components.queryItems = [
+            URLQueryItem(name: "client_id", value: googleClientId),
+            URLQueryItem(name: "refresh_token", value: refreshToken),
+            URLQueryItem(name: "grant_type", value: "refresh_token")
+        ]
+        request.httpBody = components.percentEncodedQuery?.data(using: .utf8)
 
-        request.httpBody = body.data(using: .utf8)
+        let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else {
+        guard httpResponse.statusCode == 200 else {
             throw OAuthError.tokenRefreshFailed
         }
 
         let tokens = try JSONDecoder().decode(TokenResponse.self, from: data)
         KeychainService.shared.save(key: "google_access_token", value: tokens.accessToken)
+        UserDefaults.standard.set(Date().timeIntervalSince1970 + Double(tokens.expiresIn), forKey: "google_token_expiry")
 
         return tokens.accessToken
     }
@@ -212,23 +220,77 @@ class OAuthService: NSObject {
             throw OAuthError.notSignedIn
         }
 
-        // Check if token is valid by making a test request
-        let url = URL(string: "https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=\(accessToken)")!
-        let (_, response) = try await URLSession.shared.data(from: url)
+        // Check locally stored expiry first to avoid unnecessary network call
+        let expiryTime = UserDefaults.standard.double(forKey: "google_token_expiry")
+        if expiryTime > 0 && Date().timeIntervalSince1970 < expiryTime - 60 {
+            // Token still valid (with 60s safety margin)
+            return accessToken
+        }
+
+        // Token may be expired — verify with Google's tokeninfo endpoint
+        guard let tokenInfoURL = URL(string: "https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=\(accessToken)") else {
+            // URL construction failed (e.g. bad token chars) — treat as expired and refresh
+            return try await refreshAccessToken()
+        }
+        let tokenInfoRequest = URLRequest(url: tokenInfoURL)
+        let (_, response) = try await URLSession.shared.data(for: tokenInfoRequest)
 
         if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
             return accessToken
         }
 
-        // Token expired, refresh it
-        return try await refreshAccessToken()
+        // Token expired - refresh it, but deduplicate concurrent refresh calls
+        let shouldWait: Bool = refreshLock.withLock {
+            if isRefreshing {
+                return true
+            }
+            isRefreshing = true
+            return false
+        }
+
+        if shouldWait {
+            return try await withCheckedThrowingContinuation { continuation in
+                refreshLock.withLock {
+                    refreshWaiters.append(continuation)
+                }
+            }
+        }
+
+        do {
+            let newToken = try await refreshAccessToken()
+            let waiters: [CheckedContinuation<String, Error>] = refreshLock.withLock {
+                isRefreshing = false
+                let w = refreshWaiters
+                refreshWaiters.removeAll()
+                return w
+            }
+            waiters.forEach { $0.resume(returning: newToken) }
+            return newToken
+        } catch {
+            let waiters: [CheckedContinuation<String, Error>] = refreshLock.withLock {
+                isRefreshing = false
+                let w = refreshWaiters
+                refreshWaiters.removeAll()
+                return w
+            }
+            waiters.forEach { $0.resume(throwing: error) }
+            throw error
+        }
+    }
+
+    // MARK: - Cancel Pending Auth
+    func cancelPendingAuth() {
+        authContinuation?.resume(throwing: OAuthError.unknownError)
+        authContinuation = nil
     }
 
     // MARK: - Sign Out
     func signOut() {
+        cancelPendingAuth()
         // Clear Google tokens
         KeychainService.shared.delete(key: "google_access_token")
         KeychainService.shared.delete(key: "google_refresh_token")
+        UserDefaults.standard.removeObject(forKey: "google_token_expiry")
         // Clear Apple Sign In
         KeychainService.shared.delete(key: "apple_user_id")
         // Clear user info
@@ -341,7 +403,7 @@ extension OAuthService: ASAuthorizationControllerDelegate {
                 UserDefaults.standard.set(name.isEmpty ? "Apple User" : name, forKey: "user_name")
             }
 
-            print("OAuthService: Apple Sign In successful for user: \(userIdentifier)")
+            print("OAuthService: Apple Sign In successful")
             appleSignInContinuation?.resume(returning: ())
             appleSignInContinuation = nil
         }

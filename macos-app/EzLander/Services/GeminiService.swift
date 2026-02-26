@@ -6,9 +6,6 @@ class GeminiService {
     private var apiKey: String = ""
     private let baseURL = "https://generativelanguage.googleapis.com/v1beta/models"
 
-    // Cached calendar context
-    private var cachedCalendarContext: String = ""
-
     private init() {
         reloadAPIKey()
     }
@@ -50,8 +47,9 @@ class GeminiService {
             throw GeminiError.noAPIKey
         }
 
-        // Refresh calendar context
-        cachedCalendarContext = await CalendarContextService.shared.buildTodayContext()
+        // Fetch calendar context via shared service (which caches internally)
+        let calendarContext = await CalendarContextService.shared.buildTodayContext()
+        let prompt = SystemPromptProvider.buildSystemPrompt(calendarContext: calendarContext)
 
         // Build contents array for Gemini format
         var contents: [[String: Any]] = []
@@ -59,7 +57,7 @@ class GeminiService {
         // Add system instruction
         contents.append([
             "role": "user",
-            "parts": [["text": systemPrompt]]
+            "parts": [["text": prompt]]
         ])
         contents.append([
             "role": "model",
@@ -89,7 +87,7 @@ class GeminiService {
             ]
         ]
 
-        let urlString = "\(baseURL)/\(currentModel.rawValue):generateContent?key=\(apiKey)"
+        let urlString = "\(baseURL)/\(currentModel.rawValue):generateContent"
         guard let url = URL(string: urlString) else {
             throw GeminiError.invalidResponse
         }
@@ -97,20 +95,19 @@ class GeminiService {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(apiKey, forHTTPHeaderField: "X-Goog-Api-Key")
         request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw GeminiError.invalidResponse
-        }
+        let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
 
         guard httpResponse.statusCode == 200 else {
-            let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
-            throw GeminiError.apiError(statusCode: httpResponse.statusCode, message: errorBody)
+            let message = APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: data)
+            throw GeminiError.apiError(statusCode: httpResponse.statusCode, message: message)
         }
 
-        let responseJSON = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        guard let responseJSON = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw GeminiError.invalidResponse
+        }
 
         guard let candidates = responseJSON["candidates"] as? [[String: Any]],
               let firstCandidate = candidates.first,
@@ -122,31 +119,6 @@ class GeminiService {
         }
 
         return ChatMessage(role: .assistant, content: text)
-    }
-
-    private var systemPrompt: String {
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd"
-        let today = dateFormatter.string(from: Date())
-
-        let timeFormatter = DateFormatter()
-        timeFormatter.timeStyle = .short
-        let currentTime = timeFormatter.string(from: Date())
-
-        let calendar = Calendar.current
-        let weekday = calendar.component(.weekday, from: Date())
-        let weekdayName = DateFormatter().weekdaySymbols[weekday - 1]
-
-        return """
-        You are ezLander, a helpful AI assistant integrated into a macOS menu bar app. You help users manage their calendar and email.
-
-        Today is \(weekdayName), \(today). Current time: \(currentTime).
-
-        \(cachedCalendarContext)
-
-        Be concise and helpful. Format responses in a readable way.
-        When the user asks about their calendar, use the schedule information above to answer directly.
-        """
     }
 }
 

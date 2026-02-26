@@ -2,7 +2,7 @@ import SwiftUI
 import Carbon
 
 struct KeyboardShortcutsView: View {
-    @StateObject private var shortcutService = KeyboardShortcutService.shared
+    @ObservedObject private var shortcutService = KeyboardShortcutService.shared
     @State private var recordingShortcut: ShortcutAction?
 
     var body: some View {
@@ -105,6 +105,7 @@ struct KeyRecorderView: View {
     let onCancel: () -> Void
 
     @State private var currentModifiers: UInt32 = 0
+    @State private var eventMonitor: Any?
 
     var body: some View {
         HStack(spacing: 8) {
@@ -128,9 +129,15 @@ struct KeyRecorderView: View {
             .buttonStyle(.plain)
         }
         .onAppear {
-            NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { event in
+            eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { event in
                 handleKeyEvent(event)
                 return nil
+            }
+        }
+        .onDisappear {
+            if let monitor = eventMonitor {
+                NSEvent.removeMonitor(monitor)
+                eventMonitor = nil
             }
         }
     }
@@ -174,7 +181,7 @@ struct KeyRecorderView: View {
 
 // MARK: - Settings Embedded View
 struct KeyboardShortcutsSettingsView: View {
-    @StateObject private var shortcutService = KeyboardShortcutService.shared
+    @ObservedObject private var shortcutService = KeyboardShortcutService.shared
     @State private var recordingShortcut: ShortcutAction?
 
     var body: some View {
@@ -233,10 +240,18 @@ struct KeyboardShortcutsSettingsView: View {
         .onAppear {
             setupKeyMonitor()
         }
+        .onDisappear {
+            if let monitor = keyMonitor {
+                NSEvent.removeMonitor(monitor)
+                keyMonitor = nil
+            }
+        }
     }
 
+    @State private var keyMonitor: Any?
+
     private func setupKeyMonitor() {
-        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             guard let action = recordingShortcut else { return event }
 
             var mods: UInt32 = 0

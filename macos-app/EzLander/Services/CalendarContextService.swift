@@ -5,20 +5,43 @@ class CalendarContextService {
 
     private init() {}
 
+    // MARK: - Context Cache
+    private var cachedContext: String = ""
+    private var lastCacheTime: Date?
+    private let cacheDuration: TimeInterval = 300 // 5 minutes
+
     // MARK: - Build Today Context (for AI system prompt injection)
     func buildTodayContext() async -> String {
-        guard GoogleCalendarService.shared.isAuthorized else {
-            return "Calendar: Not connected to Google Calendar."
+        // Return cached context if still fresh
+        if let lastTime = lastCacheTime, Date().timeIntervalSince(lastTime) < cacheDuration, !cachedContext.isEmpty {
+            return cachedContext
         }
+        // Otherwise fetch fresh
+        let context = await fetchFreshContext()
+        cachedContext = context
+        lastCacheTime = Date()
+        return context
+    }
 
+    // MARK: - Fetch Fresh Context
+    private func fetchFreshContext() async -> String {
         let calendar = Calendar.current
         let startOfDay = calendar.startOfDay(for: Date())
         guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else {
             return "Calendar: Unable to determine today's date range."
         }
 
+        guard GoogleCalendarService.shared.isAuthorized || AppleCalendarService.shared.isAuthorized else {
+            return "Calendar: Not connected to any calendar."
+        }
+
         do {
-            let events = try await GoogleCalendarService.shared.listEvents(from: startOfDay, to: endOfDay)
+            let events: [CalendarEvent]
+            if GoogleCalendarService.shared.isAuthorized {
+                events = try await GoogleCalendarService.shared.listEvents(from: startOfDay, to: endOfDay)
+            } else {
+                events = try await AppleCalendarService.shared.listEvents(from: startOfDay, to: endOfDay)
+            }
             if events.isEmpty {
                 return "Calendar: No events scheduled for today."
             }
@@ -54,13 +77,18 @@ class CalendarContextService {
 
     // MARK: - Build Upcoming Context (next 24 hours)
     func buildUpcomingContext() async -> String {
-        guard GoogleCalendarService.shared.isAuthorized else { return "" }
+        guard GoogleCalendarService.shared.isAuthorized || AppleCalendarService.shared.isAuthorized else { return "" }
 
         let now = Date()
         guard let tomorrow = Calendar.current.date(byAdding: .hour, value: 24, to: now) else { return "" }
 
         do {
-            let events = try await GoogleCalendarService.shared.listEvents(from: now, to: tomorrow)
+            let events: [CalendarEvent]
+            if GoogleCalendarService.shared.isAuthorized {
+                events = try await GoogleCalendarService.shared.listEvents(from: now, to: tomorrow)
+            } else {
+                events = try await AppleCalendarService.shared.listEvents(from: now, to: tomorrow)
+            }
             let futureEvents = events.filter { $0.startDate > now }
 
             if futureEvents.isEmpty { return "No upcoming events in the next 24 hours." }
@@ -162,8 +190,8 @@ class CalendarContextService {
 
     // MARK: - Build Daily Briefing
     func buildDailyBriefing() async -> String {
-        guard GoogleCalendarService.shared.isAuthorized else {
-            return "Good morning! Connect your Google Calendar in Settings to get a daily briefing."
+        guard GoogleCalendarService.shared.isAuthorized || AppleCalendarService.shared.isAuthorized else {
+            return "Good morning! Connect your calendar in Settings to get a daily briefing."
         }
 
         let calendar = Calendar.current
@@ -180,7 +208,12 @@ class CalendarContextService {
         let todayStr = dateFormatter.string(from: Date())
 
         do {
-            let events = try await GoogleCalendarService.shared.listEvents(from: startOfDay, to: endOfDay)
+            let events: [CalendarEvent]
+            if GoogleCalendarService.shared.isAuthorized {
+                events = try await GoogleCalendarService.shared.listEvents(from: startOfDay, to: endOfDay)
+            } else {
+                events = try await AppleCalendarService.shared.listEvents(from: startOfDay, to: endOfDay)
+            }
 
             if events.isEmpty {
                 return "Good morning! Today is **\(todayStr)**. You have a clear schedule today -- no events planned."
@@ -239,7 +272,14 @@ class CalendarContextService {
         guard let end = calendar.date(byAdding: .day, value: 7, to: start) else { return nil }
 
         do {
-            let events = try await GoogleCalendarService.shared.listEvents(from: start, to: end)
+            let events: [CalendarEvent]
+            if GoogleCalendarService.shared.isAuthorized {
+                events = try await GoogleCalendarService.shared.listEvents(from: start, to: end)
+            } else if AppleCalendarService.shared.isAuthorized {
+                events = try await AppleCalendarService.shared.listEvents(from: start, to: end)
+            } else {
+                return nil
+            }
             // Find best match by title
             let lowered = title.lowercased()
             return events.first(where: { $0.title.lowercased().contains(lowered) })

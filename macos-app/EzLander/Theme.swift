@@ -39,8 +39,8 @@ extension Color {
         switch hex.count {
         case 6: // RGB
             (r, g, b, a) = (int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF, 255)
-        case 8: // ARGB
-            (r, g, b, a) = (int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF, int >> 24 & 0xFF)
+        case 8: // RGBA
+            (r, g, b, a) = (int >> 24 & 0xFF, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
         default:
             (r, g, b, a) = (0, 0, 0, 255)
         }

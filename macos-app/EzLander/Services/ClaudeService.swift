@@ -7,9 +7,6 @@ class ClaudeService {
     private let baseURL = "https://api.anthropic.com/v1/messages"
     private let model = "claude-sonnet-4-20250514"
 
-    // Cached calendar context (refreshed on each sendMessage call)
-    private var cachedCalendarContext: String = ""
-
     private init() {
         // Load API key from: 1) Keychain, 2) Environment variable, 3) Empty (will fail gracefully)
         if let keychainKey = KeychainService.shared.get(key: "anthropic_api_key"), !keychainKey.isEmpty {
@@ -34,36 +31,23 @@ class ClaudeService {
 
     // MARK: - Check if configured
     var isConfigured: Bool {
-        if ClaudeOAuthService.shared.isSignedIn {
-            return true
-        }
         reloadAPIKey()
         return !apiKey.isEmpty
-    }
-
-    // MARK: - Auth Headers
-    private func setAuthHeaders(on request: inout URLRequest) async throws {
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
-
-        if ClaudeOAuthService.shared.isSignedIn {
-            let token = try await ClaudeOAuthService.shared.getValidAccessToken()
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        } else {
-            reloadAPIKey()
-            request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
-        }
     }
 
     // MARK: - Tools Definition
     private let tools: [[String: Any]] = [
         [
             "name": "create_calendar_event",
-            "description": "Create a new calendar event. Extract a descriptive, specific title from the user's message — never use generic titles like 'New Event' or 'Event'.",
+            // Strengthened description: explicitly forbids pronouns as titles and instructs
+            // Claude to ask for clarification when the user's message is too vague.
+            "description": "Create a new calendar event. You MUST extract a descriptive, specific title from the user's message. NEVER use pronouns (that, this, it, those, these) or vague words (thing, stuff, something) as the event title. NEVER use generic titles like 'New Event' or 'Event'. If the user's message is too vague to extract a clear title (e.g. 'schedule that', 'remind me about this'), do NOT call this tool — instead respond asking the user for the event name.",
             "input_schema": [
                 "type": "object",
                 "properties": [
-                    "title": ["type": "string", "description": "A descriptive event title extracted from the user's message. Examples: 'Dentist Appointment', 'Team Standup Meeting', 'Lunch with Sarah', 'Flight to NYC'. Never use generic titles like 'New Event'."],
+                    // Richer description that mirrors the system-prompt examples and explicitly
+                    // calls out pronoun prohibition so the model sees it at schema-read time too.
+                    "title": ["type": "string", "description": "A descriptive event title extracted from the user's message. Must be a noun phrase (e.g. 'Dentist Appointment', 'Team Standup Meeting', 'Lunch with Sarah', 'Flight to NYC'). NEVER use pronouns (that, this, it, those, these) or vague words (thing, stuff, something) as the title. NEVER use generic placeholders like 'New Event'."],
                     "date": ["type": "string", "description": "Event date in YYYY-MM-DD format"],
                     "time": ["type": "string", "description": "Event start time in HH:MM format (24-hour)"],
                     "duration": ["type": "integer", "description": "Duration in minutes (default 60)"],
@@ -140,8 +124,8 @@ class ClaudeService {
 
     // MARK: - Send Message
     func sendMessage(_ text: String, conversationHistory: [ChatMessage]) async throws -> ChatMessage {
-        // Refresh calendar context before each message
-        cachedCalendarContext = await CalendarContextService.shared.buildTodayContext()
+        // Fetch calendar context via shared service (which caches internally)
+        let calendarContext = await CalendarContextService.shared.buildTodayContext()
 
         // Build messages array
         var messages: [[String: Any]] = conversationHistory.map { message in
@@ -153,36 +137,23 @@ class ClaudeService {
         let requestBody: [String: Any] = [
             "model": model,
             "max_tokens": 4096,
-            "system": systemPrompt,
+            "system": buildSystemPrompt(calendarContext: calendarContext),
             "tools": tools,
             "messages": messages
         ]
 
-        guard let url = URL(string: baseURL) else {
-            throw ClaudeError.invalidResponse
-        }
-        var request = URLRequest(url: url, timeoutInterval: 60)
+        var request = URLRequest(url: URL(string: baseURL)!)
         request.httpMethod = "POST"
-        try await setAuthHeaders(on: &request)
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+        request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
         request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
 
-        var (data, response) = try await URLSession.shared.data(for: request)
-
-        guard var httpResponse = response as? HTTPURLResponse else {
-            throw ClaudeError.invalidResponse
-        }
-
-        // Retry once on 401 if using OAuth (token may have just expired)
-        if httpResponse.statusCode == 401 && ClaudeOAuthService.shared.isSignedIn {
-            _ = try await ClaudeOAuthService.shared.refreshAccessToken()
-            try await setAuthHeaders(on: &request)
-            (data, response) = try await URLSession.shared.data(for: request)
-            httpResponse = response as! HTTPURLResponse
-        }
+        let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
 
         guard httpResponse.statusCode == 200 else {
-            let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
-            throw ClaudeError.apiError(statusCode: httpResponse.statusCode, message: errorBody)
+            let message = APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: data)
+            throw ClaudeError.apiError(statusCode: httpResponse.statusCode, message: message)
         }
 
         guard let responseJSON = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
@@ -190,11 +161,11 @@ class ClaudeService {
         }
 
         // Parse response
-        return try await parseResponse(responseJSON, originalMessages: messages)
+        return try await parseResponse(responseJSON, originalMessages: messages, calendarContext: calendarContext)
     }
 
     // MARK: - Parse Response
-    private func parseResponse(_ json: [String: Any], originalMessages: [[String: Any]]) async throws -> ChatMessage {
+    private func parseResponse(_ json: [String: Any], originalMessages: [[String: Any]], calendarContext: String) async throws -> ChatMessage {
         guard let content = json["content"] as? [[String: Any]] else {
             throw ClaudeError.invalidResponse
         }
@@ -210,7 +181,7 @@ class ClaudeService {
                     guard let toolName = block["name"] as? String,
                           let toolInput = block["input"] as? [String: Any],
                           let toolId = block["id"] as? String else {
-                        continue
+                        throw ClaudeError.invalidResponse
                     }
 
                     // Get the user's original message for context
@@ -246,20 +217,25 @@ class ClaudeService {
                     let finalRequestBody: [String: Any] = [
                         "model": model,
                         "max_tokens": 4096,
-                        "system": systemPrompt,
+                        "system": buildSystemPrompt(calendarContext: calendarContext),
                         "tools": tools,
                         "messages": updatedMessages
                     ]
 
-                    guard let finalURL = URL(string: baseURL) else {
-                        throw ClaudeError.invalidResponse
-                    }
-                    var request = URLRequest(url: finalURL, timeoutInterval: 60)
+                    var request = URLRequest(url: URL(string: baseURL)!)
                     request.httpMethod = "POST"
-                    try await setAuthHeaders(on: &request)
+                    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                    request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+                    request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
                     request.httpBody = try JSONSerialization.data(withJSONObject: finalRequestBody)
 
-                    let (finalData, _) = try await URLSession.shared.data(for: request)
+                    let (finalData, finalHttpResponse) = try await APIRetryHelper.performRequest(request)
+
+                    guard finalHttpResponse.statusCode == 200 else {
+                        let message = APIRetryHelper.userFriendlyMessage(statusCode: finalHttpResponse.statusCode, data: finalData)
+                        throw ClaudeError.apiError(statusCode: finalHttpResponse.statusCode, message: message)
+                    }
+
                     guard let finalJSON = try JSONSerialization.jsonObject(with: finalData) as? [String: Any] else {
                         throw ClaudeError.invalidResponse
                     }
@@ -286,7 +262,7 @@ class ClaudeService {
         case "send_email":
             return try await handleSendEmail(input)
         case "draft_email":
-            return handleDraftEmail(input)
+            return try handleDraftEmail(input)
         case "search_emails":
             return try await handleSearchEmails(input)
         case "get_meeting_prep":
@@ -298,20 +274,49 @@ class ClaudeService {
 
     // MARK: - Tool Handlers
     private func handleCreateCalendarEvent(_ input: [String: Any], userMessage: String = "") async throws -> String {
-        NSLog("ClaudeService: create_calendar_event called with input: \(input)")
-        NSLog("ClaudeService: userMessage: \(userMessage)")
-
-        guard var title = input["title"] as? String,
-              let dateStr = input["date"] as? String,
-              let timeStr = input["time"] as? String else {
-            throw ClaudeError.toolExecutionFailed("Missing required fields: title, date, or time")
+        guard var title = input["title"] as? String else {
+            throw ClaudeError.invalidResponse
         }
 
-        // If the AI gave a generic title, extract a better one from the user's message
-        let genericTitles = ["new event", "event", "meeting", "untitled", "calendar event", "new meeting", "new calendar event"]
-        if genericTitles.contains(title.lowercased().trimmingCharacters(in: .whitespaces)) && !userMessage.isEmpty {
-            title = extractTitleFromMessage(userMessage)
-            NSLog("ClaudeService: Extracted better title: '\(title)'")
+        // Expanded list of titles that Claude should never use verbatim.
+        // Includes generic placeholders AND pronouns/fillers that Claude occasionally
+        // returns when the user's request is vague (e.g. "schedule that").
+        let badTitles: Set<String> = [
+            // Generic placeholders
+            "new event", "event", "meeting", "untitled",
+            "calendar event", "new meeting", "new calendar event",
+            // Pronouns — Claude must not use these as titles (see tool description / system prompt)
+            "that", "this", "it", "those", "these",
+            "that's", "this is", "it's",
+            // Vague fillers — singular and plural forms (BUG-3 fix: added plural/compound forms)
+            "thing", "things", "stuff", "something",
+            "that thing", "these things", "those things",
+        ]
+
+        let normalizedTitle = title.lowercased().trimmingCharacters(in: .whitespaces)
+        let isBadTitle = badTitles.contains(normalizedTitle)
+            || EventParser.isPronounOrFiller(normalizedTitle)
+
+        if isBadTitle {
+            // Attempt to recover a better title from the user's original message.
+            let recovered = userMessage.isEmpty
+                ? ""
+                : EventParser.extractTitleFromUserMessage(userMessage)
+
+            if recovered.isEmpty {
+                // The user's message is too vague — ask for clarification instead of
+                // creating an event with a meaningless title.
+                return "I couldn't determine a title for this event. Could you tell me what you'd like to call it?"
+            }
+
+            // Capitalise the recovered title (Title Case).
+            title = recovered.split(separator: " ").map { word in
+                word.prefix(1).uppercased() + word.dropFirst()
+            }.joined(separator: " ")
+        }
+        guard let dateStr = input["date"] as? String,
+              let timeStr = input["time"] as? String else {
+            throw ClaudeError.invalidResponse
         }
         let duration = input["duration"] as? Int ?? 60
         let calendarType = input["calendar_type"] as? String ?? "google"
@@ -339,8 +344,8 @@ class ClaudeService {
         let event = CalendarEvent(
             id: UUID().uuidString,
             title: title,
-            startDate: parseDateTime(date: dateStr, time: timeStr),
-            endDate: parseDateTime(date: dateStr, time: timeStr).addingTimeInterval(TimeInterval(duration * 60)),
+            startDate: EventParser.parseDateTime(date: dateStr, time: timeStr),
+            endDate: EventParser.parseDateTime(date: dateStr, time: timeStr).addingTimeInterval(TimeInterval(duration * 60)),
             calendarType: calendarType == "google" ? .google : .apple,
             attendees: attendees,
             conferenceData: addVideoCall ? confData : nil
@@ -365,7 +370,7 @@ class ClaudeService {
     private func handleListCalendarEvents(_ input: [String: Any]) async throws -> String {
         guard let startDate = input["start_date"] as? String,
               let endDate = input["end_date"] as? String else {
-            throw ClaudeError.toolExecutionFailed("Missing required fields: start_date or end_date")
+            throw ClaudeError.invalidResponse
         }
         let calendarType = input["calendar_type"] as? String ?? "both"
 
@@ -373,16 +378,16 @@ class ClaudeService {
 
         if calendarType == "google" || calendarType == "both" {
             let googleEvents = try await GoogleCalendarService.shared.listEvents(
-                from: parseDate(startDate),
-                to: parseDate(endDate)
+                from: EventParser.parseDate(startDate),
+                to: EventParser.parseDate(endDate)
             )
             events.append(contentsOf: googleEvents)
         }
 
         if calendarType == "apple" || calendarType == "both" {
             let appleEvents = try await AppleCalendarService.shared.listEvents(
-                from: parseDate(startDate),
-                to: parseDate(endDate)
+                from: EventParser.parseDate(startDate),
+                to: EventParser.parseDate(endDate)
             )
             events.append(contentsOf: appleEvents)
         }
@@ -418,7 +423,7 @@ class ClaudeService {
         guard let to = input["to"] as? String,
               let subject = input["subject"] as? String,
               let body = input["body"] as? String else {
-            throw ClaudeError.toolExecutionFailed("Missing required fields: to, subject, or body")
+            throw ClaudeError.invalidResponse
         }
 
         let email = Email(
@@ -434,10 +439,12 @@ class ClaudeService {
         return "Successfully sent email to \(to) with subject '\(subject)'"
     }
 
-    private func handleDraftEmail(_ input: [String: Any]) -> String {
-        let to = input["to"] as? String ?? ""
-        let subject = input["subject"] as? String ?? ""
-        let body = input["body"] as? String ?? ""
+    private func handleDraftEmail(_ input: [String: Any]) throws -> String {
+        guard let to = input["to"] as? String,
+              let subject = input["subject"] as? String,
+              let body = input["body"] as? String else {
+            throw ClaudeError.invalidResponse
+        }
 
         return """
         Draft email created:
@@ -452,7 +459,7 @@ class ClaudeService {
 
     private func handleSearchEmails(_ input: [String: Any]) async throws -> String {
         guard let query = input["query"] as? String else {
-            throw ClaudeError.toolExecutionFailed("Missing required field: query")
+            throw ClaudeError.invalidResponse
         }
 
         let emails = try await GmailService.shared.searchEmails(query: query)
@@ -473,13 +480,13 @@ class ClaudeService {
 
     private func handleGetMeetingPrep(_ input: [String: Any]) async throws -> String {
         guard let eventTitle = input["event_title"] as? String else {
-            throw ClaudeError.toolExecutionFailed("Missing required field: event_title")
+            throw ClaudeError.invalidResponse
         }
         let dateStr = input["date"] as? String
 
         var searchDate: Date?
         if let dateStr = dateStr {
-            searchDate = parseDate(dateStr)
+            searchDate = EventParser.parseDate(dateStr)
         }
 
         guard let event = await CalendarContextService.shared.findEvent(title: eventTitle, nearDate: searchDate) else {
@@ -490,205 +497,15 @@ class ClaudeService {
         return prep
     }
 
-    // MARK: - Helpers
-    private func extractTitleFromMessage(_ message: String) -> String {
-        var text = message.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        // Remove common action phrases to get the core subject
-        let prefixes = [
-            "create a new event for ", "create an event for ", "create event for ",
-            "create a new event called ", "create an event called ", "create event called ",
-            "add a new event for ", "add an event for ", "add event for ",
-            "add a new event called ", "add an event called ", "add event called ",
-            "schedule a ", "schedule an ", "schedule ",
-            "set up a ", "set up an ", "set up ",
-            "book a ", "book an ", "book ",
-            "add a ", "add an ", "add ",
-            "create a ", "create an ", "create ",
-            "new event for ", "new event called ", "new event ",
-            "remind me about ", "remind me to ", "remind me of ",
-            "i have a ", "i have an ", "i have ",
-            "put ", "make a ", "make an ", "make ",
-        ]
-
-        let lowerText = text.lowercased()
-        for prefix in prefixes {
-            if lowerText.hasPrefix(prefix) {
-                text = String(text.dropFirst(prefix.count))
-                break
-            }
-        }
-
-        // Remove trailing time/date phrases like "at 3pm", "tomorrow", "on friday", etc.
-        let timePatterns = [
-            " at \\d{1,2}(:\\d{2})?\\s*(am|pm|AM|PM)?.*$",
-            " on (monday|tuesday|wednesday|thursday|friday|saturday|sunday).*$",
-            " on \\d{1,2}(/|-)\\d{1,2}.*$",
-            " tomorrow.*$",
-            " today.*$",
-            " next (monday|tuesday|wednesday|thursday|friday|saturday|sunday|week|month).*$",
-            " this (monday|tuesday|wednesday|thursday|friday|saturday|sunday|week|month).*$",
-            " for \\d+ (minutes|hours|hour|min).*$",
-        ]
-
-        for pattern in timePatterns {
-            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
-                let range = NSRange(text.startIndex..<text.endIndex, in: text)
-                text = regex.stringByReplacingMatches(in: text, range: range, withTemplate: "")
-            }
-        }
-
-        // Clean up and capitalize
-        text = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: CharacterSet(charactersIn: ".,!?"))
-            .trimmingCharacters(in: .whitespaces)
-
-        // Capitalize each word
-        if !text.isEmpty {
-            text = text.split(separator: " ").map { word in
-                let lower = word.lowercased()
-                // Don't capitalize small words unless first word
-                let smallWords = ["a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with"]
-                if smallWords.contains(lower) {
-                    return String(word)
-                }
-                return word.prefix(1).uppercased() + word.dropFirst()
-            }.joined(separator: " ")
-            // Always capitalize first letter
-            text = text.prefix(1).uppercased() + text.dropFirst()
-        }
-
-        // Fallback if extraction resulted in empty or very short string
-        if text.count < 2 {
-            return "New Event"
-        }
-
-        // Truncate if too long
-        if text.count > 60 {
-            text = String(text.prefix(60))
-        }
-
-        return text
-    }
-
-    private func parseDateTime(date: String, time: String) -> Date {
-        NSLog("ClaudeService: Parsing date='\(date)' time='\(time)'")
-
-        // Parse the date part
-        let parsedDate = parseDate(date)
-
-        // Parse the time part — try multiple formats the AI might use
-        let cleanTime = time.trimmingCharacters(in: .whitespaces)
-        let timeFormats = [
-            "HH:mm",       // 15:00 (24-hour)
-            "H:mm",        // 3:00 (24-hour single digit)
-            "HH:mm:ss",    // 15:00:00
-            "h:mm a",      // 3:00 PM
-            "h:mma",       // 3:00PM
-            "ha",          // 3PM
-            "h a",         // 3 PM
-            "h:mm",        // 3:00 (ambiguous, treat as 24h)
-        ]
-
-        var parsedHour: Int?
-        var parsedMinute: Int = 0
-
-        for format in timeFormats {
-            let formatter = DateFormatter()
-            formatter.dateFormat = format
-            formatter.locale = Locale(identifier: "en_US_POSIX")
-            if let parsed = formatter.date(from: cleanTime) {
-                let cal = Calendar.current
-                parsedHour = cal.component(.hour, from: parsed)
-                parsedMinute = cal.component(.minute, from: parsed)
-                NSLog("ClaudeService: Parsed time with format '\(format)' → \(parsedHour ?? -1):\(parsedMinute)")
-                break
-            }
-        }
-
-        // Fallback: try to extract numbers manually (e.g. "15", "3pm", "3:30pm")
-        if parsedHour == nil {
-            let lower = cleanTime.lowercased()
-            let isPM = lower.contains("pm")
-            let isAM = lower.contains("am")
-            let digits = lower.replacingOccurrences(of: "[^0-9:]", with: "", options: .regularExpression)
-
-            let parts = digits.split(separator: ":")
-            if let hour = Int(parts.first ?? "") {
-                var h = hour
-                if isPM && h < 12 { h += 12 }
-                if isAM && h == 12 { h = 0 }
-                parsedHour = h
-                parsedMinute = parts.count > 1 ? (Int(parts[1]) ?? 0) : 0
-                NSLog("ClaudeService: Manual time parse → \(parsedHour ?? -1):\(parsedMinute)")
-            }
-        }
-
-        guard let hour = parsedHour else {
-            NSLog("ClaudeService: Failed to parse time '\(time)', using noon")
-            // Use noon as fallback instead of current time
-            let cal = Calendar.current
-            var components = cal.dateComponents([.year, .month, .day], from: parsedDate)
-            components.hour = 12
-            components.minute = 0
-            return cal.date(from: components) ?? parsedDate
-        }
-
-        let cal = Calendar.current
-        var components = cal.dateComponents([.year, .month, .day], from: parsedDate)
-        components.hour = hour
-        components.minute = parsedMinute
-        let result = cal.date(from: components) ?? parsedDate
-        NSLog("ClaudeService: Final parsed datetime: \(result)")
-        return result
-    }
-
-    private func parseDate(_ dateString: String) -> Date {
-        let clean = dateString.trimmingCharacters(in: .whitespaces)
-
-        // Try multiple date formats
-        let formats = [
-            "yyyy-MM-dd",          // 2026-02-19
-            "MM/dd/yyyy",          // 02/19/2026
-            "dd/MM/yyyy",          // 19/02/2026
-            "MMMM d, yyyy",       // February 19, 2026
-            "MMM d, yyyy",        // Feb 19, 2026
-            "yyyy-MM-dd'T'HH:mm", // 2026-02-19T15:00
-        ]
-
-        for format in formats {
-            let formatter = DateFormatter()
-            formatter.dateFormat = format
-            formatter.locale = Locale(identifier: "en_US_POSIX")
-            if let date = formatter.date(from: clean) {
-                return date
-            }
-        }
-
-        NSLog("ClaudeService: Failed to parse date '\(dateString)', using today")
-        return Date()
-    }
+    // Event title extraction and date/time parsing extracted to EventParser utility
 
     // MARK: - System Prompt
-    private var systemPrompt: String {
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd"
-        let today = dateFormatter.string(from: Date())
+    private func buildSystemPrompt(calendarContext: String) -> String {
+        let base = SystemPromptProvider.buildSystemPrompt(calendarContext: calendarContext)
 
-        let timeFormatter = DateFormatter()
-        timeFormatter.timeStyle = .short
-        let currentTime = timeFormatter.string(from: Date())
+        // Claude-specific additions: tool use instructions
+        let toolInstructions = """
 
-        let calendar = Calendar.current
-        let weekday = calendar.component(.weekday, from: Date())
-        let weekdayName = DateFormatter().weekdaySymbols[weekday - 1]
-
-        return """
-        You are ezLander, a helpful AI assistant integrated into a macOS menu bar app. You help users manage their calendar and email.
-
-        Today is \(weekdayName), \(today). Current time: \(currentTime).
-
-        \(cachedCalendarContext)
 
         You have access to the following tools:
         - create_calendar_event: Create new calendar events (supports attendees and Google Meet video calls)
@@ -700,12 +517,18 @@ class ClaudeService {
 
         IMPORTANT — Creating calendar events:
         - Always extract a specific, descriptive title from the user's message. NEVER use generic titles like "New Event", "Event", or "Meeting".
-        - Examples of good title extraction:
+        - NEVER use pronouns (that, this, it, those, these) or vague words (thing, stuff, something) as the event title.
+        - If the user's message is too vague to identify a clear event name — for example "schedule that", "remind me about this", or "add that thing" — do NOT call create_calendar_event. Instead, reply asking the user: "What would you like to call this event?"
+        - Examples of GOOD title extraction:
           - User says "schedule a dentist appointment tomorrow at 3pm" → title: "Dentist Appointment"
           - User says "remind me about the team standup at 9am" → title: "Team Standup"
           - User says "add lunch with Sarah on Friday" → title: "Lunch with Sarah"
           - User says "I have a flight to NYC next Monday at 6am" → title: "Flight to NYC"
           - User says "book a haircut for Saturday 2pm" → title: "Haircut"
+        - Examples of messages where you must ask for clarification BEFORE creating the event:
+          - "Schedule that" → ask: "What would you like to call this event?"
+          - "Remind me about that thing tomorrow" → ask: "What is the event you'd like me to add?"
+          - "Add this on Monday" → ask: "Could you give me a name for this event?"
         - Resolve relative dates like "tomorrow", "next Monday", "this Friday" using today's date.
         - If the user doesn't specify a duration, default to 60 minutes. Use shorter durations for quick things (haircut: 30min) and longer for things like flights.
         - If the date or time is ambiguous, ask for clarification before creating the event.
@@ -720,13 +543,9 @@ class ClaudeService {
         IMPORTANT — Meeting prep:
         - When the user asks to prepare for a meeting, use the get_meeting_prep tool to get detailed context.
         - Provide a concise briefing: who's attending, their RSVP status, key topics from recent emails, and the video call link.
-
-        General guidelines:
-        - Be concise and helpful
-        - Always confirm before sending emails
-        - Format dates and times in a human-readable way
-        - If you don't have enough information, ask for clarification
         """
+
+        return base + toolInstructions
     }
 }
 

@@ -1,317 +1,151 @@
 import SwiftUI
 
-// MARK: - Settings Category
-enum SettingsCategory: String, CaseIterable, Identifiable {
-    case accountSubscription
-    case integrations
-    case aiProviders
-    case general
-    case keyboardShortcuts
-    case about
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .accountSubscription: return "Account & Subscription"
-        case .integrations: return "Integrations"
-        case .aiProviders: return "AI Providers"
-        case .general: return "General"
-        case .keyboardShortcuts: return "Keyboard Shortcuts"
-        case .about: return "About"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .accountSubscription: return "person.crop.circle"
-        case .integrations: return "link"
-        case .aiProviders: return "brain"
-        case .general: return "gearshape"
-        case .keyboardShortcuts: return "command"
-        case .about: return "info.circle"
-        }
-    }
-
-    var iconColor: Color {
-        switch self {
-        case .accountSubscription: return .warmPrimary
-        case .integrations: return .green
-        case .aiProviders: return .warmAccent
-        case .general: return .gray
-        case .keyboardShortcuts: return .warmHighlight
-        case .about: return .blue
-        }
-    }
-}
-
-// MARK: - Settings View
 struct SettingsView: View {
     @StateObject private var viewModel = SettingsViewModel()
-    @State private var activeCategory: SettingsCategory?
+    @ObservedObject private var updateService = UpdateService.shared
+    @State private var selectedSettingsTab: SettingsTab = .account
 
-    var body: some View {
-        ZStack {
-            if activeCategory == nil {
-                mainListView
-                    .transition(.move(edge: .leading))
-            } else {
-                detailView(for: activeCategory!)
-                    .transition(.move(edge: .trailing))
+    enum SettingsTab: String, CaseIterable {
+        case account
+        case ai
+        case integrations
+        case general
+
+        var label: String {
+            switch self {
+            case .account: return "Account"
+            case .ai: return "AI"
+            case .integrations: return "Integrations"
+            case .general: return "General"
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: activeCategory)
-        .clipped()
-    }
 
-    // MARK: - Main List
-    private var mainListView: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                ProfileCard(viewModel: viewModel)
-                    .onTapGesture { activeCategory = .accountSubscription }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 12)
-                    .padding(.bottom, 8)
-
-                Divider()
-                    .padding(.horizontal, 16)
-
-                VStack(spacing: 1) {
-                    ForEach(SettingsCategory.allCases) { category in
-                        SettingsCategoryRow(
-                            category: category,
-                            subtitle: subtitleForCategory(category),
-                            onTap: { activeCategory = category }
-                        )
-                    }
-                }
-                .padding(.top, 8)
+        var icon: String {
+            switch self {
+            case .account: return "person.crop.circle"
+            case .ai: return "cpu"
+            case .integrations: return "link"
+            case .general: return "gearshape"
             }
         }
     }
-
-    private func subtitleForCategory(_ category: SettingsCategory) -> String? {
-        switch category {
-        case .accountSubscription:
-            return viewModel.subscriptionStatus.displayName
-        case .integrations:
-            let count = viewModel.connectedIntegrationCount
-            return count > 0 ? "\(count) connected" : "None connected"
-        case .aiProviders:
-            return viewModel.selectedAIProvider.displayName
-        case .general:
-            return nil
-        case .keyboardShortcuts:
-            return nil
-        case .about:
-            return "v\(viewModel.appVersion)"
-        }
-    }
-
-    // MARK: - Detail View Dispatch
-    @ViewBuilder
-    private func detailView(for category: SettingsCategory) -> some View {
-        SettingsDetailContainer(title: category.title, onBack: { activeCategory = nil }) {
-            switch category {
-            case .accountSubscription:
-                AccountSubscriptionDetailView(viewModel: viewModel)
-            case .integrations:
-                IntegrationsDetailView(viewModel: viewModel)
-            case .aiProviders:
-                AIProvidersDetailView(viewModel: viewModel)
-            case .general:
-                GeneralDetailView(viewModel: viewModel)
-            case .keyboardShortcuts:
-                KeyboardShortcutsSettingsView()
-            case .about:
-                AboutDetailView(viewModel: viewModel)
-            }
-        }
-    }
-}
-
-// MARK: - Profile Card
-struct ProfileCard: View {
-    @ObservedObject var viewModel: SettingsViewModel
-
-    var body: some View {
-        HStack(spacing: 12) {
-            if viewModel.isSignedIn {
-                profileAvatar
-            } else {
-                Image(systemName: "person.crop.circle.fill")
-                    .font(.system(size: 36))
-                    .foregroundColor(.secondary.opacity(0.4))
-            }
-
-            VStack(alignment: .leading, spacing: 2) {
-                if viewModel.isSignedIn {
-                    Text(viewModel.userName)
-                        .font(.headline)
-                    Text(viewModel.userEmail)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                } else {
-                    Text("Sign In")
-                        .font(.headline)
-                    Text("Sign in to sync your data")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-
-            Spacer()
-
-            Image(systemName: "chevron.right")
-                .font(.caption)
-                .foregroundColor(.secondary)
-        }
-        .padding(.vertical, 8)
-        .contentShape(Rectangle())
-    }
-
-    @ViewBuilder
-    private var profileAvatar: some View {
-        if let pictureURL = viewModel.userPicture, let url = URL(string: pictureURL) {
-            AsyncImage(url: url) { image in
-                image
-                    .resizable()
-                    .scaledToFill()
-            } placeholder: {
-                avatarPlaceholder
-            }
-            .frame(width: 40, height: 40)
-            .clipShape(Circle())
-        } else {
-            avatarPlaceholder
-        }
-    }
-
-    private var avatarPlaceholder: some View {
-        Circle()
-            .fill(Color.warmPrimary.opacity(0.15))
-            .frame(width: 40, height: 40)
-            .overlay(
-                Text(String(viewModel.userName.prefix(1)).uppercased())
-                    .font(.headline)
-                    .foregroundColor(.warmPrimary)
-            )
-    }
-}
-
-// MARK: - Category Row
-struct SettingsCategoryRow: View {
-    let category: SettingsCategory
-    let subtitle: String?
-    let onTap: () -> Void
-
-    var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 12) {
-                Image(systemName: category.icon)
-                    .font(.system(size: 14))
-                    .foregroundColor(.white)
-                    .frame(width: 28, height: 28)
-                    .background(category.iconColor)
-                    .cornerRadius(6)
-
-                Text(category.title)
-                    .foregroundColor(.primary)
-
-                Spacer()
-
-                if let subtitle = subtitle {
-                    Text(subtitle)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundColor(.secondary.opacity(0.5))
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-// MARK: - Detail Container
-struct SettingsDetailContainer<Content: View>: View {
-    let title: String
-    let onBack: () -> Void
-    @ViewBuilder let content: Content
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header with back button
-            HStack(spacing: 8) {
-                Button(action: onBack) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 14, weight: .medium))
-                        Text("Settings")
-                            .font(.subheadline)
+            // Tab picker
+            HStack(spacing: 0) {
+                ForEach(SettingsTab.allCases, id: \.self) { tab in
+                    Button(action: { selectedSettingsTab = tab }) {
+                        VStack(spacing: 4) {
+                            Image(systemName: tab.icon)
+                                .font(.system(size: 14))
+                            Text(tab.label)
+                                .font(.system(size: 10, weight: .medium))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .foregroundColor(selectedSettingsTab == tab ? .warmPrimary : .secondary)
                     }
-                    .foregroundColor(.warmPrimary)
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
-
-                Spacer()
-
-                Text(title)
-                    .font(.headline)
-
-                Spacer()
-
-                // Invisible spacer to center the title
-                HStack(spacing: 4) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 14, weight: .medium))
-                    Text("Settings")
-                        .font(.subheadline)
-                }
-                .opacity(0)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
+            .padding(.horizontal, 8)
+            .overlay(alignment: .bottom) {
+                // Active tab underline
+                GeometryReader { geo in
+                    let tabWidth = geo.size.width / CGFloat(SettingsTab.allCases.count)
+                    let tabIndex = CGFloat(SettingsTab.allCases.firstIndex(of: selectedSettingsTab) ?? 0)
+                    Rectangle()
+                        .fill(Color.warmPrimary)
+                        .frame(width: tabWidth * 0.6, height: 2)
+                        .cornerRadius(1)
+                        .offset(x: tabWidth * tabIndex + tabWidth * 0.2)
+                        .animation(.easeInOut(duration: 0.2), value: selectedSettingsTab)
+                }
+                .frame(height: 2)
+            }
 
             Divider()
 
+            // Tab content
             ScrollView {
-                content
-                    .padding(16)
+                VStack(alignment: .leading, spacing: 16) {
+                    switch selectedSettingsTab {
+                    case .account:
+                        accountTabContent
+                    case .ai:
+                        aiTabContent
+                    case .integrations:
+                        integrationsTabContent
+                    case .general:
+                        generalTabContent
+                    }
+                }
+                .padding()
             }
         }
     }
-}
 
-// MARK: - Account & Subscription Detail
-struct AccountSubscriptionDetailView: View {
-    @ObservedObject var viewModel: SettingsViewModel
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            // Account
-            if viewModel.isSignedIn {
-                signedInSection
-            } else {
-                signInSection
+    // MARK: - Account Tab
+    private var accountTabContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            SettingsSection(title: "Account") {
+                if viewModel.isSignedIn {
+                    signedInView
+                } else {
+                    signInButtons
+                }
             }
 
-            Divider()
-
-            // Subscription
-            subscriptionSection
+            SettingsSection(title: "Subscription") {
+                subscriptionView
+            }
         }
     }
 
-    private var signedInSection: some View {
+    // MARK: - AI Tab
+    private var aiTabContent: some View {
+        SettingsSection(title: "AI Provider") {
+            aiProviderView
+        }
+    }
+
+    // MARK: - Integrations Tab
+    private var integrationsTabContent: some View {
+        SettingsSection(title: "Integrations") {
+            integrationsView
+        }
+    }
+
+    // MARK: - General Tab
+    private var generalTabContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            SettingsSection(title: "Preferences") {
+                preferencesView
+            }
+
+            SettingsSection(title: "Menu Bar Icon") {
+                menuBarIconPicker
+            }
+
+            SettingsSection(title: "Email Swipe Actions") {
+                swipeActionsView
+            }
+
+            SettingsSection(title: "Keyboard Shortcuts") {
+                keyboardShortcutsView
+            }
+
+            SettingsSection(title: "About") {
+                aboutView
+            }
+        }
+    }
+
+    // MARK: - Signed In View
+    private var signedInView: some View {
         HStack {
+            // Profile picture
             if let pictureURL = viewModel.userPicture, let url = URL(string: pictureURL) {
                 AsyncImage(url: url) { image in
                     image
@@ -356,30 +190,44 @@ struct AccountSubscriptionDetailView: View {
         }
     }
 
-    private var signInSection: some View {
+    // MARK: - Sign In Buttons
+    private var signInButtons: some View {
         VStack(spacing: 12) {
             Button(action: viewModel.signInWithGoogle) {
                 HStack {
-                    Image(systemName: "globe")
+                    if viewModel.isSigningIn {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                    } else {
+                        Image(systemName: "globe")
+                    }
                     Text("Sign in with Google")
                 }
                 .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
+            .disabled(viewModel.isSigningIn)
 
             Button(action: viewModel.signInWithApple) {
                 HStack {
-                    Image(systemName: "apple.logo")
+                    if viewModel.isSigningIn {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                    } else {
+                        Image(systemName: "apple.logo")
+                    }
                     Text("Sign in with Apple")
                 }
                 .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
             .tint(.black)
+            .disabled(viewModel.isSigningIn)
         }
     }
 
-    private var subscriptionSection: some View {
+    // MARK: - Subscription View
+    private var subscriptionView: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 VStack(alignment: .leading) {
@@ -416,13 +264,9 @@ struct AccountSubscriptionDetailView: View {
             }
         }
     }
-}
 
-// MARK: - Integrations Detail
-struct IntegrationsDetailView: View {
-    @ObservedObject var viewModel: SettingsViewModel
-
-    var body: some View {
+    // MARK: - Integrations View
+    private var integrationsView: some View {
         VStack(spacing: 12) {
             IntegrationRow(
                 name: "Google Calendar",
@@ -449,14 +293,11 @@ struct IntegrationsDetailView: View {
             )
         }
     }
-}
 
-// MARK: - AI Providers Detail
-struct AIProvidersDetailView: View {
-    @ObservedObject var viewModel: SettingsViewModel
-
-    var body: some View {
+    // MARK: - AI Provider View
+    private var aiProviderView: some View {
         VStack(alignment: .leading, spacing: 12) {
+            // Provider selector
             Picker("Active Provider", selection: $viewModel.selectedAIProvider) {
                 ForEach(AIProvider.allCases) { provider in
                     HStack {
@@ -478,52 +319,28 @@ struct AIProvidersDetailView: View {
 
             Divider()
 
+            // API Keys for each provider
             ForEach(AIProvider.allCases) { provider in
-                if provider.supportsOAuth {
-                    ClaudeAuthRow(
-                        provider: provider,
-                        useOAuth: $viewModel.claudeUseOAuth,
-                        isOAuthConnected: provider.isOAuthConnected,
-                        isAPIKeyConfigured: KeychainService.shared.get(key: provider.keychainKey) != nil,
-                        isConnecting: viewModel.isClaudeOAuthConnecting,
-                        showInput: viewModel.showKeyInput[provider] ?? false,
-                        keyInput: Binding(
-                            get: { viewModel.keyInputs[provider] ?? "" },
-                            set: { viewModel.keyInputs[provider] = $0 }
-                        ),
-                        onSignInOAuth: { viewModel.signInWithClaudeOAuth() },
-                        onSignOutOAuth: { viewModel.signOutClaudeOAuth() },
-                        onAddKey: { viewModel.showKeyInput[provider] = true },
-                        onSaveKey: { viewModel.saveAPIKey(for: provider) },
-                        onRemoveKey: { viewModel.removeAPIKey(for: provider) },
-                        onGetKey: { viewModel.openKeyURL(for: provider) }
-                    )
-                } else {
-                    APIKeyRow(
-                        provider: provider,
-                        isConfigured: provider.isConfigured,
-                        showInput: viewModel.showKeyInput[provider] ?? false,
-                        keyInput: Binding(
-                            get: { viewModel.keyInputs[provider] ?? "" },
-                            set: { viewModel.keyInputs[provider] = $0 }
-                        ),
-                        onAddKey: { viewModel.showKeyInput[provider] = true },
-                        onSaveKey: { viewModel.saveAPIKey(for: provider) },
-                        onRemoveKey: { viewModel.removeAPIKey(for: provider) },
-                        onGetKey: { viewModel.openKeyURL(for: provider) }
-                    )
-                }
+                APIKeyRow(
+                    provider: provider,
+                    isConfigured: provider.isConfigured,
+                    showInput: viewModel.showKeyInput[provider] ?? false,
+                    keyInput: Binding(
+                        get: { viewModel.keyInputs[provider] ?? "" },
+                        set: { viewModel.keyInputs[provider] = $0 }
+                    ),
+                    onAddKey: { viewModel.showKeyInput[provider] = true },
+                    onSaveKey: { viewModel.saveAPIKey(for: provider) },
+                    onRemoveKey: { viewModel.removeAPIKey(for: provider) },
+                    onGetKey: { viewModel.openKeyURL(for: provider) }
+                )
             }
         }
     }
-}
 
-// MARK: - General Detail
-struct GeneralDetailView: View {
-    @ObservedObject var viewModel: SettingsViewModel
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+    // MARK: - Preferences View
+    private var preferencesView: some View {
+        VStack(alignment: .leading, spacing: 12) {
             Picker("Default Calendar", selection: $viewModel.defaultCalendar) {
                 Text("Google Calendar").tag(CalendarType.google)
                 Text("Apple Calendar").tag(CalendarType.apple)
@@ -534,14 +351,72 @@ struct GeneralDetailView: View {
             Toggle("Show Notifications", isOn: $viewModel.showNotifications)
         }
     }
-}
 
-// MARK: - About Detail
-struct AboutDetailView: View {
-    @ObservedObject var viewModel: SettingsViewModel
-    @StateObject private var updateService = UpdateService.shared
+    // MARK: - Menu Bar Icon Picker
+    private var menuBarIconPicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Choose an icon for the menu bar")
+                .font(.caption)
+                .foregroundColor(.secondary)
 
-    var body: some View {
+            HStack(spacing: 12) {
+                ForEach(MenuBarIconOption.allCases) { option in
+                    Button(action: { viewModel.selectedMenuBarIcon = option }) {
+                        VStack(spacing: 4) {
+                            Image(systemName: option.rawValue)
+                                .font(.system(size: 20))
+                                .frame(width: 40, height: 40)
+                                .background(
+                                    viewModel.selectedMenuBarIcon == option
+                                        ? Color.warmPrimary.opacity(0.15)
+                                        : Color.clear
+                                )
+                                .cornerRadius(8)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(
+                                            viewModel.selectedMenuBarIcon == option
+                                                ? Color.warmPrimary
+                                                : Color.clear,
+                                            lineWidth: 2
+                                        )
+                                )
+                            Text(option.displayName)
+                                .font(.system(size: 9))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(viewModel.selectedMenuBarIcon == option ? .warmPrimary : .primary)
+                }
+            }
+        }
+    }
+
+    // MARK: - Swipe Actions View
+    private var swipeActionsView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Picker("Swipe Right", selection: $viewModel.swipeRightAction) {
+                ForEach(EmailSwipeAction.allCases) { action in
+                    Label(action.displayName, systemImage: action.icon).tag(action)
+                }
+            }
+
+            Picker("Swipe Left", selection: $viewModel.swipeLeftAction) {
+                ForEach(EmailSwipeAction.allCases) { action in
+                    Label(action.displayName, systemImage: action.icon).tag(action)
+                }
+            }
+        }
+    }
+
+    // MARK: - Keyboard Shortcuts View
+    private var keyboardShortcutsView: some View {
+        KeyboardShortcutsSettingsView()
+    }
+
+    // MARK: - About View
+    private var aboutView: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("Version")
@@ -550,6 +425,7 @@ struct AboutDetailView: View {
                     .foregroundColor(.secondary)
             }
 
+            // Update section
             if updateService.updateAvailable {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
@@ -606,17 +482,30 @@ struct AboutDetailView: View {
             Divider()
 
             HStack(spacing: 16) {
-                if let websiteURL = URL(string: "https://ezlander.app") {
-                    Link("Website", destination: websiteURL)
-                }
-                if let privacyURL = URL(string: "https://ezlander.app/privacy") {
-                    Link("Privacy Policy", destination: privacyURL)
-                }
-                if let termsURL = URL(string: "https://ezlander.app/terms") {
-                    Link("Terms", destination: termsURL)
-                }
+                Link("Website", destination: URL(string: "https://ezlander.app")!)
+                Link("Privacy Policy", destination: URL(string: "https://ezlander.app/privacy")!)
+                Link("Terms", destination: URL(string: "https://ezlander.app/terms")!)
             }
             .font(.caption)
+        }
+    }
+}
+
+// MARK: - Settings Section
+struct SettingsSection<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(.headline)
+                .foregroundColor(.secondary)
+
+            content
+                .padding()
+                .background(Color(NSColor.controlBackgroundColor))
+                .cornerRadius(8)
         }
     }
 }
@@ -661,118 +550,6 @@ struct IntegrationRow: View {
     }
 }
 
-// MARK: - Claude Auth Row
-struct ClaudeAuthRow: View {
-    let provider: AIProvider
-    @Binding var useOAuth: Bool
-    let isOAuthConnected: Bool
-    let isAPIKeyConfigured: Bool
-    let isConnecting: Bool
-    let showInput: Bool
-    @Binding var keyInput: String
-    let onSignInOAuth: () -> Void
-    let onSignOutOAuth: () -> Void
-    let onAddKey: () -> Void
-    let onSaveKey: () -> Void
-    let onRemoveKey: () -> Void
-    let onGetKey: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Image(systemName: provider.icon)
-                    .frame(width: 24)
-                    .foregroundColor(.warmAccent)
-
-                Text(provider.displayName)
-                    .fontWeight(.medium)
-
-                Spacer()
-
-                if isOAuthConnected || isAPIKeyConfigured {
-                    Text("Active")
-                        .font(.caption)
-                        .foregroundColor(.green)
-                }
-            }
-
-            Picker("", selection: $useOAuth) {
-                Text("API Key").tag(false)
-                Text("Claude Account").tag(true)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-
-            if useOAuth {
-                if isOAuthConnected {
-                    HStack {
-                        Text("Connected to Claude")
-                            .font(.caption)
-                            .foregroundColor(.green)
-                        Spacer()
-                        Button("Disconnect") {
-                            onSignOutOAuth()
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                    }
-                } else {
-                    HStack {
-                        Button("Sign in with Claude") {
-                            onSignInOAuth()
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
-                        .disabled(isConnecting)
-
-                        if isConnecting {
-                            ProgressView()
-                                .scaleEffect(0.7)
-                        }
-                    }
-
-                    Text("Use your Claude Pro/Max subscription")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            } else {
-                if isAPIKeyConfigured {
-                    HStack {
-                        Spacer()
-                        Button("Remove") {
-                            onRemoveKey()
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                    }
-                } else {
-                    HStack {
-                        Button("Get Key") { onGetKey() }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-
-                        Button("Add Key") { onAddKey() }
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.small)
-                    }
-                }
-
-                if showInput {
-                    HStack {
-                        SecureField(provider.keyPlaceholder, text: $keyInput)
-                            .textFieldStyle(.roundedBorder)
-                        Button("Save") { onSaveKey() }
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.small)
-                            .disabled(keyInput.isEmpty)
-                    }
-                }
-            }
-        }
-        .padding(.vertical, 4)
-    }
-}
-
 // MARK: - API Key Row
 struct APIKeyRow: View {
     let provider: AIProvider
@@ -783,6 +560,7 @@ struct APIKeyRow: View {
     let onSaveKey: () -> Void
     let onRemoveKey: () -> Void
     let onGetKey: () -> Void
+    @State private var showSaveSuccess = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -796,7 +574,15 @@ struct APIKeyRow: View {
 
                 Spacer()
 
-                if isConfigured {
+                if showSaveSuccess {
+                    HStack(spacing: 4) {
+                        Image(systemName: "checkmark.circle.fill")
+                        Text("Saved")
+                    }
+                    .font(.caption)
+                    .foregroundColor(.green)
+                    .transition(.opacity)
+                } else if isConfigured {
                     Text("Active")
                         .font(.caption)
                         .foregroundColor(.green)
@@ -826,6 +612,14 @@ struct APIKeyRow: View {
                         .textFieldStyle(.roundedBorder)
                     Button("Save") {
                         onSaveKey()
+                        withAnimation {
+                            showSaveSuccess = true
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            withAnimation {
+                                showSaveSuccess = false
+                            }
+                        }
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
@@ -840,6 +634,7 @@ struct APIKeyRow: View {
 // MARK: - View Model
 class SettingsViewModel: ObservableObject {
     @Published var isSignedIn: Bool = false
+    @Published var isSigningIn: Bool = false
     @Published var userEmail: String = ""
     @Published var userName: String = ""
     @Published var userPicture: String? = nil
@@ -862,6 +657,22 @@ class SettingsViewModel: ObservableObject {
             UserDefaults.standard.set(showNotifications, forKey: "show_notifications")
         }
     }
+    @Published var selectedMenuBarIcon: MenuBarIconOption = .starFill {
+        didSet {
+            UserDefaults.standard.set(selectedMenuBarIcon.rawValue, forKey: "menu_bar_icon")
+            NotificationCenter.default.post(name: Notification.Name("MenuBarIconChanged"), object: nil)
+        }
+    }
+    @Published var swipeRightAction: EmailSwipeAction = .archive {
+        didSet {
+            UserDefaults.standard.set(swipeRightAction.rawValue, forKey: "swipe_right_action")
+        }
+    }
+    @Published var swipeLeftAction: EmailSwipeAction = .delete {
+        didSet {
+            UserDefaults.standard.set(swipeLeftAction.rawValue, forKey: "swipe_left_action")
+        }
+    }
 
     // AI Provider settings
     @Published var selectedAIProvider: AIProvider = .claude {
@@ -874,17 +685,8 @@ class SettingsViewModel: ObservableObject {
     @Published var showKeyInput: [AIProvider: Bool] = [:]
     @Published var keyInputs: [AIProvider: String] = [:]
 
-    // Claude OAuth
-    @Published var claudeUseOAuth: Bool = false
-    @Published var isClaudeOAuthConnecting: Bool = false
-
     var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
-    }
-
-    var connectedIntegrationCount: Int {
-        [googleCalendarConnected, appleCalendarConnected, gmailConnected]
-            .filter { $0 }.count
     }
 
     init() {
@@ -909,6 +711,10 @@ class SettingsViewModel: ObservableObject {
         googleCalendarConnected = OAuthService.shared.isSignedInWithGoogle
         gmailConnected = OAuthService.shared.isSignedInWithGoogle
 
+        // Check Apple Calendar: persisted disconnect flag + actual OS authorization
+        let intentionallyDisconnected = UserDefaults.standard.bool(forKey: "apple_calendar_disconnected")
+        appleCalendarConnected = !intentionallyDisconnected && AppleCalendarService.shared.isAuthorized
+
         // Load preferences
         if let savedCalendar = UserDefaults.standard.string(forKey: "default_calendar"),
            let calType = CalendarType(rawValue: savedCalendar) {
@@ -917,9 +723,24 @@ class SettingsViewModel: ObservableObject {
         launchAtLogin = UserDefaults.standard.bool(forKey: "launch_at_login")
         showNotifications = UserDefaults.standard.object(forKey: "show_notifications") as? Bool ?? true
 
+        // Load menu bar icon preference
+        if let savedIcon = UserDefaults.standard.string(forKey: "menu_bar_icon"),
+           let icon = MenuBarIconOption(rawValue: savedIcon) {
+            selectedMenuBarIcon = icon
+        }
+
+        // Load swipe action preferences
+        if let savedRight = UserDefaults.standard.string(forKey: "swipe_right_action"),
+           let action = EmailSwipeAction(rawValue: savedRight) {
+            swipeRightAction = action
+        }
+        if let savedLeft = UserDefaults.standard.string(forKey: "swipe_left_action"),
+           let action = EmailSwipeAction(rawValue: savedLeft) {
+            swipeLeftAction = action
+        }
+
         // Load AI provider settings
         selectedAIProvider = AIService.shared.currentProvider
-        claudeUseOAuth = ClaudeOAuthService.shared.isSignedIn
     }
 
     // MARK: - AI Key Management
@@ -942,52 +763,37 @@ class SettingsViewModel: ObservableObject {
         }
     }
 
-    func signInWithClaudeOAuth() {
-        isClaudeOAuthConnecting = true
-        Task {
-            do {
-                try await ClaudeOAuthService.shared.signIn()
-                await MainActor.run {
-                    claudeUseOAuth = true
-                    isClaudeOAuthConnecting = false
-                    objectWillChange.send()
-                }
-            } catch {
-                await MainActor.run {
-                    isClaudeOAuthConnecting = false
-                }
-                print("Claude OAuth error: \(error)")
-            }
-        }
-    }
-
-    func signOutClaudeOAuth() {
-        ClaudeOAuthService.shared.signOut()
-        claudeUseOAuth = false
-        objectWillChange.send()
-    }
-
     func signInWithGoogle() {
+        isSigningIn = true
         Task {
             do {
                 try await OAuthService.shared.signInWithGoogle()
                 await MainActor.run {
+                    isSigningIn = false
                     loadSettings()
                 }
             } catch {
+                await MainActor.run {
+                    isSigningIn = false
+                }
                 print("Google sign in error: \(error)")
             }
         }
     }
 
     func signInWithApple() {
+        isSigningIn = true
         Task {
             do {
                 try await OAuthService.shared.signInWithApple()
                 await MainActor.run {
+                    isSigningIn = false
                     loadSettings()
                 }
             } catch {
+                await MainActor.run {
+                    isSigningIn = false
+                }
                 print("Apple sign in error: \(error)")
             }
         }
@@ -1028,6 +834,7 @@ class SettingsViewModel: ObservableObject {
     }
 
     func connectAppleCalendar() {
+        UserDefaults.standard.set(false, forKey: "apple_calendar_disconnected")
         AppleCalendarService.shared.requestAccess { [weak self] granted in
             DispatchQueue.main.async {
                 self?.appleCalendarConnected = granted
@@ -1036,6 +843,7 @@ class SettingsViewModel: ObservableObject {
     }
 
     func disconnectAppleCalendar() {
+        UserDefaults.standard.set(true, forKey: "apple_calendar_disconnected")
         appleCalendarConnected = false
     }
 
@@ -1092,5 +900,5 @@ enum CalendarType: String, CaseIterable {
 
 #Preview {
     SettingsView()
-        .frame(width: 400, height: 500)
+        .frame(width: 400, height: 600)
 }
