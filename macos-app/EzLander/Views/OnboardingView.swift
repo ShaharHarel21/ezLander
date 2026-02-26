@@ -42,9 +42,9 @@ struct OnboardingView: View {
                         .frame(width: index == currentStep ? 11 : 8,
                                height: index == currentStep ? 11 : 8)
                         .overlay(
-                            index == currentStep ?
-                                AnyView(Circle().strokeBorder(Color.warmPrimary.opacity(0.50), lineWidth: 0.75)) :
-                                AnyView(EmptyView())
+                            Circle()
+                                .strokeBorder(Color.warmPrimary.opacity(0.50), lineWidth: 0.75)
+                                .opacity(index == currentStep ? 1 : 0)
                         )
                         .shadow(color: index <= currentStep ? Color.warmPrimary.opacity(0.40) : .clear, radius: 5)
                         .animation(.spring(response: 0.30, dampingFraction: 0.55), value: currentStep)
@@ -141,6 +141,7 @@ struct OnboardingView: View {
                         RoundedRectangle(cornerRadius: 12)
                             .fill(.ultraThinMaterial)
                             .overlay(RoundedRectangle(cornerRadius: 12).fill(Color.warmSoft.opacity(0.06)))
+                            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.secondary.opacity(0.2), lineWidth: 0.75))
                     )
                     .buttonStyle(.plain)
                     .foregroundColor(.secondary)

@@ -15,14 +15,14 @@ struct MainPopover: View {
             headerView
 
             Rectangle()
-                .fill(Color.white.opacity(0.10))
+                .fill(Color.glassSeparator)
                 .frame(height: 0.5)
 
             // Content
             contentView
 
             Rectangle()
-                .fill(Color.white.opacity(0.10))
+                .fill(Color.glassSeparator)
                 .frame(height: 0.5)
 
             // Tab bar
@@ -60,6 +60,8 @@ struct MainPopover: View {
                     Text("Hi, \(viewModel.userName)!")
                         .font(.caption)
                         .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
             }
 
@@ -68,6 +70,8 @@ struct MainPopover: View {
             Text(aiService.currentProvider.displayName)
                 .font(.system(size: 11))
                 .foregroundColor(.secondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
                 .padding(.trailing, 6)
 
             if viewModel.isSubscribed {
@@ -92,7 +96,13 @@ struct MainPopover: View {
                     .foregroundColor(selectedTab == .settings ? .warmPrimary : .secondary)
             }
             .buttonStyle(.plain)
-            .background(Circle().fill(Color.warmPrimary.opacity(0.0)))
+            .contentShape(Circle())
+            .onHover { isHovered in }
+            .background(
+                Circle()
+                    .fill(Color.glassHover)
+                    .opacity(selectedTab == .settings ? 1 : 0)
+            )
         }
         .padding()
         .background(

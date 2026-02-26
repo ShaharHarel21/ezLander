@@ -62,6 +62,7 @@ extension Color {
     static let glassBorder       = Color.white.opacity(0.10)
     static let glassHover        = Color.warmPrimary.opacity(0.06)
     static let glassPressed      = Color.warmPrimary.opacity(0.14)
+    static let glassSeparator    = Color.primary.opacity(0.10)
 }
 
 // MARK: - Glass Infrastructure
@@ -165,17 +166,22 @@ struct GlassCard: ViewModifier {
 
 struct ShimmerModifier: ViewModifier {
     @State private var phase: CGFloat = -1
+    @Environment(\.accessibilityReduceMotion) var reduceMotion
+
     func body(content: Content) -> some View {
         content.overlay(
             LinearGradient(
                 stops: [
-                    .init(color: .clear, location: phase - 0.3),
-                    .init(color: .white.opacity(0.18), location: phase),
-                    .init(color: .clear, location: phase + 0.3)
+                    .init(color: .clear, location: max(0, phase - 0.3)),
+                    .init(color: .white.opacity(0.18), location: max(0, min(1, phase))),
+                    .init(color: .clear, location: min(1, phase + 0.3))
                 ],
                 startPoint: .topLeading, endPoint: .bottomTrailing
             )
-            .onAppear { withAnimation(.linear(duration: 1.4).repeatForever(autoreverses: false)) { phase = 2 } }
+            .onAppear {
+                guard !reduceMotion else { return }
+                withAnimation(.linear(duration: 1.4).repeatForever(autoreverses: false)) { phase = 2 }
+            }
         )
     }
 }
@@ -203,6 +209,8 @@ extension View {
 
 // MARK: - Warm Gradient Button Style
 struct WarmGradientButtonStyle: ButtonStyle {
+    @State private var isHovered = false
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .padding(.horizontal, 16)
@@ -222,10 +230,13 @@ struct WarmGradientButtonStyle: ButtonStyle {
                 }
             )
             .foregroundColor(.white)
-            .cornerRadius(12)
-            .shadow(color: Color.warmPrimary.opacity(0.28), radius: 10, x: 0, y: 3)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .shadow(color: Color.warmPrimary.opacity(isHovered ? 0.40 : 0.28), radius: isHovered ? 14 : 10, x: 0, y: 3)
+            .brightness(isHovered ? 0.05 : 0)
             .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
             .animation(.spring(response: 0.2, dampingFraction: 0.5), value: configuration.isPressed)
+            .animation(.easeInOut(duration: 0.2), value: isHovered)
+            .onHover { hovering in isHovered = hovering }
     }
 }
 

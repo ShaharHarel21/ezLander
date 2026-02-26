@@ -49,6 +49,7 @@ function FAQItem({ question, answer, isOpen, onClick }: {
       <button
         onClick={onClick}
         className="w-full py-6 flex items-center justify-between text-left"
+        aria-expanded={isOpen}
       >
         <span className="font-medium text-lg">{question}</span>
         <svg

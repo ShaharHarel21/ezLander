@@ -1,6 +1,11 @@
-import Link from 'next/link'
+import type { Metadata } from 'next'
 import Navbar from '@/components/Navbar'
 import Footer from '@/components/Footer'
+
+export const metadata: Metadata = {
+  title: 'Download ezLander for macOS',
+  description: 'Download ezLander, the AI-powered menu bar assistant for macOS. Free 7-day trial, no credit card required.',
+}
 
 const systemRequirements = [
   'macOS 13.0 (Ventura) or later',
@@ -195,12 +200,12 @@ export default function DownloadPage() {
             </p>
             <p className="text-gray-600 dark:text-gray-400">
               Need help?{' '}
-              <Link
+              <a
                 href="mailto:support@ezlander.app"
                 className="text-primary-600 dark:text-primary-400 hover:underline"
               >
                 Contact support
-              </Link>
+              </a>
             </p>
           </div>
         </div>

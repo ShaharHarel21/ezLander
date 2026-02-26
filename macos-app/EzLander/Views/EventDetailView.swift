@@ -40,6 +40,8 @@ struct EventDetailView: View {
                             Text(event.title)
                                 .font(.title3)
                                 .fontWeight(.semibold)
+                                .lineLimit(2)
+                                .truncationMode(.tail)
 
                             if let calName = event.calendarName {
                                 Text(calName)
@@ -79,8 +81,13 @@ struct EventDetailView: View {
                                 .font(.subheadline)
                                 .padding(10)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(Color(NSColor.controlBackgroundColor))
-                                .cornerRadius(8)
+                                .background(
+                                    ZStack {
+                                        RoundedRectangle(cornerRadius: 8).fill(.ultraThinMaterial)
+                                        RoundedRectangle(cornerRadius: 8).fill(Color.warmSoft.opacity(0.06))
+                                    }
+                                )
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
                         }
                     }
 
@@ -102,7 +109,7 @@ struct EventDetailView: View {
                 .padding()
             }
         }
-        .frame(width: 350, height: 420)
+        .frame(minWidth: 350, maxWidth: 350, minHeight: 350, maxHeight: 500)
     }
 
     // MARK: - Calendar Bar Color
@@ -158,9 +165,16 @@ struct EventDetailView: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
-            .background(Color.warmPrimary)
+            .background(
+                LinearGradient(
+                    colors: [Color.warmPrimary, Color.warmAccent],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
             .foregroundColor(.white)
-            .cornerRadius(8)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .shadow(color: Color.warmPrimary.opacity(0.25), radius: 8, x: 0, y: 2)
         }
         .buttonStyle(.plain)
     }
@@ -178,6 +192,8 @@ struct EventDetailView: View {
                     .foregroundColor(.secondary)
                 Text(value)
                     .font(.subheadline)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
             }
         }
     }
