@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ChatView: View {
-    @StateObject private var viewModel = ChatViewModel.shared
+    @ObservedObject private var viewModel = ChatViewModel.shared
     @State private var inputText: String = ""
     @FocusState private var isInputFocused: Bool
 
@@ -59,7 +59,7 @@ struct ChatView: View {
                     }
                     .padding()
                 }
-                .onChange(of: viewModel.messages.count) { _ in
+                .onChange(of: viewModel.messages.count) { _, _ in
                     if let lastMessage = viewModel.messages.last {
                         withAnimation {
                             proxy.scrollTo(lastMessage.id, anchor: .bottom)

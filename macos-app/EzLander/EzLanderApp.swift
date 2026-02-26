@@ -14,6 +14,7 @@ struct EzLanderApp: App {
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     var menuBarController: MenuBarController?
+    private var onboardingWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Show dock icon alongside menu bar
@@ -21,6 +22,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Initialize menu bar controller
         menuBarController = MenuBarController()
+
+        // Show onboarding for new users
+        if !UserDefaults.standard.bool(forKey: "onboardingComplete") {
+            showOnboarding()
+        }
 
         // Register for URL events
         NSAppleEventManager.shared().setEventHandler(
@@ -39,6 +45,30 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         // Cleanup
+    }
+
+    private func showOnboarding() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 400, height: 500),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.center()
+        window.title = "Welcome to ezLander"
+        window.isReleasedWhenClosed = false
+
+        let onboardingView = OnboardingView(isOnboardingComplete: Binding(
+            get: { UserDefaults.standard.bool(forKey: "onboardingComplete") },
+            set: { complete in
+                if complete {
+                    window.close()
+                }
+            }
+        ))
+        window.contentViewController = NSHostingController(rootView: onboardingView)
+        window.makeKeyAndOrderFront(nil)
+        onboardingWindow = window
     }
 
     @objc func handleURLEvent(_ event: NSAppleEventDescriptor, withReplyEvent replyEvent: NSAppleEventDescriptor) {

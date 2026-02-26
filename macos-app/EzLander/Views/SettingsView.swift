@@ -2,7 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @StateObject private var viewModel = SettingsViewModel()
-    @StateObject private var updateService = UpdateService.shared
+    @ObservedObject private var updateService = UpdateService.shared
     @State private var selectedSettingsTab: SettingsTab = .account
 
     enum SettingsTab: String, CaseIterable {

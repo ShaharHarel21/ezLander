@@ -132,6 +132,7 @@ class GoogleCalendarService {
                         organizer: organizerAttendee,
                         calendarColor: calendar.backgroundColor,
                         calendarName: calendar.summary,
+                        googleCalendarId: calendar.id,
                         conferenceData: confData,
                         htmlLink: googleEvent.htmlLink
                     )
@@ -262,7 +263,9 @@ class GoogleCalendarService {
 
         let accessToken = try await oauthService.getValidAccessToken()
 
-        let url = URL(string: "\(baseURL)/calendars/primary/events/\(event.id)")!
+        let calendarId = (event.googleCalendarId ?? "primary")
+            .addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? "primary"
+        let url = URL(string: "\(baseURL)/calendars/\(calendarId)/events/\(event.id)")!
 
         var request = URLRequest(url: url)
         request.httpMethod = "PUT"
@@ -310,13 +313,19 @@ class GoogleCalendarService {
 
     // MARK: - Delete Event
     func deleteEvent(id: String) async throws {
+        try await deleteEvent(id: id, calendarId: nil)
+    }
+
+    func deleteEvent(id: String, calendarId: String?) async throws {
         #if DEBUG
         NSLog("GoogleCalendarService: Deleting event \(id)")
         #endif
 
         let accessToken = try await oauthService.getValidAccessToken()
 
-        let url = URL(string: "\(baseURL)/calendars/primary/events/\(id)")!
+        let resolvedCalendarId = (calendarId ?? "primary")
+            .addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? "primary"
+        let url = URL(string: "\(baseURL)/calendars/\(resolvedCalendarId)/events/\(id)")!
 
         var request = URLRequest(url: url)
         request.httpMethod = "DELETE"

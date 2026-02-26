@@ -56,14 +56,25 @@ class AppleCalendarService {
         let events = eventStore.events(matching: predicate)
 
         return events.map { ekEvent in
-            CalendarEvent(
+            var colorHex: String? = nil
+            if let cgColor = ekEvent.calendar?.cgColor,
+               let components = cgColor.components, components.count >= 3 {
+                let r = Int(components[0] * 255)
+                let g = Int(components[1] * 255)
+                let b = Int(components[2] * 255)
+                colorHex = String(format: "%02X%02X%02X", r, g, b)
+            }
+            return CalendarEvent(
                 id: ekEvent.eventIdentifier,
                 title: ekEvent.title ?? "Untitled",
                 startDate: ekEvent.startDate,
                 endDate: ekEvent.endDate,
                 calendarType: .apple,
                 description: ekEvent.notes,
-                location: ekEvent.location
+                location: ekEvent.location,
+                isAllDay: ekEvent.isAllDay,
+                calendarColor: colorHex,
+                calendarName: ekEvent.calendar?.title
             )
         }
     }

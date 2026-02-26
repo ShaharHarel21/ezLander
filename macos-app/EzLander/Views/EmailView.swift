@@ -44,7 +44,7 @@ enum EmailSwipeAction: String, CaseIterable, Identifiable {
 }
 
 struct EmailView: View {
-    @StateObject private var viewModel = EmailViewModel.shared
+    @ObservedObject private var viewModel = EmailViewModel.shared
     @State private var selectedEmail: Email?
     @State private var openedEmail: Email?
     @State private var showingCompose = false
@@ -133,7 +133,7 @@ struct EmailView: View {
                 emailListView
             }
         }
-        .onChange(of: viewModel.error) { newError in
+        .onChange(of: viewModel.error) { _, newError in
             if newError != nil {
                 showingError = true
             }
@@ -1136,7 +1136,7 @@ struct SenderAvatarView: View {
         .onAppear {
             loader.load(email: email)
         }
-        .onChange(of: email) { newEmail in
+        .onChange(of: email) { _, newEmail in
             loader.load(email: newEmail)
         }
     }
@@ -1497,14 +1497,23 @@ class EmailViewModel: ObservableObject {
 
     func onAppear() {
         checkConnection()
-        if isConnected && !hasLoadedOnce {
+        if isConnected && (!hasLoadedOnce || emails.isEmpty) {
             loadEmails()
-            loadLabels()
+            if browsableLabels.isEmpty {
+                loadLabels()
+            }
         }
     }
 
     func checkConnection() {
-        isConnected = OAuthService.shared.isSignedInWithGoogle
+        let nowConnected = OAuthService.shared.isSignedInWithGoogle
+        if !nowConnected && isConnected {
+            hasLoadedOnce = false
+            emails = []
+            browsableLabels = []
+            availableLabels = []
+        }
+        isConnected = nowConnected
     }
 
     func connect() {
@@ -1591,6 +1600,7 @@ class EmailViewModel: ObservableObject {
         checkConnection()
         if isConnected {
             loadEmails()
+            loadLabels()
         }
     }
 

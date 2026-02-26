@@ -150,8 +150,9 @@ class OAuthService: NSObject {
             bodyParams["code_verifier"] = verifier
         }
 
-        let body = bodyParams.map { "\($0.key)=\($0.value)" }.joined(separator: "&")
-        request.httpBody = body.data(using: .utf8)
+        var components = URLComponents()
+        components.queryItems = bodyParams.map { URLQueryItem(name: $0.key, value: $0.value) }
+        request.httpBody = components.percentEncodedQuery?.data(using: .utf8)
 
         let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
 
@@ -192,13 +193,13 @@ class OAuthService: NSObject {
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
 
-        let body = [
-            "client_id": googleClientId,
-            "refresh_token": refreshToken,
-            "grant_type": "refresh_token"
-        ].map { "\($0.key)=\($0.value)" }.joined(separator: "&")
-
-        request.httpBody = body.data(using: .utf8)
+        var components = URLComponents()
+        components.queryItems = [
+            URLQueryItem(name: "client_id", value: googleClientId),
+            URLQueryItem(name: "refresh_token", value: refreshToken),
+            URLQueryItem(name: "grant_type", value: "refresh_token")
+        ]
+        request.httpBody = components.percentEncodedQuery?.data(using: .utf8)
 
         let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
 
@@ -277,8 +278,15 @@ class OAuthService: NSObject {
         }
     }
 
+    // MARK: - Cancel Pending Auth
+    func cancelPendingAuth() {
+        authContinuation?.resume(throwing: OAuthError.unknownError)
+        authContinuation = nil
+    }
+
     // MARK: - Sign Out
     func signOut() {
+        cancelPendingAuth()
         // Clear Google tokens
         KeychainService.shared.delete(key: "google_access_token")
         KeychainService.shared.delete(key: "google_refresh_token")

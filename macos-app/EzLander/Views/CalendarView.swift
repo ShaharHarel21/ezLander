@@ -2,7 +2,7 @@ import SwiftUI
 import EventKit
 
 struct CalendarView: View {
-    @StateObject private var viewModel = CalendarViewModel.shared
+    @ObservedObject private var viewModel = CalendarViewModel.shared
     @State private var showingAddEvent = false
     @State private var selectedEvent: CalendarEvent?
     @State private var editingEvent: CalendarEvent?
@@ -314,7 +314,7 @@ struct CalendarView: View {
                 .onAppear {
                     scrollToRelevantHour(proxy: proxy)
                 }
-                .onChange(of: viewModel.selectedDate) { _ in
+                .onChange(of: viewModel.selectedDate) { _, _ in
                     scrollToRelevantHour(proxy: proxy)
                 }
             }
@@ -977,7 +977,7 @@ class CalendarViewModel: ObservableObject {
 
     func onAppear() {
         checkConnection()
-        if isConnected && !hasLoadedOnce {
+        if isConnected && (!hasLoadedOnce || events.isEmpty) {
             loadEvents()
         }
     }
@@ -1167,6 +1167,7 @@ class CalendarViewModel: ObservableObject {
     }
 
     // MARK: - Data Operations
+    @MainActor
     func loadEvents() {
         guard isConnected else {
             NSLog("CalendarViewModel: Not connected, skipping load")
@@ -1253,7 +1254,7 @@ class CalendarViewModel: ObservableObject {
     func deleteEvent(_ event: CalendarEvent) {
         Task {
             do {
-                try await GoogleCalendarService.shared.deleteEvent(id: event.id)
+                try await GoogleCalendarService.shared.deleteEvent(id: event.id, calendarId: event.googleCalendarId)
                 await MainActor.run {
                     loadEvents()
                 }

@@ -60,8 +60,11 @@ enum EmailParser {
 
         let formats = [
             "EEE, d MMM yyyy HH:mm:ss Z",
+            "EEE, dd MMM yyyy HH:mm:ss Z",
             "d MMM yyyy HH:mm:ss Z",
+            "dd MMM yyyy HH:mm:ss Z",
             "EEE, d MMM yyyy HH:mm:ss z",
+            "EEE, d MMM yyyy HH:mm:ss +0000",
             "yyyy-MM-dd'T'HH:mm:ssZ",
         ]
 
