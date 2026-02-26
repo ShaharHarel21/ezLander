@@ -314,7 +314,7 @@ struct CalendarView: View {
                 .onAppear {
                     scrollToRelevantHour(proxy: proxy)
                 }
-                .onChange(of: viewModel.selectedDate) { _, _ in
+                .onChange(of: viewModel.selectedDate) { _ in
                     scrollToRelevantHour(proxy: proxy)
                 }
             }
@@ -939,6 +939,7 @@ enum CalendarViewMode: Equatable {
     case day
 }
 
+@MainActor
 class CalendarViewModel: ObservableObject {
     static let shared = CalendarViewModel()
 
@@ -1167,7 +1168,6 @@ class CalendarViewModel: ObservableObject {
     }
 
     // MARK: - Data Operations
-    @MainActor
     func loadEvents() {
         guard isConnected else {
             NSLog("CalendarViewModel: Not connected, skipping load")

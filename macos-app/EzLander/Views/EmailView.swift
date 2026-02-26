@@ -133,7 +133,7 @@ struct EmailView: View {
                 emailListView
             }
         }
-        .onChange(of: viewModel.error) { _, newError in
+        .onChange(of: viewModel.error) { newError in
             if newError != nil {
                 showingError = true
             }
@@ -1136,7 +1136,7 @@ struct SenderAvatarView: View {
         .onAppear {
             loader.load(email: email)
         }
-        .onChange(of: email) { _, newEmail in
+        .onChange(of: email) { newEmail in
             loader.load(email: newEmail)
         }
     }
