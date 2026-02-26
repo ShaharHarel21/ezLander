@@ -60,9 +60,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let onboardingView = OnboardingView(isOnboardingComplete: Binding(
             get: { UserDefaults.standard.bool(forKey: "onboardingComplete") },
-            set: { complete in
+            set: { [weak self] complete in
                 if complete {
-                    window.close()
+                    self?.onboardingWindow?.close()
+                    self?.onboardingWindow = nil
                 }
             }
         ))

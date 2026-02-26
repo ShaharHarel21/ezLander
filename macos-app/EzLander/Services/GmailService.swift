@@ -8,6 +8,22 @@ class GmailService {
 
     private init() {}
 
+    /// Execute an authenticated request, automatically refreshing the token on 401 and retrying once.
+    private func performAuthenticatedRequest(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        var req = request
+        let (data, httpResponse) = try await APIRetryHelper.performRequest(req)
+
+        guard httpResponse.statusCode == 401 else {
+            return (data, httpResponse)
+        }
+
+        // Token expired mid-session — refresh and retry once
+        print("GmailService: Got 401, refreshing token and retrying...")
+        let newToken = try await oauthService.refreshAccessToken()
+        req.setValue("Bearer \(newToken)", forHTTPHeaderField: "Authorization")
+        return try await APIRetryHelper.performRequest(req, maxRetries: 0)
+    }
+
     // MARK: - Authorization
     func authorize() async throws {
         try await oauthService.signInWithGoogle()
@@ -42,7 +58,7 @@ class GmailService {
         let body: [String: Any] = ["raw": encodedMessage]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (responseData, httpResponse) = try await APIRetryHelper.performRequest(request)
+        let (responseData, httpResponse) = try await performAuthenticatedRequest(request)
 
         guard httpResponse.statusCode == 200 else {
             throw GmailError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: responseData))
@@ -71,7 +87,7 @@ class GmailService {
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
+        let (data, httpResponse) = try await performAuthenticatedRequest(request)
 
         guard httpResponse.statusCode == 200 else {
             throw GmailError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: data))
@@ -93,7 +109,7 @@ class GmailService {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
-        let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
+        let (data, httpResponse) = try await performAuthenticatedRequest(request)
 
         guard httpResponse.statusCode == 200 else {
             throw GmailError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: data))
@@ -134,7 +150,7 @@ class GmailService {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
-        let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
+        let (data, httpResponse) = try await performAuthenticatedRequest(request)
 
         guard httpResponse.statusCode == 200 else {
             throw GmailError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: data))
@@ -160,7 +176,7 @@ class GmailService {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
-        let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
+        let (data, httpResponse) = try await performAuthenticatedRequest(request)
 
         guard httpResponse.statusCode == 200 else {
             throw GmailError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: data))
@@ -201,7 +217,7 @@ class GmailService {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
-        let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
+        let (data, httpResponse) = try await performAuthenticatedRequest(request)
 
         guard httpResponse.statusCode == 200 else {
             throw GmailError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: data))
@@ -222,7 +238,7 @@ class GmailService {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
-        let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
+        let (data, httpResponse) = try await performAuthenticatedRequest(request)
 
         guard httpResponse.statusCode == 200 else {
             throw GmailError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: data))
@@ -250,7 +266,7 @@ class GmailService {
         request.httpMethod = "POST"
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
-        let (responseData, httpResponse) = try await APIRetryHelper.performRequest(request)
+        let (responseData, httpResponse) = try await performAuthenticatedRequest(request)
 
         guard httpResponse.statusCode == 200 else {
             throw GmailError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: responseData))
@@ -271,7 +287,7 @@ class GmailService {
         let body: [String: Any] = ["removeLabelIds": ["INBOX"]]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (responseData, httpResponse) = try await APIRetryHelper.performRequest(request)
+        let (responseData, httpResponse) = try await performAuthenticatedRequest(request)
 
         guard httpResponse.statusCode == 200 else {
             throw GmailError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: responseData))
@@ -292,7 +308,7 @@ class GmailService {
         let body: [String: Any] = ["removeLabelIds": ["UNREAD"]]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (responseData, httpResponse) = try await APIRetryHelper.performRequest(request)
+        let (responseData, httpResponse) = try await performAuthenticatedRequest(request)
 
         guard httpResponse.statusCode == 200 else {
             throw GmailError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: responseData))
@@ -313,7 +329,7 @@ class GmailService {
         let body: [String: Any] = ["addLabelIds": ["UNREAD"]]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (responseData, httpResponse) = try await APIRetryHelper.performRequest(request)
+        let (responseData, httpResponse) = try await performAuthenticatedRequest(request)
 
         guard httpResponse.statusCode == 200 else {
             throw GmailError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: responseData))
@@ -339,7 +355,7 @@ class GmailService {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
-        let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
+        let (data, httpResponse) = try await performAuthenticatedRequest(request)
 
         guard httpResponse.statusCode == 200 else {
             throw GmailError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: data))
@@ -380,7 +396,7 @@ class GmailService {
         }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (responseData, httpResponse) = try await APIRetryHelper.performRequest(request)
+        let (responseData, httpResponse) = try await performAuthenticatedRequest(request)
 
         guard httpResponse.statusCode == 200 else {
             throw GmailError.apiErrorWithMessage(statusCode: httpResponse.statusCode, message: APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: responseData))
@@ -430,7 +446,7 @@ class GmailService {
         }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        var (data, httpResponse) = try await APIRetryHelper.performRequest(request)
+        var (data, httpResponse) = try await performAuthenticatedRequest(request)
 
         // If 404 with threadId, retry without it (thread may have been deleted)
         if httpResponse.statusCode == 404 && hasThreadId {
@@ -439,7 +455,7 @@ class GmailService {
             #endif
             body.removeValue(forKey: "threadId")
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
-            (data, httpResponse) = try await APIRetryHelper.performRequest(request)
+            (data, httpResponse) = try await performAuthenticatedRequest(request)
         }
 
         if httpResponse.statusCode != 200 {
@@ -461,7 +477,7 @@ class GmailService {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
-        let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
+        let (data, httpResponse) = try await performAuthenticatedRequest(request)
 
         guard httpResponse.statusCode == 200 else {
             return nil

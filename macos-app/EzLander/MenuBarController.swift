@@ -41,6 +41,10 @@ class MenuBarController: NSObject {
         setupKeyboardShortcuts()
     }
 
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 

@@ -158,10 +158,7 @@ struct MainPopover: View {
             .padding(.vertical, 6)
             .background {
                 if selectedTab == tab {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(.ultraThinMaterial)
-                        .overlay(RoundedRectangle(cornerRadius: 12).fill(Color.warmPrimary.opacity(0.16)))
-                        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.warmPrimary.opacity(0.28), lineWidth: 0.75))
+                    GlassPanelBackground(cornerRadius: 12, tint: Color.warmPrimary.opacity(0.12))
                         .shadow(color: Color.warmPrimary.opacity(0.20), radius: 8)
                         .animation(.spring(response: 0.35, dampingFraction: 0.72), value: selectedTab)
                 }
@@ -346,23 +343,9 @@ class CalendarQuickViewModel: ObservableObject {
     }
 
     private func logToFile(_ message: String) {
-        // Use Documents folder which is accessible in sandbox
-        guard let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
-        let logPath = documentsPath.appendingPathComponent("ezlander_calendar.log")
-
-        let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-        let logMessage = "[\(timestamp)] \(message)\n"
-        if let data = logMessage.data(using: .utf8) {
-            if FileManager.default.fileExists(atPath: logPath.path) {
-                if let fileHandle = try? FileHandle(forWritingTo: logPath) {
-                    fileHandle.seekToEndOfFile()
-                    fileHandle.write(data)
-                    try? fileHandle.close()
-                }
-            } else {
-                try? data.write(to: logPath)
-            }
-        }
+        #if DEBUG
+        print("CalendarQuick: \(message)")
+        #endif
     }
 
     func refresh() {

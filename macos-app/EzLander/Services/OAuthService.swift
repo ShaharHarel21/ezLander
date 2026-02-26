@@ -22,6 +22,10 @@ class OAuthService: NSObject {
     // Apple Sign In
     private var appleSignInContinuation: CheckedContinuation<Void, Error>?
 
+    // OAuth timeout — cancel abandoned sign-in flows to prevent Task leaks
+    private var authTimeoutTask: Task<Void, Never>?
+    private static let authTimeoutSeconds: UInt64 = 300 // 5 minutes
+
     // Token refresh deduplication — access synchronized via refreshLock
     private let refreshLock = NSLock()
     private var isRefreshing = false
@@ -95,14 +99,29 @@ class OAuthService: NSObject {
 
         print("OAuthService: Opening Google OAuth URL in browser...")
 
+        // Cancel any previously abandoned auth flow before starting a new one
+        cancelPendingAuth()
+
         let callbackURL = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<URL, Error>) in
             self.authContinuation = continuation
+
+            // Set a timeout to prevent leaked continuations if user abandons the flow
+            self.authTimeoutTask = Task { [weak self] in
+                try? await Task.sleep(nanoseconds: Self.authTimeoutSeconds * 1_000_000_000)
+                guard !Task.isCancelled else { return }
+                print("OAuthService: OAuth flow timed out after \(Self.authTimeoutSeconds)s")
+                self?.cancelPendingAuth()
+            }
 
             // Open in default browser
             DispatchQueue.main.async {
                 NSWorkspace.shared.open(authURL)
             }
         }
+
+        // Auth succeeded — cancel the timeout
+        authTimeoutTask?.cancel()
+        authTimeoutTask = nil
 
         // Extract authorization code
         guard let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false),
@@ -184,6 +203,7 @@ class OAuthService: NSObject {
     // MARK: - Refresh Token
     func refreshAccessToken() async throws -> String {
         guard let refreshToken = KeychainService.shared.get(key: "google_refresh_token") else {
+            print("OAuthService: No refresh token found in keychain")
             throw OAuthError.noRefreshToken
         }
 
@@ -204,6 +224,27 @@ class OAuthService: NSObject {
         let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
 
         guard httpResponse.statusCode == 200 else {
+            // Parse Google's error response for diagnostics
+            var googleError: String?
+            var googleErrorDesc: String?
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                googleError = json["error"] as? String
+                googleErrorDesc = json["error_description"] as? String
+            }
+            print("OAuthService: Token refresh failed — status \(httpResponse.statusCode), error: \(googleError ?? "unknown"), description: \(googleErrorDesc ?? "none")")
+
+            // If the refresh token itself is invalid/revoked, clear it so the user
+            // is prompted to re-authenticate instead of hitting the same error forever
+            if httpResponse.statusCode == 400 || httpResponse.statusCode == 401 {
+                if googleError == "invalid_grant" {
+                    print("OAuthService: Refresh token revoked or expired — clearing stored tokens")
+                    KeychainService.shared.delete(key: "google_access_token")
+                    KeychainService.shared.delete(key: "google_refresh_token")
+                    UserDefaults.standard.removeObject(forKey: "google_token_expiry")
+                    throw OAuthError.refreshTokenRevoked
+                }
+            }
+
             throw OAuthError.tokenRefreshFailed
         }
 
@@ -211,6 +252,7 @@ class OAuthService: NSObject {
         KeychainService.shared.save(key: "google_access_token", value: tokens.accessToken)
         UserDefaults.standard.set(Date().timeIntervalSince1970 + Double(tokens.expiresIn), forKey: "google_token_expiry")
 
+        print("OAuthService: Token refreshed successfully, expires in \(tokens.expiresIn)s")
         return tokens.accessToken
     }
 
@@ -220,26 +262,17 @@ class OAuthService: NSObject {
             throw OAuthError.notSignedIn
         }
 
-        // Check locally stored expiry first to avoid unnecessary network call
+        // Check locally stored expiry — use a 5-minute safety margin to avoid
+        // using a token that's about to expire mid-request
         let expiryTime = UserDefaults.standard.double(forKey: "google_token_expiry")
-        if expiryTime > 0 && Date().timeIntervalSince1970 < expiryTime - 60 {
-            // Token still valid (with 60s safety margin)
+        if expiryTime > 0 && Date().timeIntervalSince1970 < expiryTime - 300 {
+            // Token still valid (with 5-minute safety margin)
             return accessToken
         }
 
-        // Token may be expired — verify with Google's tokeninfo endpoint
-        guard let tokenInfoURL = URL(string: "https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=\(accessToken)") else {
-            // URL construction failed (e.g. bad token chars) — treat as expired and refresh
-            return try await refreshAccessToken()
-        }
-        let tokenInfoRequest = URLRequest(url: tokenInfoURL)
-        let (_, response) = try await URLSession.shared.data(for: tokenInfoRequest)
+        print("OAuthService: Access token expired or expiring soon, refreshing...")
 
-        if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
-            return accessToken
-        }
-
-        // Token expired - refresh it, but deduplicate concurrent refresh calls
+        // Token expired — refresh it, but deduplicate concurrent refresh calls
         let shouldWait: Bool = refreshLock.withLock {
             if isRefreshing {
                 return true
@@ -249,9 +282,22 @@ class OAuthService: NSObject {
         }
 
         if shouldWait {
-            return try await withCheckedThrowingContinuation { continuation in
+            return try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { continuation in
+                    refreshLock.withLock {
+                        refreshWaiters.append(continuation)
+                    }
+                }
+            } onCancel: { [self] in
+                // Remove this continuation from waiters and resume with cancellation error
                 refreshLock.withLock {
-                    refreshWaiters.append(continuation)
+                    // We can't identify the exact continuation, so drain all waiters
+                    // on cancellation — the active refresh will re-populate for non-cancelled tasks
+                    let waiters = refreshWaiters
+                    refreshWaiters.removeAll()
+                    for waiter in waiters {
+                        waiter.resume(throwing: CancellationError())
+                    }
                 }
             }
         }
@@ -280,6 +326,8 @@ class OAuthService: NSObject {
 
     // MARK: - Cancel Pending Auth
     func cancelPendingAuth() {
+        authTimeoutTask?.cancel()
+        authTimeoutTask = nil
         authContinuation?.resume(throwing: OAuthError.unknownError)
         authContinuation = nil
     }
@@ -342,6 +390,13 @@ class OAuthService: NSObject {
 
     // MARK: - Sign in with Apple
     func signInWithApple() async throws {
+        // Cancel any previously abandoned Apple sign-in flow
+        if appleSignInContinuation != nil {
+            print("OAuthService: Cancelling previous Apple Sign In continuation")
+            appleSignInContinuation?.resume(throwing: OAuthError.unknownError)
+            appleSignInContinuation = nil
+        }
+
         let provider = ASAuthorizationAppleIDProvider()
         let request = provider.createRequest()
         request.requestedScopes = [.fullName, .email]
@@ -465,6 +520,7 @@ enum OAuthError: Error, LocalizedError {
     case noAuthorizationCode
     case tokenExchangeFailed
     case tokenRefreshFailed
+    case refreshTokenRevoked
     case noRefreshToken
     case notSignedIn
     case unknownError
@@ -477,8 +533,10 @@ enum OAuthError: Error, LocalizedError {
             return "Failed to exchange code for tokens"
         case .tokenRefreshFailed:
             return "Failed to refresh access token"
+        case .refreshTokenRevoked:
+            return "Your Google session has expired. Please sign in again in Settings."
         case .noRefreshToken:
-            return "No refresh token available"
+            return "No refresh token available. Please sign in again in Settings."
         case .notSignedIn:
             return "User is not signed in"
         case .unknownError:

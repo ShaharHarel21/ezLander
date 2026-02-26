@@ -163,6 +163,12 @@ class KeyboardShortcutService: ObservableObject {
     private var eventHandlerRef: EventHandlerRef?
 
     private func installEventHandler() {
+        // Remove previously installed handler to prevent leaking Carbon event handlers
+        if let existingHandler = eventHandlerRef {
+            RemoveEventHandler(existingHandler)
+            eventHandlerRef = nil
+        }
+
         var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
 
         let handler: EventHandlerUPP = { _, event, userData -> OSStatus in

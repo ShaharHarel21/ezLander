@@ -339,6 +339,10 @@ struct TypingIndicator: View {
 class ChatViewModel: ObservableObject {
     static let shared = ChatViewModel()
 
+    /// Maximum number of messages to keep in memory. Oldest messages are trimmed
+    /// when this limit is exceeded to prevent unbounded memory growth.
+    private static let maxMessages = 200
+
     @Published var messages: [ChatMessage] = []
     @Published var isLoading: Bool = false
     @Published var pendingAction: AIAction?
@@ -354,6 +358,14 @@ class ChatViewModel: ObservableObject {
             role: .assistant,
             content: "Hi! I'm your AI assistant. I can help you manage your calendar, send emails, and more. What would you like to do?\n\nWhen I want to create events or send emails, I'll show you a preview first so you can confirm."
         ))
+    }
+
+    /// Trim oldest messages when the array exceeds the cap to prevent unbounded memory growth.
+    private func trimMessagesIfNeeded() {
+        if messages.count > Self.maxMessages {
+            let overflow = messages.count - Self.maxMessages
+            messages.removeFirst(overflow)
+        }
     }
 
     func clearConversation() {
@@ -432,6 +444,7 @@ class ChatViewModel: ObservableObject {
                     } else {
                         messages.append(response)
                     }
+                    trimMessagesIfNeeded()
                 }
             } catch {
                 await MainActor.run {
@@ -440,6 +453,7 @@ class ChatViewModel: ObservableObject {
                         role: .assistant,
                         content: "Sorry, I encountered an error: \(error.localizedDescription)"
                     ))
+                    trimMessagesIfNeeded()
                 }
             }
         }

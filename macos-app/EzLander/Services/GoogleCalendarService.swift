@@ -11,6 +11,24 @@ class GoogleCalendarService {
 
     private init() {}
 
+    /// Execute an authenticated request, automatically refreshing the token on 401 and retrying once.
+    private func performAuthenticatedRequest(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        var req = request
+        let (data, httpResponse) = try await APIRetryHelper.performRequest(req)
+
+        guard httpResponse.statusCode == 401 else {
+            return (data, httpResponse)
+        }
+
+        // Token expired mid-session — refresh and retry once
+        #if DEBUG
+        NSLog("GoogleCalendarService: Got 401, refreshing token and retrying...")
+        #endif
+        let newToken = try await oauthService.refreshAccessToken()
+        req.setValue("Bearer \(newToken)", forHTTPHeaderField: "Authorization")
+        return try await APIRetryHelper.performRequest(req, maxRetries: 0)
+    }
+
     // MARK: - Authorization
     func authorize() async throws {
         try await oauthService.signInWithGoogle()
@@ -228,22 +246,7 @@ class GoogleCalendarService {
         }
         #endif
 
-        let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
-
-        // Handle token expiry — refresh and retry once
-        if httpResponse.statusCode == 401 {
-            let newToken = try await oauthService.refreshAccessToken()
-            request.setValue("Bearer \(newToken)", forHTTPHeaderField: "Authorization")
-            let (retryData, retryResponse) = try await APIRetryHelper.performRequest(request, maxRetries: 0)
-            guard retryResponse.statusCode == 200 || retryResponse.statusCode == 201 else {
-                let message = APIRetryHelper.userFriendlyMessage(statusCode: retryResponse.statusCode, data: retryData)
-                throw GoogleCalendarError.apiErrorWithMessage(statusCode: retryResponse.statusCode, message: message)
-            }
-            #if DEBUG
-            NSLog("GoogleCalendarService: Event created successfully (after token refresh)")
-            #endif
-            return
-        }
+        let (data, httpResponse) = try await performAuthenticatedRequest(request)
 
         guard httpResponse.statusCode == 200 || httpResponse.statusCode == 201 else {
             let message = APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: data)
@@ -284,22 +287,7 @@ class GoogleCalendarService {
 
         request.httpBody = try JSONEncoder().encode(googleEvent)
 
-        let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
-
-        // Handle token expiry — refresh and retry once
-        if httpResponse.statusCode == 401 {
-            let newToken = try await oauthService.refreshAccessToken()
-            request.setValue("Bearer \(newToken)", forHTTPHeaderField: "Authorization")
-            let (retryData, retryResponse) = try await APIRetryHelper.performRequest(request, maxRetries: 0)
-            guard retryResponse.statusCode == 200 else {
-                let message = APIRetryHelper.userFriendlyMessage(statusCode: retryResponse.statusCode, data: retryData)
-                throw GoogleCalendarError.apiErrorWithMessage(statusCode: retryResponse.statusCode, message: message)
-            }
-            #if DEBUG
-            NSLog("GoogleCalendarService: Event updated successfully (after token refresh)")
-            #endif
-            return
-        }
+        let (data, httpResponse) = try await performAuthenticatedRequest(request)
 
         guard httpResponse.statusCode == 200 else {
             let message = APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: data)
@@ -331,22 +319,7 @@ class GoogleCalendarService {
         request.httpMethod = "DELETE"
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
-        let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
-
-        // Handle token expiry — refresh and retry once
-        if httpResponse.statusCode == 401 {
-            let newToken = try await oauthService.refreshAccessToken()
-            request.setValue("Bearer \(newToken)", forHTTPHeaderField: "Authorization")
-            let (retryData, retryResponse) = try await APIRetryHelper.performRequest(request, maxRetries: 0)
-            guard retryResponse.statusCode == 204 || retryResponse.statusCode == 200 else {
-                let message = APIRetryHelper.userFriendlyMessage(statusCode: retryResponse.statusCode, data: retryData)
-                throw GoogleCalendarError.apiErrorWithMessage(statusCode: retryResponse.statusCode, message: message)
-            }
-            #if DEBUG
-            NSLog("GoogleCalendarService: Event deleted successfully (after token refresh)")
-            #endif
-            return
-        }
+        let (data, httpResponse) = try await performAuthenticatedRequest(request)
 
         guard httpResponse.statusCode == 204 || httpResponse.statusCode == 200 else {
             let message = APIRetryHelper.userFriendlyMessage(statusCode: httpResponse.statusCode, data: data)
@@ -365,7 +338,7 @@ class GoogleCalendarService {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
-        let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
+        let (data, httpResponse) = try await performAuthenticatedRequest(request)
 
         guard httpResponse.statusCode == 200 else {
             return []
@@ -399,7 +372,7 @@ class GoogleCalendarService {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
-        let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
+        let (data, httpResponse) = try await performAuthenticatedRequest(request)
 
         if httpResponse.statusCode != 200 {
             if let errorString = String(data: data, encoding: .utf8) {
