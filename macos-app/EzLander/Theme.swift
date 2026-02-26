@@ -1,34 +1,34 @@
 import SwiftUI
 
-// MARK: - Blue & Purple Modern Theme (matches website branding)
+// MARK: - Warm & Modern Color Theme
 extension Color {
-    // Primary blue — main interactive elements, buttons, selected states
-    static let warmPrimary = Color(red: 0.047, green: 0.549, blue: 0.902)       // #0C8CE6
+    // Primary coral — main interactive elements, buttons, selected states
+    static let warmPrimary = Color(red: 1.0, green: 0.42, blue: 0.42)       // #FF6B6B
 
-    // Accent purple — secondary highlights, gradients
-    static let warmAccent = Color(red: 0.851, green: 0.275, blue: 0.937)        // #D946EF
+    // Accent amber — secondary highlights, gradients
+    static let warmAccent = Color(red: 1.0, green: 0.66, blue: 0.30)        // #FFA94D
 
-    // Highlight light blue — badges, special elements
-    static let warmHighlight = Color(red: 0.212, green: 0.667, blue: 0.961)     // #36AAF5
+    // Highlight warm yellow — badges, special elements
+    static let warmHighlight = Color(red: 1.0, green: 0.85, blue: 0.24)     // #FFD93D
 
-    // Soft blue tint — subtle backgrounds, hover states
-    static let warmSoft = Color(red: 0.878, green: 0.937, blue: 0.996)          // #E0EFFE
+    // Soft peach — subtle backgrounds, hover states
+    static let warmSoft = Color(red: 1.0, green: 0.91, blue: 0.87)          // #FFE8DE
 
-    // Gradient: blue to purple
+    // Gradient: coral to amber
     static let warmGradient = LinearGradient(
         colors: [warmPrimary, warmAccent],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
 
-    // User message bubble — primary blue
-    static let userBubble = Color(red: 0.047, green: 0.549, blue: 0.902)        // #0C8CE6
+    // User message bubble — warm coral
+    static let userBubble = Color(red: 1.0, green: 0.42, blue: 0.42)        // #FF6B6B
 
     // Event indicator dot color
-    static let eventDot = Color(red: 0.486, green: 0.549, blue: 0.984)          // #7C8CFB
+    static let eventDot = Color(red: 1.0, green: 0.55, blue: 0.36)          // #FF8C5C
 
     // Pro badge gold
-    static let proBadge = Color(red: 1.0, green: 0.76, blue: 0.20)             // #FFC233
+    static let proBadge = Color(red: 1.0, green: 0.76, blue: 0.20)          // #FFC233
 
     // Initialize from hex string (e.g. "#FF6B6B" or "FF6B6B")
     init(hex: String) {
@@ -53,22 +53,179 @@ extension Color {
     }
 }
 
-// MARK: - Gradient Button Style
+// MARK: - Liquid Glass Tokens
+extension Color {
+    static let glassCoralTint    = Color.warmPrimary.opacity(0.08)
+    static let glassAmberTint    = Color.warmAccent.opacity(0.07)
+    static let glassPeachTint    = Color.warmSoft.opacity(0.12)
+    static let glassSpecular     = Color.white.opacity(0.18)
+    static let glassBorder       = Color.white.opacity(0.10)
+    static let glassHover        = Color.warmPrimary.opacity(0.06)
+    static let glassPressed      = Color.warmPrimary.opacity(0.14)
+}
+
+// MARK: - Glass Infrastructure
+
+struct VisualEffectBlur: NSViewRepresentable {
+    var material: NSVisualEffectView.Material = .popover
+    var blendingMode: NSVisualEffectView.BlendingMode = .behindWindow
+
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = material
+        view.blendingMode = blendingMode
+        view.state = .active
+        return view
+    }
+
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
+        nsView.material = material
+        nsView.blendingMode = blendingMode
+    }
+}
+
+struct GlassPanelBackground: View {
+    var cornerRadius: CGFloat = 12
+    var tint: Color = .clear
+    var thickness: GlassThickness = .regular
+    @Environment(\.colorScheme) var colorScheme
+
+    enum GlassThickness { case thin, regular, thick }
+
+    private var tintOpacity: Double { colorScheme == .dark ? 1.0 : 0.7 }
+    private var edgeOpacity: Double { colorScheme == .dark ? 0.25 : 0.45 }
+
+    var body: some View {
+        if #available(macOS 26, *) {
+            nativeGlass
+        } else {
+            fallbackGlass
+        }
+    }
+
+    @available(macOS 26, *)
+    private var nativeGlass: some View {
+        ZStack {
+            if tint != .clear {
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .fill(tint.opacity(tintOpacity))
+            }
+        }
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: cornerRadius))
+    }
+
+    private var fallbackGlass: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: cornerRadius).fill(.ultraThinMaterial)
+            if tint != .clear {
+                RoundedRectangle(cornerRadius: cornerRadius).fill(tint.opacity(tintOpacity))
+            }
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .fill(RadialGradient(
+                    colors: [.white.opacity(0.18), .white.opacity(0)],
+                    center: UnitPoint(x: 0.2, y: 0.12),
+                    startRadius: 0, endRadius: 140
+                ))
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [
+                            .white.opacity(edgeOpacity),
+                            .white.opacity(edgeOpacity * 0.22),
+                            .white.opacity(edgeOpacity * 0.12),
+                            .white.opacity(edgeOpacity * 0.40)
+                        ],
+                        startPoint: .topLeading, endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1.0
+                )
+        }
+    }
+}
+
+struct LiquidShadow: ViewModifier {
+    var radius: CGFloat = 12
+    var opacity: Double = 0.12
+    func body(content: Content) -> some View {
+        content
+            .shadow(color: .black.opacity(opacity), radius: radius, x: 0, y: 4)
+            .shadow(color: .black.opacity(opacity * 0.6), radius: 2, x: 0, y: 1)
+    }
+}
+
+struct GlassCard: ViewModifier {
+    var tint: Color = .glassCoralTint
+    var cornerRadius: CGFloat = 16
+    func body(content: Content) -> some View {
+        content
+            .background(GlassPanelBackground(cornerRadius: cornerRadius, tint: tint))
+            .modifier(LiquidShadow())
+    }
+}
+
+struct ShimmerModifier: ViewModifier {
+    @State private var phase: CGFloat = -1
+    func body(content: Content) -> some View {
+        content.overlay(
+            LinearGradient(
+                stops: [
+                    .init(color: .clear, location: phase - 0.3),
+                    .init(color: .white.opacity(0.18), location: phase),
+                    .init(color: .clear, location: phase + 0.3)
+                ],
+                startPoint: .topLeading, endPoint: .bottomTrailing
+            )
+            .onAppear { withAnimation(.linear(duration: 1.4).repeatForever(autoreverses: false)) { phase = 2 } }
+        )
+    }
+}
+
+struct LiquidPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
+            .brightness(configuration.isPressed ? -0.03 : 0)
+            .animation(.spring(response: 0.20, dampingFraction: 0.50), value: configuration.isPressed)
+    }
+}
+
+extension View {
+    func glassCard(tint: Color = .glassCoralTint, cornerRadius: CGFloat = 16) -> some View {
+        modifier(GlassCard(tint: tint, cornerRadius: cornerRadius))
+    }
+    func liquidShadow(radius: CGFloat = 12, opacity: Double = 0.12) -> some View {
+        modifier(LiquidShadow(radius: radius, opacity: opacity))
+    }
+    func shimmer() -> some View {
+        modifier(ShimmerModifier())
+    }
+}
+
+// MARK: - Warm Gradient Button Style
 struct WarmGradientButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
             .background(
-                LinearGradient(
-                    colors: [Color.warmPrimary, Color.warmAccent],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
+                ZStack {
+                    LinearGradient(
+                        colors: [Color.warmPrimary, Color.warmAccent],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    LinearGradient(
+                        colors: [.white.opacity(0.20), .white.opacity(0.05), .clear],
+                        startPoint: .top,
+                        endPoint: .center
+                    )
+                }
             )
             .foregroundColor(.white)
-            .cornerRadius(8)
-            .opacity(configuration.isPressed ? 0.85 : 1.0)
+            .cornerRadius(12)
+            .shadow(color: Color.warmPrimary.opacity(0.28), radius: 10, x: 0, y: 3)
+            .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
+            .animation(.spring(response: 0.2, dampingFraction: 0.5), value: configuration.isPressed)
     }
 }
 

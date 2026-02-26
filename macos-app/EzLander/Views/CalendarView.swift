@@ -12,7 +12,7 @@ struct CalendarView: View {
             // Header with navigation
             calendarHeader
 
-            Divider()
+            Rectangle().fill(Color.white.opacity(0.08)).frame(height: 0.5)
 
             // View mode toggle
             viewModeToggle
@@ -28,11 +28,15 @@ struct CalendarView: View {
                     dayView
                 }
             }
-            .animation(.easeInOut(duration: 0.25), value: viewModel.viewMode)
+            .transition(.asymmetric(
+                insertion: .opacity.combined(with: .move(edge: .trailing)),
+                removal: .opacity.combined(with: .move(edge: .leading))
+            ))
+            .animation(.spring(response: 0.32, dampingFraction: 0.80), value: viewModel.viewMode)
 
             // Selected day events (hidden in day view since events are shown inline)
             if viewModel.viewMode != .day {
-                Divider()
+                Rectangle().fill(Color.white.opacity(0.08)).frame(height: 0.5)
                 selectedDayEvents
             }
         }
@@ -99,8 +103,13 @@ struct CalendarView: View {
         HStack {
             Button(action: { viewModel.previousPeriod() }) {
                 Image(systemName: "chevron.left")
+                    .frame(width: 28, height: 28)
+                    .background(
+                        Circle().fill(.ultraThinMaterial)
+                            .overlay(Circle().fill(Color.warmAccent.opacity(0.08)))
+                    )
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.plain)
 
             Spacer()
 
@@ -111,15 +120,29 @@ struct CalendarView: View {
 
             Button(action: { viewModel.nextPeriod() }) {
                 Image(systemName: "chevron.right")
+                    .frame(width: 28, height: 28)
+                    .background(
+                        Circle().fill(.ultraThinMaterial)
+                            .overlay(Circle().fill(Color.warmAccent.opacity(0.08)))
+                    )
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.plain)
 
             Button(action: { viewModel.goToToday() }) {
                 Text("Today")
                     .font(.caption)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 8).fill(.ultraThinMaterial)
+                            RoundedRectangle(cornerRadius: 8).fill(Color.warmAccent.opacity(0.12))
+                            RoundedRectangle(cornerRadius: 8).strokeBorder(Color.warmAccent.opacity(0.25), lineWidth: 0.5)
+                        }
+                    )
+                    .foregroundColor(Color.warmAccent)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
+            .buttonStyle(.plain)
 
             Button(action: { showingAddEvent = true }) {
                 Image(systemName: "plus")
@@ -135,18 +158,57 @@ struct CalendarView: View {
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
+        .background(
+            ZStack {
+                Rectangle().fill(.ultraThinMaterial)
+                Rectangle().fill(Color.warmAccent.opacity(0.06))
+                Rectangle().fill(Color.white.opacity(0.10)).frame(height: 0.5).frame(maxHeight: .infinity, alignment: .bottom)
+            }
+        )
     }
 
     // MARK: - View Mode Toggle
     private var viewModeToggle: some View {
-        Picker("View", selection: $viewModel.viewMode) {
-            Text("Month").tag(CalendarViewMode.month)
-            Text("Week").tag(CalendarViewMode.week)
-            Text("Day").tag(CalendarViewMode.day)
+        HStack(spacing: 0) {
+            ForEach([CalendarViewMode.month, .week, .day], id: \.self) { mode in
+                Button(action: { viewModel.viewMode = mode }) {
+                    Text(viewModeLabel(mode))
+                        .font(.caption)
+                        .fontWeight(viewModel.viewMode == mode ? .semibold : .regular)
+                        .foregroundColor(viewModel.viewMode == mode ? Color.warmAccent : .secondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                        .background {
+                            if viewModel.viewMode == mode {
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(.ultraThinMaterial)
+                                    .overlay(RoundedRectangle(cornerRadius: 8).fill(Color.warmAccent.opacity(0.20)))
+                                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.warmAccent.opacity(0.30), lineWidth: 0.75))
+                                    .shadow(color: Color.warmAccent.opacity(0.20), radius: 6)
+                            }
+                        }
+                        .animation(.spring(response: 0.30, dampingFraction: 0.75), value: viewModel.viewMode)
+                }
+                .buttonStyle(.plain)
+            }
         }
-        .pickerStyle(.segmented)
+        .padding(3)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(.ultraThinMaterial)
+                .overlay(RoundedRectangle(cornerRadius: 10).fill(Color.warmSoft.opacity(0.08)))
+                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.white.opacity(0.12), lineWidth: 0.75))
+        )
         .padding(.horizontal)
         .padding(.vertical, 4)
+    }
+
+    private func viewModeLabel(_ mode: CalendarViewMode) -> String {
+        switch mode {
+        case .month: return "Month"
+        case .week: return "Week"
+        case .day: return "Day"
+        }
     }
 
     // MARK: - Month View
@@ -158,7 +220,7 @@ struct CalendarView: View {
                     Text(day)
                         .font(.caption2)
                         .fontWeight(.medium)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.tertiary)
                         .frame(maxWidth: .infinity)
                 }
             }
@@ -200,8 +262,21 @@ struct CalendarView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 4)
-                    .background(viewModel.isSameDay(date, viewModel.selectedDate) ? Color.warmPrimary.opacity(0.1) : Color.clear)
-                    .cornerRadius(4)
+                    .background(
+                        Group {
+                            if viewModel.isSameDay(date, Date()) {
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(.ultraThinMaterial)
+                                    .overlay(RoundedRectangle(cornerRadius: 10).fill(Color.warmPrimary.opacity(0.14)))
+                                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.warmPrimary.opacity(0.25), lineWidth: 0.5))
+                                    .padding(.horizontal, 2)
+                            } else if viewModel.isSameDay(date, viewModel.selectedDate) {
+                                RoundedRectangle(cornerRadius: 4).fill(Color.warmPrimary.opacity(0.1))
+                            } else {
+                                Color.clear
+                            }
+                        }
+                    )
                     .onTapGesture {
                         viewModel.selectDate(date)
                     }
@@ -209,7 +284,7 @@ struct CalendarView: View {
             }
             .padding(.horizontal, 4)
 
-            Divider()
+            Rectangle().fill(Color.white.opacity(0.08)).frame(height: 0.5)
 
             // Week events timeline
             ScrollView {
@@ -223,6 +298,15 @@ struct CalendarView: View {
                     if viewModel.weekEvents.isEmpty && !viewModel.isLoading {
                         Text("No events this week")
                             .foregroundColor(.secondary)
+                            .padding()
+                            .frame(maxWidth: .infinity)
+                            .background(
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 16).fill(.ultraThinMaterial)
+                                    RoundedRectangle(cornerRadius: 16).fill(Color.warmSoft.opacity(0.08))
+                                    RoundedRectangle(cornerRadius: 16).strokeBorder(Color.white.opacity(0.12), lineWidth: 0.75)
+                                }
+                            )
                             .padding()
                     }
                 }
@@ -262,7 +346,7 @@ struct CalendarView: View {
                 }
                 .padding(.vertical, 6)
 
-                Divider()
+                Rectangle().fill(Color.white.opacity(0.08)).frame(height: 0.5)
             }
 
             // Timeline
@@ -279,7 +363,9 @@ struct CalendarView: View {
                                         .frame(width: 42, alignment: .trailing)
 
                                     VStack(spacing: 0) {
-                                        Divider()
+                                        Rectangle()
+                                            .fill(Color.white.opacity(0.07))
+                                            .frame(height: 0.5)
                                         Spacer()
                                     }
                                 }
@@ -418,6 +504,15 @@ struct CalendarView: View {
                                 .foregroundColor(.secondary)
                                 .font(.caption)
                                 .padding()
+                                .frame(maxWidth: .infinity)
+                                .background(
+                                    ZStack {
+                                        RoundedRectangle(cornerRadius: 16).fill(.ultraThinMaterial)
+                                        RoundedRectangle(cornerRadius: 16).fill(Color.warmSoft.opacity(0.08))
+                                        RoundedRectangle(cornerRadius: 16).strokeBorder(Color.white.opacity(0.12), lineWidth: 0.75)
+                                    }
+                                )
+                                .padding()
                         }
                     }
                     .padding(.horizontal)
@@ -425,6 +520,13 @@ struct CalendarView: View {
                 .frame(maxHeight: 120)
             }
         }
+        .background(
+            ZStack {
+                Rectangle().fill(.ultraThinMaterial)
+                Rectangle().fill(Color.warmAccent.opacity(0.05))
+                Rectangle().fill(Color.white.opacity(0.10)).frame(height: 0.5).frame(maxHeight: .infinity, alignment: .top)
+            }
+        )
     }
 }
 
@@ -448,6 +550,7 @@ struct DayCell: View {
                     Circle()
                         .fill(Color.warmPrimary)
                         .frame(width: 22, height: 22)
+                        .shadow(color: Color.warmPrimary.opacity(0.30), radius: 6)
                 }
                 Text("\(Calendar.current.component(.day, from: date))")
                     .font(.system(size: 12, weight: isToday ? .bold : .regular))
@@ -480,12 +583,14 @@ struct DayCell: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: 48)
-        .background(backgroundColor)
-        .cornerRadius(4)
+        .background(dayCellBackground)
+        .cornerRadius(isSelected ? 8 : 4)
         .overlay(
-            RoundedRectangle(cornerRadius: 4)
+            RoundedRectangle(cornerRadius: isSelected ? 8 : 4)
                 .stroke(isHovered && !isSelected ? Color.warmPrimary.opacity(0.3) : Color.clear, lineWidth: 1)
         )
+        .scaleEffect(isSelected ? 1.02 : 1.0)
+        .animation(.spring(response: 0.25, dampingFraction: 0.60), value: isSelected)
         .onTapGesture {
             onTap()
         }
@@ -493,6 +598,27 @@ struct DayCell: View {
             withAnimation(.easeInOut(duration: 0.15)) {
                 isHovered = hovering
             }
+        }
+    }
+
+    @ViewBuilder
+    private var dayCellBackground: some View {
+        if isSelected {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(.ultraThinMaterial)
+                RoundedRectangle(cornerRadius: 8).fill(Color.warmPrimary.opacity(0.80))
+                RoundedRectangle(cornerRadius: 8).strokeBorder(Color.white.opacity(0.30), lineWidth: 0.75)
+            }
+            .shadow(color: Color.warmPrimary.opacity(0.30), radius: 8, x: 0, y: 2)
+        } else if isCurrentMonth && eventCount >= 3 {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(.ultraThinMaterial)
+                RoundedRectangle(cornerRadius: 8).fill(Color.warmSoft.opacity(0.30))
+            }
+        } else {
+            Color.clear
         }
     }
 
@@ -517,16 +643,6 @@ struct DayCell: View {
         return .primary
     }
 
-    private var backgroundColor: Color {
-        if isSelected {
-            return .warmPrimary
-        }
-        // Busy day tint: subtle warm background for days with 3+ events
-        if isCurrentMonth && eventCount >= 3 {
-            return Color.warmSoft.opacity(0.4)
-        }
-        return .clear
-    }
 }
 
 // MARK: - Event Row
@@ -615,8 +731,16 @@ struct EventRow: View {
         }
         .padding(.vertical, 6)
         .padding(.horizontal, 8)
-        .background(Color(NSColor.controlBackgroundColor))
-        .cornerRadius(6)
+        .background(
+            ZStack {
+                RoundedRectangle(cornerRadius: 10).fill(.ultraThinMaterial)
+                RoundedRectangle(cornerRadius: 10).fill(Color.warmSoft.opacity(0.05))
+                RoundedRectangle(cornerRadius: 10).strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
+            }
+            .shadow(color: .black.opacity(0.04), radius: 4, x: 0, y: 1)
+        )
+        .padding(.horizontal, 4)
+        .padding(.vertical, 2)
         .onTapGesture {
             onTap()
         }
@@ -685,8 +809,16 @@ struct WeekEventRow: View {
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 8)
-        .background(Color(NSColor.controlBackgroundColor))
-        .cornerRadius(6)
+        .background(
+            ZStack {
+                RoundedRectangle(cornerRadius: 10).fill(.ultraThinMaterial)
+                RoundedRectangle(cornerRadius: 10).fill(Color.warmSoft.opacity(0.05))
+                RoundedRectangle(cornerRadius: 10).strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
+            }
+            .shadow(color: .black.opacity(0.04), radius: 4, x: 0, y: 1)
+        )
+        .padding(.horizontal, 4)
+        .padding(.vertical, 2)
         .onTapGesture {
             onTap()
         }
@@ -705,13 +837,16 @@ struct CurrentTimeIndicator: View {
     var body: some View {
         HStack(spacing: 0) {
             Circle()
-                .fill(Color.red)
+                .fill(Color.warmPrimary)
                 .frame(width: 8, height: 8)
+                .overlay(Circle().fill(Color.warmPrimary).shadow(color: Color.warmPrimary.opacity(0.5), radius: 6))
                 .padding(.leading, 42)
 
-            Rectangle()
-                .fill(Color.red)
-                .frame(height: 1)
+            LinearGradient(
+                colors: [Color.warmPrimary, Color.warmPrimary.opacity(0)],
+                startPoint: .leading, endPoint: .trailing
+            )
+            .frame(height: 1.5)
         }
     }
 }
@@ -764,8 +899,28 @@ struct DayEventBlock: View {
             Spacer()
         }
         .frame(maxWidth: .infinity)
-        .background(Color.warmPrimary.opacity(0.12))
-        .cornerRadius(4)
+        .background(
+            ZStack {
+                RoundedRectangle(cornerRadius: 8).fill(.ultraThinMaterial)
+                RoundedRectangle(cornerRadius: 8).fill(Color.warmAccent.opacity(0.18))
+                // Left accent border
+                HStack {
+                    RoundedRectangle(cornerRadius: 1.5)
+                        .fill(Color.warmAccent.opacity(0.85))
+                        .frame(width: 3)
+                    Spacer()
+                }
+                // Top edge specular
+                VStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .strokeBorder(Color.white.opacity(0.20), lineWidth: 0.5)
+                        .frame(height: 1)
+                    Spacer()
+                }
+            }
+            .shadow(color: Color.warmAccent.opacity(0.20), radius: 8, x: 0, y: 2)
+        )
+        .cornerRadius(8)
         .onTapGesture { onTap() }
     }
 
@@ -933,7 +1088,7 @@ struct EventEditorView: View {
 }
 
 // MARK: - View Model
-enum CalendarViewMode: Equatable {
+enum CalendarViewMode: Equatable, Hashable {
     case month
     case week
     case day

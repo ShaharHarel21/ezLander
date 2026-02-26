@@ -68,7 +68,9 @@ struct ChatView: View {
                 }
             }
 
-            Divider()
+            Rectangle()
+                .fill(Color.white.opacity(0.10))
+                .frame(height: 0.5)
 
             // Quick action buttons
             ScrollView(.horizontal, showsIndicators: false) {
@@ -93,35 +95,33 @@ struct ChatView: View {
                     .textFieldStyle(.plain)
                     .lineLimit(1...4)
                     .focused($isInputFocused)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14)
+                            .fill(.ultraThinMaterial)
+                            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5))
+                    )
                     .onSubmit {
                         sendMessage()
                     }
 
                 Button(action: sendMessage) {
-                    Image(systemName: "arrow.right")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.white)
-                        .frame(width: 30, height: 30)
-                        .background(
-                            LinearGradient(
-                                colors: inputText.isEmpty
-                                    ? [Color.secondary.opacity(0.3), Color.secondary.opacity(0.3)]
-                                    : [Color.warmPrimary, Color.warmAccent],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .cornerRadius(8)
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.title2)
+                        .foregroundColor(inputText.isEmpty ? .secondary : .warmPrimary)
                 }
                 .buttonStyle(.plain)
                 .disabled(inputText.isEmpty || viewModel.isLoading)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
-            .cornerRadius(10)
-            .padding(.horizontal, 12)
-            .padding(.bottom, 8)
+            .padding()
+            .background(
+                ZStack {
+                    Rectangle().fill(.regularMaterial)
+                    Rectangle().fill(Color.warmSoft.opacity(0.06))
+                    Rectangle().fill(Color.white.opacity(0.10)).frame(height: 0.5).frame(maxHeight: .infinity, alignment: .top)
+                }
+            )
         }
         .onAppear {
             isInputFocused = true
@@ -158,7 +158,13 @@ struct QuickActionButton: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(Color.warmPrimary.opacity(0.1))
+            .background(
+                ZStack {
+                    Capsule().fill(.ultraThinMaterial)
+                    Capsule().fill(Color.warmPrimary.opacity(0.10))
+                    Capsule().strokeBorder(Color.warmPrimary.opacity(0.22), lineWidth: 0.5)
+                }
+            )
             .foregroundColor(.warmPrimary)
             .cornerRadius(16)
         }
@@ -169,6 +175,7 @@ struct QuickActionButton: View {
 // MARK: - Message Bubble
 struct MessageBubble: View {
     let message: ChatMessage
+    @State private var appeared = false
 
     var body: some View {
         HStack {
@@ -181,61 +188,62 @@ struct MessageBubble: View {
                     FormattedTextView(text: message.content)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
-                        .background(Color(NSColor.controlBackgroundColor))
-                        .clipShape(BubbleShape(isUser: false))
+                        .background(
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 18).fill(.ultraThinMaterial)
+                                RoundedRectangle(cornerRadius: 18).fill(Color.warmSoft.opacity(0.10))
+                                RoundedRectangle(cornerRadius: 18)
+                                    .strokeBorder(
+                                        LinearGradient(colors: [.white.opacity(0.40), .white.opacity(0.08)],
+                                                       startPoint: .topLeading, endPoint: .bottomTrailing),
+                                        lineWidth: 0.75
+                                    )
+                            }
+                            .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 2)
+                        )
+                        .cornerRadius(16)
                 } else {
                     Text(message.content)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
-                        .background(Color.warmPrimary)
+                        .background(
+                            ZStack {
+                                LinearGradient(
+                                    colors: [Color.warmPrimary, Color.warmAccent],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            }
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 18)
+                                .fill(LinearGradient(
+                                    colors: [.white.opacity(0.22), .clear, .clear],
+                                    startPoint: .topLeading, endPoint: .center
+                                ))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 18)
+                                .strokeBorder(.white.opacity(0.20), lineWidth: 0.75)
+                        )
+                        .shadow(color: Color.warmPrimary.opacity(0.28), radius: 10, x: 0, y: 3)
                         .foregroundColor(.white)
-                        .clipShape(BubbleShape(isUser: true))
+                        .cornerRadius(16)
                 }
 
                 if let toolCall = message.toolCall {
                     ToolCallBadge(toolCall: toolCall)
                 }
             }
+            .scaleEffect(appeared ? 1.0 : 0.85, anchor: message.role == .user ? .bottomTrailing : .bottomLeading)
+            .opacity(appeared ? 1.0 : 0)
+            .offset(y: appeared ? 0 : 8)
+            .animation(.spring(response: 0.35, dampingFraction: 0.70), value: appeared)
+            .onAppear { appeared = true }
 
             if message.role == .assistant {
                 Spacer(minLength: 60)
             }
-        }
-    }
-}
-
-// MARK: - Bubble Shape (matching website mockup)
-struct BubbleShape: Shape {
-    let isUser: Bool
-
-    func path(in rect: CGRect) -> Path {
-        let bigRadius: CGFloat = 16
-        let smallRadius: CGFloat = 6
-
-        // User: small radius on bottom-right, AI: small radius on bottom-left
-        let topLeft = bigRadius
-        let topRight = bigRadius
-        let bottomRight = isUser ? smallRadius : bigRadius
-        let bottomLeft = isUser ? bigRadius : smallRadius
-
-        return Path { path in
-            path.move(to: CGPoint(x: rect.minX + topLeft, y: rect.minY))
-            path.addLine(to: CGPoint(x: rect.maxX - topRight, y: rect.minY))
-            path.addArc(tangent1End: CGPoint(x: rect.maxX, y: rect.minY),
-                        tangent2End: CGPoint(x: rect.maxX, y: rect.minY + topRight),
-                        radius: topRight)
-            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - bottomRight))
-            path.addArc(tangent1End: CGPoint(x: rect.maxX, y: rect.maxY),
-                        tangent2End: CGPoint(x: rect.maxX - bottomRight, y: rect.maxY),
-                        radius: bottomRight)
-            path.addLine(to: CGPoint(x: rect.minX + bottomLeft, y: rect.maxY))
-            path.addArc(tangent1End: CGPoint(x: rect.minX, y: rect.maxY),
-                        tangent2End: CGPoint(x: rect.minX, y: rect.maxY - bottomLeft),
-                        radius: bottomLeft)
-            path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + topLeft))
-            path.addArc(tangent1End: CGPoint(x: rect.minX, y: rect.minY),
-                        tangent2End: CGPoint(x: rect.minX + topLeft, y: rect.minY),
-                        radius: topLeft)
         }
     }
 }
@@ -304,7 +312,13 @@ struct TypingIndicator: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(Color(NSColor.controlBackgroundColor))
+        .background(
+            ZStack {
+                RoundedRectangle(cornerRadius: 18).fill(.ultraThinMaterial)
+                RoundedRectangle(cornerRadius: 18).fill(Color.warmSoft.opacity(0.10))
+                RoundedRectangle(cornerRadius: 18).strokeBorder(Color.white.opacity(0.18), lineWidth: 0.75)
+            }
+        )
         .cornerRadius(16)
         .onAppear {
             animating = true
