@@ -15,6 +15,21 @@ struct EzLanderApp: App {
 class AppDelegate: NSObject, NSApplicationDelegate {
     var menuBarController: MenuBarController?
     private var onboardingWindow: NSWindow?
+    static var isPreviewMode: Bool {
+        CommandLine.arguments.contains("--preview-mode")
+    }
+
+    static func previewLog(_ msg: String) {
+        let line = "[PREVIEW] \(msg)\n"
+        let logPath = "/tmp/ezlander-preview.log"
+        if let handle = FileHandle(forWritingAtPath: logPath) {
+            handle.seekToEndOfFile()
+            handle.write(line.data(using: .utf8)!)
+            handle.closeFile()
+        } else {
+            FileManager.default.createFile(atPath: logPath, contents: line.data(using: .utf8))
+        }
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Show dock icon alongside menu bar
@@ -23,8 +38,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Initialize menu bar controller
         menuBarController = MenuBarController()
 
+        // In preview mode, auto-open the popover for screenshot capture
+        if Self.isPreviewMode {
+            Self.previewLog("Preview mode detected, will show window in 1s. Args: \(CommandLine.arguments)")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                Self.previewLog("Timer fired, calling showPopover")
+                self?.menuBarController?.showPopover()
+            }
+        }
+
         // Show onboarding for new users
-        if !UserDefaults.standard.bool(forKey: "onboardingComplete") {
+        if !UserDefaults.standard.bool(forKey: "onboardingComplete") && !Self.isPreviewMode {
             showOnboarding()
         }
 

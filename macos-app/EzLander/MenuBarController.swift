@@ -28,6 +28,7 @@ class MenuBarController: NSObject {
     private var eventMonitor: EventMonitor?
     private let shortcutService = KeyboardShortcutService.shared
     private var statusMenu: NSMenu!
+    private var previewWindow: NSWindow?
 
     // Notification for tab switching
     static let switchTabNotification = Notification.Name("SwitchTabNotification")
@@ -158,7 +159,8 @@ class MenuBarController: NSObject {
     private func setupPopover() {
         popover = NSPopover()
         popover.contentSize = NSSize(width: 400, height: 500)
-        popover.behavior = .transient
+        // In preview mode, keep popover open for screenshot capture
+        popover.behavior = AppDelegate.isPreviewMode ? .applicationDefined : .transient
         popover.contentViewController = NSHostingController(rootView: MainPopover())
     }
 
@@ -179,6 +181,10 @@ class MenuBarController: NSObject {
     }
 
     func showPopover() {
+        if AppDelegate.isPreviewMode {
+            showPreviewWindow()
+            return
+        }
         if let button = statusItem.button {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             eventMonitor?.start()
@@ -186,8 +192,35 @@ class MenuBarController: NSObject {
     }
 
     private func closePopover() {
+        if AppDelegate.isPreviewMode {
+            // Don't close in preview mode
+            return
+        }
         popover.performClose(nil)
         eventMonitor?.stop()
+    }
+
+    private func showPreviewWindow() {
+        AppDelegate.previewLog("showPreviewWindow called, existing=\(previewWindow != nil)")
+        if previewWindow != nil { return }
+        let hostingController = NSHostingController(rootView: MainPopover())
+        hostingController.preferredContentSize = NSSize(width: 400, height: 500)
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 400, height: 500),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentViewController = hostingController
+        window.setContentSize(NSSize(width: 400, height: 500))
+        window.center()
+        window.title = "ezLander Preview"
+        window.isReleasedWhenClosed = false
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        previewWindow = window
+        AppDelegate.previewLog("Preview window created. Frame=\(window.frame), isVisible=\(window.isVisible)")
     }
 
     private func setupKeyboardShortcuts() {
