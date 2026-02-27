@@ -12,10 +12,11 @@ struct MainPopover: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header
-            headerView
-
-            Divider()
+            // Header — hidden on the email tab for maximum reading space
+            if selectedTab != .email {
+                headerView
+                Divider()
+            }
 
             // Content
             contentView
@@ -157,12 +158,7 @@ class MainPopoverViewModel: ObservableObject {
     }
 
     func checkSubscription() {
-        Task {
-            let status = await subscriptionService.checkSubscriptionStatus()
-            await MainActor.run {
-                isSubscribed = status
-            }
-        }
+        isSubscribed = subscriptionService.isSubscribed
     }
 }
 

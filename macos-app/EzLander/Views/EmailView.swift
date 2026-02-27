@@ -52,6 +52,7 @@ struct EmailView: View {
     @State private var showingError = false
     @State private var showingSuccess = false
     @State private var successMessage = ""
+    @State private var searchText = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -267,12 +268,6 @@ struct EmailView: View {
                         .scaleEffect(0.7)
                 }
 
-                Button(action: { showingCompose = true }) {
-                    Image(systemName: "square.and.pencil")
-                }
-                .buttonStyle(.borderless)
-                .help("Compose")
-
                 Button(action: { viewModel.refresh() }) {
                     Image(systemName: "arrow.clockwise")
                 }
@@ -384,60 +379,111 @@ struct EmailView: View {
 
     // MARK: - Email List View
     private var emailListView: some View {
-        ScrollView {
-            LazyVStack(spacing: 0) {
-                ForEach(viewModel.emails) { email in
-                    EmailListRow(
-                        email: email,
-                        isSelected: selectedEmail?.id == email.id,
-                        onTap: {
-                            selectedEmail = email
-                        },
-                        onDoubleTap: {
-                            selectedEmail = email
-                            openedEmail = email
-                            viewModel.markAsRead(email)
-                        },
-                        onReply: {
-                            replyToEmail = email
-                        },
-                        onArchive: {
-                            viewModel.archiveEmail(email)
-                        },
-                        onDelete: {
-                            viewModel.deleteEmail(email)
-                        },
-                        onMarkRead: {
-                            if email.isRead {
-                                viewModel.markAsUnread(email)
-                            } else {
-                                viewModel.markAsRead(email)
-                            }
-                        },
-                        onStar: {
-                            viewModel.starEmail(email)
-                        },
-                        onMove: { label in
-                            viewModel.moveEmail(email, to: label)
-                        },
-                        availableLabels: viewModel.availableLabels
-                    )
-                    Divider()
-                        .padding(.leading, 50)
+        ZStack(alignment: .bottomTrailing) {
+            ScrollView {
+                // Search bar
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                    TextField("Search emails...", text: $searchText)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 13))
                 }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color(NSColor.controlBackgroundColor))
+                )
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+                .padding(.bottom, 4)
 
-                if viewModel.emails.isEmpty {
-                    VStack(spacing: 8) {
-                        Image(systemName: "tray")
-                            .font(.system(size: 40))
-                            .foregroundColor(.secondary)
-                        Text("No emails")
-                            .foregroundColor(.secondary)
+                LazyVStack(spacing: 4) {
+                    ForEach(filteredEmails) { email in
+                        EmailListRow(
+                            email: email,
+                            isSelected: selectedEmail?.id == email.id,
+                            onTap: {
+                                selectedEmail = email
+                            },
+                            onDoubleTap: {
+                                selectedEmail = email
+                                openedEmail = email
+                                viewModel.markAsRead(email)
+                            },
+                            onReply: {
+                                replyToEmail = email
+                            },
+                            onArchive: {
+                                viewModel.archiveEmail(email)
+                            },
+                            onDelete: {
+                                viewModel.deleteEmail(email)
+                            },
+                            onMarkRead: {
+                                if email.isRead {
+                                    viewModel.markAsUnread(email)
+                                } else {
+                                    viewModel.markAsRead(email)
+                                }
+                            },
+                            onStar: {
+                                viewModel.starEmail(email)
+                            },
+                            onMove: { label in
+                                viewModel.moveEmail(email, to: label)
+                            },
+                            availableLabels: viewModel.availableLabels
+                        )
+                        .padding(.horizontal, 6)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 60)
+
+                    if filteredEmails.isEmpty {
+                        VStack(spacing: 8) {
+                            Image(systemName: searchText.isEmpty ? "tray" : "magnifyingglass")
+                                .font(.system(size: 40))
+                                .foregroundColor(.secondary)
+                            Text(searchText.isEmpty ? "No emails" : "No results")
+                                .foregroundColor(.secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 60)
+                    }
                 }
+                .padding(.bottom, 60) // Space for FAB
             }
+
+            // Floating compose button
+            Button(action: { showingCompose = true }) {
+                Image(systemName: "square.and.pencil")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(.white)
+                    .frame(width: 44, height: 44)
+                    .background(
+                        LinearGradient(
+                            colors: [.warmPrimary, .warmAccent],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .clipShape(Circle())
+                    .shadow(color: Color.warmPrimary.opacity(0.3), radius: 8, y: 4)
+            }
+            .buttonStyle(.plain)
+            .padding(16)
+            .help("Compose")
+        }
+    }
+
+    private var filteredEmails: [Email] {
+        if searchText.isEmpty { return viewModel.emails }
+        let query = searchText.lowercased()
+        return viewModel.emails.filter {
+            $0.subject.lowercased().contains(query) ||
+            $0.senderName.lowercased().contains(query) ||
+            $0.body.lowercased().contains(query)
         }
     }
 
@@ -629,7 +675,7 @@ struct EmailListRow: View {
                     SenderAvatarView(
                         email: email.senderEmail,
                         name: email.senderName,
-                        size: 40,
+                        size: 44,
                         isRead: email.isRead
                     )
 
@@ -643,17 +689,21 @@ struct EmailListRow: View {
 
                             Spacer()
 
-                            // Attachment indicator
+                            // Attachment indicator (pill badge)
                             if !email.attachments.isEmpty {
                                 HStack(spacing: 2) {
                                     Image(systemName: "paperclip")
-                                        .font(.system(size: 10))
-                                    if email.attachments.count > 1 {
-                                        Text("\(email.attachments.count)")
-                                            .font(.system(size: 9))
-                                    }
+                                        .font(.system(size: 9))
+                                    Text("\(email.attachments.count)")
+                                        .font(.system(size: 9, weight: .medium))
                                 }
                                 .foregroundColor(.secondary)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 2)
+                                .background(
+                                    Capsule()
+                                        .fill(Color.secondary.opacity(0.12))
+                                )
                             }
 
                             Text(email.formattedDate)
@@ -664,6 +714,7 @@ struct EmailListRow: View {
                         HStack(spacing: 4) {
                             Text(email.subject)
                                 .font(.subheadline)
+                                .fontWeight(email.isRead ? .regular : .semibold)
                                 .foregroundColor(email.isRead ? .secondary : .primary)
                                 .lineLimit(1)
 
@@ -1114,15 +1165,16 @@ struct SenderAvatarView: View {
                     .resizable()
                     .scaledToFill()
                     .frame(width: size, height: size)
-                    .clipShape(Circle())
+                    .clipShape(RoundedRectangle(cornerRadius: size * 0.2))
             } else {
-                // Fallback: colored circle with initial (consistent per-sender color)
+                // Fallback: colored rounded square with initial (consistent per-sender color)
                 Text(String(name.prefix(1)).uppercased())
                     .font(.system(size: size * 0.4, weight: .medium))
                     .foregroundColor(isRead ? senderColor.opacity(0.6) : senderColor)
                     .frame(width: size, height: size)
                     .background(
-                        Circle().fill(senderColor.opacity(0.15))
+                        RoundedRectangle(cornerRadius: size * 0.2)
+                            .fill(senderColor.opacity(0.15))
                     )
             }
         }
