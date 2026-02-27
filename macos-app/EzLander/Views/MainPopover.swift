@@ -15,29 +15,18 @@ struct MainPopover: View {
             // Header
             headerView
 
-            Rectangle()
-                .fill(Color.glassSeparator)
-                .frame(height: 0.5)
+            Divider()
 
             // Content
             contentView
 
-            Rectangle()
-                .fill(Color.glassSeparator)
-                .frame(height: 0.5)
+            Divider()
 
             // Tab bar
             tabBar
         }
         .frame(width: 400, height: 500)
-        .background {
-            if #available(macOS 26, *) {
-                Color.clear
-            } else {
-                VisualEffectBlur(material: .popover, blendingMode: .behindWindow)
-                    .overlay(Color.warmSoft.opacity(0.05))
-            }
-        }
+        .background(Color(NSColor.windowBackgroundColor))
         .preferredColorScheme(themeManager.resolvedColorScheme)
         .onReceive(NotificationCenter.default.publisher(for: MenuBarController.switchTabNotification)) { notification in
             if let tabName = notification.object as? String,
@@ -83,12 +72,8 @@ struct MainPopover: View {
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(
-                        ZStack {
-                            Capsule().fill(.ultraThinMaterial)
-                            Capsule().fill(Color.proBadge.opacity(0.18))
-                            Capsule().strokeBorder(Color.proBadge.opacity(0.35), lineWidth: 0.5)
-                        }
-                        .shadow(color: Color.warmHighlight.opacity(0.2), radius: 6)
+                        Color.proBadge.opacity(0.15)
+                            .cornerRadius(8)
                     )
             }
 
@@ -99,17 +84,8 @@ struct MainPopover: View {
             }
             .buttonStyle(.plain)
             .contentShape(Circle())
-            .onHover { isHovered in }
-            .background(
-                Circle()
-                    .fill(Color.glassHover)
-                    .opacity(selectedTab == .settings ? 1 : 0)
-            )
         }
         .padding()
-        .background(
-            GlassPanelBackground(cornerRadius: 0, tint: Color.warmSoft, thickness: .thick)
-        )
     }
 
     @ViewBuilder
@@ -126,11 +102,8 @@ struct MainPopover: View {
                 SettingsView()
             }
         }
-        .transition(.asymmetric(
-            insertion: .opacity.combined(with: .scale(scale: 0.97, anchor: .center)),
-            removal: .opacity.combined(with: .scale(scale: 1.02, anchor: .center))
-        ))
-        .animation(.spring(response: 0.30, dampingFraction: 0.78), value: selectedTab)
+        .transition(.opacity)
+        .animation(.easeInOut(duration: 0.2), value: selectedTab)
     }
 
     private var tabBar: some View {
@@ -140,9 +113,6 @@ struct MainPopover: View {
             tabButton(tab: .email, icon: "envelope.fill", label: "Email")
         }
         .padding(.vertical, 8)
-        .background(
-            GlassPanelBackground(cornerRadius: 0, tint: Color.warmSoft, thickness: .thick)
-        )
     }
 
     private func tabButton(tab: Tab, icon: String, label: String) -> some View {
@@ -150,8 +120,6 @@ struct MainPopover: View {
             VStack(spacing: 4) {
                 Image(systemName: icon)
                     .font(.system(size: 20))
-                    .scaleEffect(selectedTab == tab ? 1.12 : 1.0)
-                    .animation(.spring(response: 0.25, dampingFraction: 0.55), value: selectedTab)
                 Text(label)
                     .font(.caption2)
             }
@@ -160,9 +128,8 @@ struct MainPopover: View {
             .padding(.vertical, 6)
             .background {
                 if selectedTab == tab {
-                    GlassPanelBackground(cornerRadius: 12, tint: Color.warmPrimary.opacity(0.12))
-                        .shadow(color: Color.warmPrimary.opacity(0.20), radius: 8)
-                        .animation(.spring(response: 0.35, dampingFraction: 0.72), value: selectedTab)
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.warmPrimary.opacity(0.12))
                 }
             }
             .padding(.horizontal, 8)

@@ -68,9 +68,7 @@ struct ChatView: View {
                 }
             }
 
-            Rectangle()
-                .fill(Color.glassSeparator)
-                .frame(height: 0.5)
+            Divider()
 
             // Quick action buttons
             ScrollView(.horizontal, showsIndicators: false) {
@@ -99,9 +97,8 @@ struct ChatView: View {
                     .padding(.vertical, 6)
                     .background(
                         RoundedRectangle(cornerRadius: 14)
-                            .fill(.ultraThinMaterial)
+                            .fill(Color(NSColor.controlBackgroundColor))
                     )
-                    .adaptiveBorder(cornerRadius: 14, opacity: 0.12, lineWidth: 0.5)
                     .onSubmit {
                         sendMessage()
                     }
@@ -115,13 +112,7 @@ struct ChatView: View {
                 .disabled(inputText.isEmpty || viewModel.isLoading)
             }
             .padding()
-            .background(
-                ZStack {
-                    Rectangle().fill(.regularMaterial)
-                    Rectangle().fill(Color.warmSoft.opacity(0.06))
-                    Rectangle().fill(Color.glassSeparator).frame(height: 0.5).frame(maxHeight: .infinity, alignment: .top)
-                }
-            )
+            .background(Color(NSColor.controlBackgroundColor))
         }
         .onAppear {
             isInputFocused = true
@@ -160,11 +151,7 @@ struct QuickActionButton: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(
-                ZStack {
-                    Capsule().fill(.ultraThinMaterial)
-                    Capsule().fill(Color.warmPrimary.opacity(0.10))
-                    Capsule().strokeBorder(Color.warmPrimary.opacity(0.22), lineWidth: 0.5)
-                }
+                Capsule().fill(Color.warmPrimary.opacity(0.1))
             )
             .foregroundColor(.warmPrimary)
         }
@@ -176,11 +163,6 @@ struct QuickActionButton: View {
 struct MessageBubble: View {
     let message: ChatMessage
     @State private var appeared = false
-    @Environment(\.colorScheme) private var colorScheme
-
-    private func edgeColor(_ opacity: Double) -> Color {
-        colorScheme == .dark ? .white.opacity(opacity) : .black.opacity(opacity * 0.3)
-    }
 
     var body: some View {
         HStack {
@@ -194,17 +176,8 @@ struct MessageBubble: View {
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
                         .background(
-                            ZStack {
-                                RoundedRectangle(cornerRadius: 18).fill(.ultraThinMaterial)
-                                RoundedRectangle(cornerRadius: 18).fill(Color.warmSoft.opacity(0.10))
-                                RoundedRectangle(cornerRadius: 18)
-                                    .strokeBorder(
-                                        LinearGradient(colors: [edgeColor(0.40), edgeColor(0.08)],
-                                                       startPoint: .topLeading, endPoint: .bottomTrailing),
-                                        lineWidth: 0.75
-                                    )
-                            }
-                            .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 2)
+                            RoundedRectangle(cornerRadius: 18)
+                                .fill(Color(NSColor.controlBackgroundColor))
                         )
                         .clipShape(RoundedRectangle(cornerRadius: 18))
                 } else {
@@ -213,26 +186,12 @@ struct MessageBubble: View {
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
                         .background(
-                            ZStack {
-                                LinearGradient(
-                                    colors: [Color.warmPrimary, Color.warmAccent],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            }
+                            LinearGradient(
+                                colors: [Color.warmPrimary, Color.warmAccent],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
                         )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 18)
-                                .fill(LinearGradient(
-                                    colors: [.white.opacity(0.22), .clear, .clear],
-                                    startPoint: .topLeading, endPoint: .center
-                                ))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 18)
-                                .strokeBorder(.white.opacity(0.20), lineWidth: 0.75)
-                        )
-                        .shadow(color: Color.warmPrimary.opacity(0.28), radius: 10, x: 0, y: 3)
                         .foregroundColor(.white)
                         .clipShape(RoundedRectangle(cornerRadius: 18))
                 }
@@ -241,10 +200,8 @@ struct MessageBubble: View {
                     ToolCallBadge(toolCall: toolCall)
                 }
             }
-            .scaleEffect(appeared ? 1.0 : 0.85, anchor: message.role == .user ? .bottomTrailing : .bottomLeading)
             .opacity(appeared ? 1.0 : 0)
-            .offset(y: appeared ? 0 : 8)
-            .animation(.spring(response: 0.35, dampingFraction: 0.70), value: appeared)
+            .animation(.easeInOut(duration: 0.2), value: appeared)
             .onAppear { appeared = true }
 
             if message.role == .assistant {
@@ -282,7 +239,6 @@ struct FormattedTextView: View {
 // MARK: - Tool Call Badge
 struct ToolCallBadge: View {
     let toolCall: ToolCall
-    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         HStack(spacing: 4) {
@@ -294,11 +250,7 @@ struct ToolCallBadge: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .background(
-            ZStack {
-                Capsule().fill(.ultraThinMaterial)
-                Capsule().fill(Color.warmSoft.opacity(0.08))
-                Capsule().strokeBorder(colorScheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.06), lineWidth: 0.5)
-            }
+            Capsule().fill(Color(NSColor.controlBackgroundColor))
         )
     }
 }
@@ -307,7 +259,6 @@ struct ToolCallBadge: View {
 struct TypingIndicator: View {
     @State private var animating = false
     @Environment(\.accessibilityReduceMotion) var reduceMotion
-    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         HStack(spacing: 4) {
@@ -327,11 +278,8 @@ struct TypingIndicator: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(
-            ZStack {
-                RoundedRectangle(cornerRadius: 18).fill(.ultraThinMaterial)
-                RoundedRectangle(cornerRadius: 18).fill(Color.warmSoft.opacity(0.10))
-                RoundedRectangle(cornerRadius: 18).strokeBorder(colorScheme == .dark ? Color.white.opacity(0.18) : Color.black.opacity(0.06), lineWidth: 0.75)
-            }
+            RoundedRectangle(cornerRadius: 18)
+                .fill(Color(NSColor.controlBackgroundColor))
         )
         .clipShape(RoundedRectangle(cornerRadius: 18))
         .onAppear {

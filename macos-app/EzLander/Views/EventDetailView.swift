@@ -81,13 +81,8 @@ struct EventDetailView: View {
                                 .font(.subheadline)
                                 .padding(10)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(
-                                    ZStack {
-                                        RoundedRectangle(cornerRadius: 8).fill(.ultraThinMaterial)
-                                        RoundedRectangle(cornerRadius: 8).fill(Color.warmSoft.opacity(0.06))
-                                    }
-                                )
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .background(Color(NSColor.controlBackgroundColor))
+                                .cornerRadius(8)
                         }
                     }
 

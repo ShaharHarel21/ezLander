@@ -123,14 +123,8 @@ struct AIActionPreviewCard: View {
                 Button(action: { onDecline() }) {
                     Text("Decline")
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
                 }
-                .buttonStyle(.plain)
-                .background(
-                    RoundedRectangle(cornerRadius: 10).fill(.ultraThinMaterial)
-                        .overlay(RoundedRectangle(cornerRadius: 10).fill(Color.red.opacity(0.08)))
-                        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.red.opacity(0.25), lineWidth: 0.5))
-                )
+                .buttonStyle(.bordered)
                 .disabled(isProcessing)
 
                 Button(action: {
@@ -165,19 +159,12 @@ struct AIActionPreviewCard: View {
         }
         .padding()
         .background(
-            ZStack {
-                RoundedRectangle(cornerRadius: 18).fill(.regularMaterial)
-                RoundedRectangle(cornerRadius: 18).fill(Color.warmAccent.opacity(0.06))
-                RoundedRectangle(cornerRadius: 18)
-                    .stroke(
-                        LinearGradient(
-                            colors: [Color.warmPrimary.opacity(0.30), Color.warmAccent.opacity(0.15)],
-                            startPoint: .topLeading, endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 1.0
-                    )
-            }
-            .shadow(color: Color.warmPrimary.opacity(0.15), radius: 16, x: 0, y: 4)
+            RoundedRectangle(cornerRadius: 18)
+                .fill(Color(NSColor.controlBackgroundColor))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18)
+                        .strokeBorder(Color.warmPrimary.opacity(0.3), lineWidth: 1.0)
+                )
         )
         .onAppear {
             if let e = action.eventData {
@@ -366,16 +353,7 @@ struct AIActionResultView: View {
         }
         .padding()
         .background(
-            ZStack {
-                RoundedRectangle(cornerRadius: 12).fill(.ultraThinMaterial)
-                RoundedRectangle(cornerRadius: 12).fill(success ? Color.green.opacity(0.10) : Color.red.opacity(0.10))
-                GeometryReader { geo in
-                    Rectangle()
-                        .fill(success ? Color.green : Color.red)
-                        .frame(width: 3, height: geo.size.height)
-                        .cornerRadius(1.5)
-                }
-            }
+            (success ? Color.green.opacity(0.1) : Color.red.opacity(0.1))
         )
         .cornerRadius(12)
     }
