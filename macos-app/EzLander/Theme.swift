@@ -30,6 +30,9 @@ enum ThemeMode: String, CaseIterable, Identifiable {
 class ThemeManager: ObservableObject {
     static let shared = ThemeManager()
 
+    /// Posted when the theme changes so AppKit views (e.g. NSPopover) can update.
+    static let themeDidChangeNotification = Notification.Name("ThemeDidChangeNotification")
+
     @Published var selectedMode: ThemeMode {
         didSet {
             UserDefaults.standard.set(selectedMode.rawValue, forKey: "theme_mode")
@@ -46,6 +49,15 @@ class ThemeManager: ObservableObject {
         }
     }
 
+    /// The resolved NSAppearance for the current mode, or nil for system default.
+    var resolvedNSAppearance: NSAppearance? {
+        switch selectedMode {
+        case .system: return nil
+        case .light: return NSAppearance(named: .aqua)
+        case .dark: return NSAppearance(named: .darkAqua)
+        }
+    }
+
     private init() {
         if let saved = UserDefaults.standard.string(forKey: "theme_mode"),
            let mode = ThemeMode(rawValue: saved) {
@@ -58,14 +70,9 @@ class ThemeManager: ObservableObject {
 
     func applyAppearance() {
         DispatchQueue.main.async {
-            switch self.selectedMode {
-            case .system:
-                NSApp.appearance = nil
-            case .light:
-                NSApp.appearance = NSAppearance(named: .aqua)
-            case .dark:
-                NSApp.appearance = NSAppearance(named: .darkAqua)
-            }
+            let appearance = self.resolvedNSAppearance
+            NSApp.appearance = appearance
+            NotificationCenter.default.post(name: Self.themeDidChangeNotification, object: appearance)
         }
     }
 }

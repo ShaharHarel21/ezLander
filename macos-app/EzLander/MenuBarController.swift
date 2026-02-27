@@ -40,6 +40,7 @@ class MenuBarController: NSObject {
         setupMenu()
         setupEventMonitor()
         setupKeyboardShortcuts()
+        setupThemeObserver()
     }
 
     deinit {
@@ -217,6 +218,7 @@ class MenuBarController: NSObject {
         window.center()
         window.title = "ezLander Preview"
         window.isReleasedWhenClosed = false
+        window.appearance = ThemeManager.shared.resolvedNSAppearance
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         previewWindow = window
@@ -229,6 +231,30 @@ class MenuBarController: NSObject {
                 self?.handleShortcut(action)
             }
         }
+    }
+
+    private func setupThemeObserver() {
+        // Apply the initial theme to the popover
+        applyThemeToPopover()
+
+        // Listen for theme changes and update the popover's AppKit appearance
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(themeDidChange(_:)),
+            name: ThemeManager.themeDidChangeNotification,
+            object: nil
+        )
+    }
+
+    @objc private func themeDidChange(_ notification: Notification) {
+        applyThemeToPopover()
+    }
+
+    private func applyThemeToPopover() {
+        let appearance = ThemeManager.shared.resolvedNSAppearance
+        popover.appearance = appearance
+        popover.contentViewController?.view.appearance = appearance
+        previewWindow?.appearance = appearance
     }
 
     private func handleShortcut(_ action: ShortcutAction) {

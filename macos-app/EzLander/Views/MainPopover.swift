@@ -3,6 +3,7 @@ import SwiftUI
 struct MainPopover: View {
     @StateObject private var viewModel = MainPopoverViewModel()
     @ObservedObject private var aiService = AIService.shared
+    @ObservedObject private var themeManager = ThemeManager.shared
     @State private var selectedTab: Tab = .chat
 
     enum Tab: String {
@@ -37,6 +38,7 @@ struct MainPopover: View {
                     .overlay(Color.warmSoft.opacity(0.05))
             }
         }
+        .preferredColorScheme(themeManager.resolvedColorScheme)
         .onReceive(NotificationCenter.default.publisher(for: MenuBarController.switchTabNotification)) { notification in
             if let tabName = notification.object as? String,
                let tab = Tab(rawValue: tabName) {
