@@ -50,6 +50,9 @@ yarn-error.log*
 coverage/
 .nyc_output/
 
+# Claude Code
+.claude/
+
 # Misc
 *.pem
 Thumbs.db
