@@ -1,0 +1,15 @@
+{
+  "name": "ezlander-preview-server",
+  "version": "1.0.0",
+  "description": "Live preview server for the EzLander macOS app",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "chokidar": "^3.6.0",
+    "express": "^4.21.0",
+    "ws": "^8.18.0"
+  }
+}

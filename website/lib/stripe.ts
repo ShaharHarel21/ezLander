@@ -20,6 +20,14 @@ export const STRIPE_PLANS = {
   },
 }
 
+function getSubscriptionPlanLookupKey(subscription: Stripe.Subscription): string | null {
+  return (
+    subscription.items.data.find(
+      (item) => typeof item.price?.lookup_key === 'string'
+    )?.price.lookup_key ?? null
+  )
+}
+
 export async function getCustomerByEmail(email: string) {
   const customers = await stripe.customers.list({
     email,
@@ -96,12 +104,12 @@ export async function getSubscriptionStatus(email: string) {
     return { isActive: false, plan: null, expiresAt: null }
   }
 
-  const plan = subscription.items.data[0].price.lookup_key as 'monthly' | 'yearly'
+  const plan = getSubscriptionPlanLookupKey(subscription)
   const expiresAt = new Date(subscription.current_period_end * 1000)
 
   return {
     isActive: true,
-    plan,
+    plan: plan ?? 'unknown',
     expiresAt,
     status: subscription.status,
     cancelAtPeriodEnd: subscription.cancel_at_period_end,

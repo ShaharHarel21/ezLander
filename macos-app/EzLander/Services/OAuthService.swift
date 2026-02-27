@@ -38,12 +38,12 @@ class OAuthService: NSObject {
     // Token refresh deduplication — access synchronized via refreshLock
     private let refreshLock = NSLock()
     private var isRefreshing = false
-    private var refreshWaiters: [CheckedContinuation<String, Error>] = []
+    private var refreshWaiters: [UUID: CheckedContinuation<String, Error>] = [:]
 
     // OpenAI token refresh deduplication
     private let openAIRefreshLock = NSLock()
     private var isRefreshingOpenAI = false
-    private var openAIRefreshWaiters: [CheckedContinuation<String, Error>] = []
+    private var openAIRefreshWaiters: [UUID: CheckedContinuation<String, Error>] = [:]
 
     // User email from Google sign-in
     var userEmail: String? {
@@ -296,23 +296,18 @@ class OAuthService: NSObject {
         }
 
         if shouldWait {
+            let waiterID = UUID()
             return try await withTaskCancellationHandler {
                 try await withCheckedThrowingContinuation { continuation in
                     refreshLock.withLock {
-                        refreshWaiters.append(continuation)
+                        refreshWaiters[waiterID] = continuation
                     }
                 }
             } onCancel: { [self] in
-                // Remove this continuation from waiters and resume with cancellation error
-                refreshLock.withLock {
-                    // We can't identify the exact continuation, so drain all waiters
-                    // on cancellation — the active refresh will re-populate for non-cancelled tasks
-                    let waiters = refreshWaiters
-                    refreshWaiters.removeAll()
-                    for waiter in waiters {
-                        waiter.resume(throwing: CancellationError())
-                    }
+                let waiter = refreshLock.withLock {
+                    refreshWaiters.removeValue(forKey: waiterID)
                 }
+                waiter?.resume(throwing: CancellationError())
             }
         }
 
@@ -320,7 +315,7 @@ class OAuthService: NSObject {
             let newToken = try await refreshAccessToken()
             let waiters: [CheckedContinuation<String, Error>] = refreshLock.withLock {
                 isRefreshing = false
-                let w = refreshWaiters
+                let w = Array(refreshWaiters.values)
                 refreshWaiters.removeAll()
                 return w
             }
@@ -329,7 +324,7 @@ class OAuthService: NSObject {
         } catch {
             let waiters: [CheckedContinuation<String, Error>] = refreshLock.withLock {
                 isRefreshing = false
-                let w = refreshWaiters
+                let w = Array(refreshWaiters.values)
                 refreshWaiters.removeAll()
                 return w
             }
@@ -503,20 +498,18 @@ class OAuthService: NSObject {
         }
 
         if shouldWait {
+            let waiterID = UUID()
             return try await withTaskCancellationHandler {
                 try await withCheckedThrowingContinuation { continuation in
                     openAIRefreshLock.withLock {
-                        openAIRefreshWaiters.append(continuation)
+                        openAIRefreshWaiters[waiterID] = continuation
                     }
                 }
             } onCancel: { [self] in
-                openAIRefreshLock.withLock {
-                    let waiters = openAIRefreshWaiters
-                    openAIRefreshWaiters.removeAll()
-                    for waiter in waiters {
-                        waiter.resume(throwing: CancellationError())
-                    }
+                let waiter = openAIRefreshLock.withLock {
+                    openAIRefreshWaiters.removeValue(forKey: waiterID)
                 }
+                waiter?.resume(throwing: CancellationError())
             }
         }
 
@@ -524,7 +517,7 @@ class OAuthService: NSObject {
             let newToken = try await refreshOpenAIAccessToken()
             let waiters: [CheckedContinuation<String, Error>] = openAIRefreshLock.withLock {
                 isRefreshingOpenAI = false
-                let w = openAIRefreshWaiters
+                let w = Array(openAIRefreshWaiters.values)
                 openAIRefreshWaiters.removeAll()
                 return w
             }
@@ -533,7 +526,7 @@ class OAuthService: NSObject {
         } catch {
             let waiters: [CheckedContinuation<String, Error>] = openAIRefreshLock.withLock {
                 isRefreshingOpenAI = false
-                let w = openAIRefreshWaiters
+                let w = Array(openAIRefreshWaiters.values)
                 openAIRefreshWaiters.removeAll()
                 return w
             }

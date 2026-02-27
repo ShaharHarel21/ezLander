@@ -7,6 +7,14 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!
 
+function getPlanLookupKey(subscription: Stripe.Subscription): string {
+  return (
+    subscription.items.data.find(
+      (item) => typeof item.price?.lookup_key === 'string'
+    )?.price.lookup_key || 'unknown'
+  )
+}
+
 export async function POST(request: NextRequest) {
   const body = await request.text()
   const signature = request.headers.get('stripe-signature')!
@@ -90,7 +98,7 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
 
 async function handleSubscriptionCreated(subscription: Stripe.Subscription) {
   const customerId = subscription.customer as string
-  const plan = subscription.items.data[0].price.lookup_key // 'monthly' or 'yearly'
+  const plan = getPlanLookupKey(subscription)
 
   console.log(`Subscription created: ${subscription.id}, plan: ${plan}`)
 

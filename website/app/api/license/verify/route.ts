@@ -5,6 +5,14 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2023-10-16',
 })
 
+function getPlanLookupKey(subscription: Stripe.Subscription): string {
+  return (
+    subscription.items.data.find(
+      (item) => typeof item.price?.lookup_key === 'string'
+    )?.price.lookup_key || 'unknown'
+  )
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { email } = await request.json()
@@ -55,7 +63,7 @@ export async function POST(request: NextRequest) {
           // Still valid until end of period
           return NextResponse.json({
             is_active: true,
-            plan: sub.items.data[0].price.lookup_key || 'unknown',
+            plan: getPlanLookupKey(sub),
             expires_at: endDate.toISOString(),
             status: 'canceled',
           })
@@ -70,7 +78,7 @@ export async function POST(request: NextRequest) {
     }
 
     const subscription = subscriptions.data[0]
-    const plan = subscription.items.data[0].price.lookup_key || 'unknown'
+    const plan = getPlanLookupKey(subscription)
     const expiresAt = new Date(subscription.current_period_end * 1000)
 
     return NextResponse.json({
