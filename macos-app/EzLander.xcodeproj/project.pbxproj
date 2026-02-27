@@ -12,7 +12,7 @@
 		1A0000000000000000000003 /* MainPopover.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000013 /* MainPopover.swift */; };
 		1A0000000000000000000004 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000014 /* ChatView.swift */; };
 		1A0000000000000000000005 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000015 /* SettingsView.swift */; };
-		1A0000000000000000000006 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000016 /* OnboardingView.swift */; };
+		1A0000000000000000000006 /* LicenseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000016 /* LicenseView.swift */; };
 		1A0000000000000000000007 /* ClaudeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000017 /* ClaudeService.swift */; };
 		1A0000000000000000000008 /* OAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000018 /* OAuthService.swift */; };
 		1A0000000000000000000009 /* GoogleCalendarService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000019 /* GoogleCalendarService.swift */; };
@@ -41,6 +41,7 @@
 		1A0000000000000000000066 /* APIRetryHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000065 /* APIRetryHelper.swift */; };
 		1A0000000000000000000068 /* EventParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000067 /* EventParser.swift */; };
 		1A000000000000000000006A /* EmailParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000069 /* EmailParser.swift */; };
+		1A000000000000000000006C /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A000000000000000000006B /* OnboardingView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -49,7 +50,7 @@
 		1A0000000000000000000013 /* MainPopover.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainPopover.swift; sourceTree = "<group>"; };
 		1A0000000000000000000014 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		1A0000000000000000000015 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
-		1A0000000000000000000016 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		1A0000000000000000000016 /* LicenseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LicenseView.swift; sourceTree = "<group>"; };
 		1A0000000000000000000017 /* ClaudeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeService.swift; sourceTree = "<group>"; };
 		1A0000000000000000000018 /* OAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OAuthService.swift; sourceTree = "<group>"; };
 		1A0000000000000000000019 /* GoogleCalendarService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleCalendarService.swift; sourceTree = "<group>"; };
@@ -81,6 +82,7 @@
 		1A0000000000000000000065 /* APIRetryHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIRetryHelper.swift; sourceTree = "<group>"; };
 		1A0000000000000000000067 /* EventParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventParser.swift; sourceTree = "<group>"; };
 		1A0000000000000000000069 /* EmailParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmailParser.swift; sourceTree = "<group>"; };
+		1A000000000000000000006B /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -132,12 +134,13 @@
 				1A0000000000000000000013 /* MainPopover.swift */,
 				1A0000000000000000000014 /* ChatView.swift */,
 				1A0000000000000000000015 /* SettingsView.swift */,
-				1A0000000000000000000016 /* OnboardingView.swift */,
+				1A0000000000000000000016 /* LicenseView.swift */,
 				1A0000000000000000000039 /* CalendarView.swift */,
 				1A000000000000000000003A /* AIActionPreview.swift */,
 				1A000000000000000000003B /* KeyboardShortcutsView.swift */,
 				1A000000000000000000003D /* EmailView.swift */,
 				1A000000000000000000003F /* EventDetailView.swift */,
+				1A000000000000000000006B /* OnboardingView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -259,7 +262,7 @@
 				1A0000000000000000000003 /* MainPopover.swift in Sources */,
 				1A0000000000000000000004 /* ChatView.swift in Sources */,
 				1A0000000000000000000005 /* SettingsView.swift in Sources */,
-				1A0000000000000000000006 /* OnboardingView.swift in Sources */,
+				1A0000000000000000000006 /* LicenseView.swift in Sources */,
 				1A0000000000000000000022 /* AIService.swift in Sources */,
 				1A0000000000000000000007 /* ClaudeService.swift in Sources */,
 				1A0000000000000000000023 /* KimiService.swift in Sources */,
@@ -287,6 +290,7 @@
 				1A0000000000000000000066 /* APIRetryHelper.swift in Sources */,
 				1A0000000000000000000068 /* EventParser.swift in Sources */,
 				1A000000000000000000006A /* EmailParser.swift in Sources */,
+				1A000000000000000000006C /* OnboardingView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

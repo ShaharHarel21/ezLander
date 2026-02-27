@@ -186,6 +186,15 @@ class MenuBarController: NSObject {
             showPreviewWindow()
             return
         }
+
+        // Block popover if not subscribed
+        guard SubscriptionService.shared.isSubscribed else {
+            if let appDelegate = NSApp.delegate as? AppDelegate {
+                appDelegate.showLicenseActivation()
+            }
+            return
+        }
+
         if let button = statusItem.button {
             // Reset to the default Chat (AI Agent) tab each time
             NotificationCenter.default.post(name: Self.switchTabNotification, object: "chat")
@@ -194,7 +203,7 @@ class MenuBarController: NSObject {
         }
     }
 
-    private func closePopover() {
+    func closePopover() {
         if AppDelegate.isPreviewMode {
             // Don't close in preview mode
             return

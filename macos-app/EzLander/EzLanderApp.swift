@@ -17,6 +17,7 @@ struct EzLanderApp: App {
 class AppDelegate: NSObject, NSApplicationDelegate {
     var menuBarController: MenuBarController?
     private var onboardingWindow: NSWindow?
+    private var licenseWindow: NSWindow?
     static var isPreviewMode: Bool {
         CommandLine.arguments.contains("--preview-mode")
     }
@@ -55,10 +56,31 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        // Show onboarding for new users
-        if !UserDefaults.standard.bool(forKey: "onboardingComplete") && !Self.isPreviewMode {
-            showOnboarding()
+        // Gate: onboarding for new users, license check for returning users
+        if !Self.isPreviewMode {
+            if !UserDefaults.standard.bool(forKey: "onboardingComplete") {
+                // First-time user: show onboarding (subscription step at end)
+                showOnboarding()
+            } else {
+                // Returning user: check license
+                Task {
+                    let isLicensed = await SubscriptionService.shared.checkSubscriptionOnLaunch()
+                    await MainActor.run {
+                        if !isLicensed {
+                            showLicenseActivation()
+                        }
+                    }
+                }
+            }
         }
+
+        // Listen for subscription invalidation during runtime
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(subscriptionInvalidated),
+            name: SubscriptionService.subscriptionInvalidatedNotification,
+            object: nil
+        )
 
         // Register for URL events
         NSAppleEventManager.shared().setEventHandler(
@@ -82,7 +104,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func showOnboarding() {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 400, height: 500),
-            styleMask: [.titled, .closable],
+            styleMask: [.titled],
             backing: .buffered,
             defer: false
         )
@@ -101,7 +123,44 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         ))
         window.contentViewController = NSHostingController(rootView: onboardingView)
         window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
         onboardingWindow = window
+    }
+
+    func showLicenseActivation() {
+        // Don't show multiple license windows
+        if licenseWindow != nil { return }
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 400, height: 500),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        window.center()
+        window.title = "Activate ezLander"
+        window.isReleasedWhenClosed = false
+
+        let licenseView = LicenseView(isLicenseActivated: Binding(
+            get: { SubscriptionService.shared.isSubscribed },
+            set: { [weak self] activated in
+                if activated {
+                    self?.licenseWindow?.close()
+                    self?.licenseWindow = nil
+                }
+            }
+        ))
+        window.contentViewController = NSHostingController(rootView: licenseView)
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        licenseWindow = window
+    }
+
+    @objc private func subscriptionInvalidated() {
+        DispatchQueue.main.async { [weak self] in
+            self?.menuBarController?.closePopover()
+            self?.showLicenseActivation()
+        }
     }
 
     @objc func handleURLEvent(_ event: NSAppleEventDescriptor, withReplyEvent replyEvent: NSAppleEventDescriptor) {

@@ -95,8 +95,8 @@ struct SettingsView: View {
                 }
             }
 
-            SettingsSection(title: "Subscription") {
-                subscriptionView
+            SettingsSection(title: "License") {
+                licenseInfoView
             }
         }
     }
@@ -228,42 +228,34 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - Subscription View
-    private var subscriptionView: some View {
+    // MARK: - License Info View
+    private var licenseInfoView: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 VStack(alignment: .leading) {
-                    Text(viewModel.subscriptionStatus.displayName)
+                    Text("Licensed")
                         .font(.headline)
-                    Text(viewModel.subscriptionStatus.description)
+                    Text(viewModel.licenseEmail)
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
 
                 Spacer()
 
-                if viewModel.subscriptionStatus == .active {
-                    Text("Active")
-                        .font(.caption)
-                        .foregroundColor(.green)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(Color.green.opacity(0.12))
-                        .cornerRadius(8)
-                }
+                Text("Active")
+                    .font(.caption)
+                    .foregroundColor(.green)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Color.green.opacity(0.12))
+                    .cornerRadius(8)
             }
 
-            if viewModel.subscriptionStatus != .active {
-                Button("Upgrade to Pro") {
-                    viewModel.openSubscriptionPage()
-                }
-                .buttonStyle(WarmGradientButtonStyle())
-            } else {
-                Button("Manage Subscription") {
-                    viewModel.openCustomerPortal()
-                }
-                .buttonStyle(.bordered)
+            Button("Deactivate Subscription") {
+                viewModel.deactivateSubscription()
             }
+            .buttonStyle(.bordered)
+            .foregroundColor(.red)
         }
     }
 
@@ -752,7 +744,7 @@ class SettingsViewModel: ObservableObject {
     @Published var userEmail: String = ""
     @Published var userName: String = ""
     @Published var userPicture: String? = nil
-    @Published var subscriptionStatus: SubscriptionStatus = .none
+    @Published var licenseEmail: String = ""
     @Published var googleCalendarConnected: Bool = false
     @Published var appleCalendarConnected: Bool = false
     @Published var gmailConnected: Bool = false
@@ -859,6 +851,9 @@ class SettingsViewModel: ObservableObject {
 
         // Load AI provider settings
         selectedAIProvider = AIService.shared.currentProvider
+
+        // Load subscription info
+        licenseEmail = SubscriptionService.shared.subscribedEmail
     }
 
     // MARK: - AI Key Management
@@ -950,14 +945,8 @@ class SettingsViewModel: ObservableObject {
         userEmail = ""
     }
 
-    func openSubscriptionPage() {
-        if let url = URL(string: "https://ezlander.app/pricing") {
-            NSWorkspace.shared.open(url)
-        }
-    }
-
-    func openCustomerPortal() {
-        // Open Stripe customer portal
+    func deactivateSubscription() {
+        SubscriptionService.shared.deactivateSubscription()
     }
 
     func connectGoogleCalendar() {
@@ -1040,31 +1029,6 @@ enum AppearanceMode: String, CaseIterable {
 }
 
 // MARK: - Types
-enum SubscriptionStatus {
-    case none
-    case trial
-    case active
-    case expired
-
-    var displayName: String {
-        switch self {
-        case .none: return "Free"
-        case .trial: return "Trial"
-        case .active: return "Pro"
-        case .expired: return "Expired"
-        }
-    }
-
-    var description: String {
-        switch self {
-        case .none: return "Upgrade to unlock all features"
-        case .trial: return "7 days remaining"
-        case .active: return "All features unlocked"
-        case .expired: return "Please renew your subscription"
-        }
-    }
-}
-
 enum CalendarType: String, CaseIterable {
     case google
     case apple
