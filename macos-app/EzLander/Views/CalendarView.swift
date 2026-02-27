@@ -36,8 +36,8 @@ struct CalendarView: View {
             ))
             .animation(.spring(response: 0.32, dampingFraction: 0.80), value: viewModel.viewMode)
 
-            // Selected day events (hidden in day view since events are shown inline)
-            if viewModel.viewMode != .day {
+            // Selected day events (only in month view — week/day views show events inline)
+            if viewModel.viewMode == .month {
                 Divider()
                 selectedDayEvents
             }
@@ -220,17 +220,30 @@ struct CalendarView: View {
 
     // MARK: - Week View
     private var weekView: some View {
-        VStack(spacing: 0) {
-            // Day headers with dates
+        let hourHeight: CGFloat = 52
+        let totalHeight: CGFloat = hourHeight * 24
+
+        return VStack(spacing: 0) {
+            // Day column headers aligned with grid columns
             HStack(spacing: 0) {
+                Color.clear
+                    .frame(width: 46)
+
                 ForEach(viewModel.weekDays, id: \.self) { date in
                     VStack(spacing: 2) {
                         Text(viewModel.dayOfWeek(date))
                             .font(.caption2)
                             .foregroundColor(.secondary)
-                        Text(viewModel.dayNumber(date))
-                            .font(.system(size: 14, weight: viewModel.isSameDay(date, Date()) ? .bold : .regular))
-                            .foregroundColor(viewModel.isSameDay(date, Date()) ? .warmPrimary : .primary)
+
+                        ZStack {
+                            Circle()
+                                .fill(viewModel.isSameDay(date, Date()) ? Color.warmPrimary : Color.clear)
+                                .frame(width: 24, height: 24)
+
+                            Text(viewModel.dayNumber(date))
+                                .font(.system(size: 13, weight: viewModel.isSameDay(date, Date()) ? .bold : .regular))
+                                .foregroundColor(viewModel.isSameDay(date, Date()) ? .white : .primary)
+                        }
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 4)
@@ -252,18 +265,56 @@ struct CalendarView: View {
                     }
                 }
             }
-            .padding(.horizontal, 4)
+
+            // All-day events row aligned with day columns
+            let hasAllDay = viewModel.weekDays.contains { !viewModel.eventsForDate($0).filter { $0.isAllDay }.isEmpty }
+            if hasAllDay {
+                Divider()
+
+                HStack(alignment: .top, spacing: 0) {
+                    Text("All day")
+                        .font(.system(size: 9))
+                        .foregroundColor(.secondary)
+                        .frame(width: 46, alignment: .trailing)
+                        .padding(.trailing, 4)
+
+                    ForEach(viewModel.weekDays, id: \.self) { date in
+                        VStack(spacing: 1) {
+                            ForEach(viewModel.eventsForDate(date).filter { $0.isAllDay }, id: \.id) { event in
+                                Text(event.title)
+                                    .font(.system(size: 8, weight: .medium))
+                                    .lineLimit(1)
+                                    .padding(.horizontal, 2)
+                                    .padding(.vertical, 1)
+                                    .frame(maxWidth: .infinity)
+                                    .background((event.calendarColor.map { Color(hex: $0) } ?? Color.warmAccent).opacity(0.2))
+                                    .cornerRadius(2)
+                                    .onTapGesture { selectedEvent = event }
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
 
             Divider()
 
-            // Week events timeline
-            ScrollView {
-                VStack(spacing: 4) {
-                    ForEach(viewModel.weekEvents, id: \.id) { event in
-                        WeekEventRow(event: event, onTap: {
-                            selectedEvent = event
-                        })
-                    }
+            // Columnar time grid
+            ScrollViewReader { proxy in
+                ScrollView {
+                    HStack(alignment: .top, spacing: 0) {
+                        // Hour labels column
+                        VStack(spacing: 0) {
+                            ForEach(0..<24, id: \.self) { hour in
+                                Text(hourLabel(hour))
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.secondary)
+                                    .frame(width: 42, height: hourHeight, alignment: .topTrailing)
+                                    .padding(.trailing, 4)
+                                    .id(hour)
+                            }
+                        }
 
                     if viewModel.weekEvents.isEmpty && !viewModel.isLoading {
                         Text("No events this week")
@@ -272,7 +323,12 @@ struct CalendarView: View {
                             .frame(maxWidth: .infinity)
                     }
                 }
-                .padding(.horizontal, 4)
+                .onAppear {
+                    scrollToRelevantHour(proxy: proxy)
+                }
+                .onChange(of: viewModel.selectedDate) { _ in
+                    scrollToRelevantHour(proxy: proxy)
+                }
             }
         }
     }
@@ -686,38 +742,30 @@ struct EventRow: View {
     }
 }
 
-// MARK: - Week Event Row
-struct WeekEventRow: View {
+// MARK: - Week Column Event Block
+struct WeekColumnEventBlock: View {
     let event: CalendarEvent
     let onTap: () -> Void
 
-    private let formatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "EEE, h:mm a"
-        return f
-    }()
-
     var body: some View {
-        HStack(spacing: 8) {
-            RoundedRectangle(cornerRadius: 2)
-                .fill(calendarBarColor)
+        HStack(spacing: 0) {
+            RoundedRectangle(cornerRadius: 1)
+                .fill(barColor)
                 .frame(width: 3)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 0) {
                 Text(event.title)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+                    .font(.system(size: 9, weight: .medium))
+                    .lineLimit(2)
 
-                if event.isAllDay {
-                    Text("All Day")
-                        .font(.caption)
+                if event.hasVideoCall {
+                    Image(systemName: "video.fill")
+                        .font(.system(size: 7))
                         .foregroundColor(.warmPrimary)
-                } else {
-                    Text(formatter.string(from: event.startDate))
-                        .font(.caption)
-                        .foregroundColor(.secondary)
                 }
             }
+            .padding(.leading, 2)
+            .padding(.vertical, 1)
 
             Spacer()
 
@@ -750,9 +798,13 @@ struct WeekEventRow: View {
         .onTapGesture {
             onTap()
         }
+        .frame(maxWidth: .infinity)
+        .background(barColor.opacity(0.15))
+        .cornerRadius(3)
+        .onTapGesture { onTap() }
     }
 
-    private var calendarBarColor: Color {
+    private var barColor: Color {
         if let hex = event.calendarColor {
             return Color(hex: hex)
         }
