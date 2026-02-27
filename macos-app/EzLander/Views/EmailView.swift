@@ -258,7 +258,7 @@ struct EmailView: View {
             ZStack {
                 Rectangle().fill(.ultraThinMaterial)
                 Rectangle().fill(Color.warmPrimary.opacity(0.04))
-                Rectangle().fill(Color.white.opacity(0.10)).frame(height: 0.5).frame(maxHeight: .infinity, alignment: .bottom)
+                Rectangle().fill(Color.glassSeparator).frame(height: 0.5).frame(maxHeight: .infinity, alignment: .bottom)
             }
         )
     }
@@ -322,7 +322,7 @@ struct EmailView: View {
                 ZStack {
                     RoundedRectangle(cornerRadius: 10).fill(.ultraThinMaterial)
                     RoundedRectangle(cornerRadius: 10).fill(Color.warmPrimary.opacity(0.08))
-                    RoundedRectangle(cornerRadius: 10).strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
+                    RoundedRectangle(cornerRadius: 10).strokeBorder(Color.glassBorder, lineWidth: 0.5)
                 }
             )
             .padding(.horizontal, 4).padding(.vertical, 2)
@@ -357,7 +357,7 @@ struct EmailView: View {
             ZStack {
                 RoundedRectangle(cornerRadius: 20).fill(.ultraThinMaterial)
                 RoundedRectangle(cornerRadius: 20).fill(Color.warmSoft.opacity(0.08))
-                RoundedRectangle(cornerRadius: 20).strokeBorder(Color.white.opacity(0.12), lineWidth: 0.75)
+                RoundedRectangle(cornerRadius: 20).strokeBorder(Color.glassBorder, lineWidth: 0.75)
             }
         )
         .padding()
@@ -417,7 +417,7 @@ struct EmailView: View {
                         availableLabels: viewModel.availableLabels
                     )
                     Rectangle()
-                        .fill(Color.white.opacity(0.06))
+                        .fill(Color.glassSeparator)
                         .frame(height: 0.5)
                         .padding(.leading, 50)
                 }
@@ -485,7 +485,7 @@ struct EmailView: View {
                 ZStack {
                     Rectangle().fill(.ultraThinMaterial)
                     Rectangle().fill(Color.warmSoft.opacity(0.08))
-                    Rectangle().fill(Color.white.opacity(0.10)).frame(height: 0.5).frame(maxHeight: .infinity, alignment: .bottom)
+                    Rectangle().fill(Color.glassSeparator).frame(height: 0.5).frame(maxHeight: .infinity, alignment: .bottom)
                 }
             )
 
@@ -641,7 +641,7 @@ struct EmailView: View {
                 ZStack {
                     Rectangle().fill(.regularMaterial)
                     Rectangle().fill(Color.warmSoft.opacity(0.06))
-                    Rectangle().fill(Color.white.opacity(0.10)).frame(height: 0.5).frame(maxHeight: .infinity, alignment: .top)
+                    Rectangle().fill(Color.glassSeparator).frame(height: 0.5).frame(maxHeight: .infinity, alignment: .top)
                 }
             )
         }

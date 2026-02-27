@@ -4,10 +4,12 @@ import AppKit
 @main
 struct EzLanderApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @ObservedObject private var themeManager = ThemeManager.shared
 
     var body: some Scene {
         Settings {
             SettingsView()
+                .preferredColorScheme(themeManager.resolvedColorScheme)
         }
     }
 }

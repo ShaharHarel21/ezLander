@@ -12,7 +12,7 @@ struct CalendarView: View {
             // Header with navigation
             calendarHeader
 
-            Rectangle().fill(Color.white.opacity(0.08)).frame(height: 0.5)
+            Rectangle().fill(Color.glassSeparator).frame(height: 0.5)
 
             // View mode toggle
             viewModeToggle
@@ -38,7 +38,7 @@ struct CalendarView: View {
 
             // Selected day events (hidden in day view since events are shown inline)
             if viewModel.viewMode != .day {
-                Rectangle().fill(Color.white.opacity(0.08)).frame(height: 0.5)
+                Rectangle().fill(Color.glassSeparator).frame(height: 0.5)
                 selectedDayEvents
             }
         }
@@ -164,7 +164,7 @@ struct CalendarView: View {
             ZStack {
                 Rectangle().fill(.ultraThinMaterial)
                 Rectangle().fill(Color.warmAccent.opacity(0.06))
-                Rectangle().fill(Color.white.opacity(0.10)).frame(height: 0.5).frame(maxHeight: .infinity, alignment: .bottom)
+                Rectangle().fill(Color.glassSeparator).frame(height: 0.5).frame(maxHeight: .infinity, alignment: .bottom)
             }
         )
     }
@@ -199,8 +199,8 @@ struct CalendarView: View {
             RoundedRectangle(cornerRadius: 10)
                 .fill(.ultraThinMaterial)
                 .overlay(RoundedRectangle(cornerRadius: 10).fill(Color.warmSoft.opacity(0.08)))
-                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.white.opacity(0.12), lineWidth: 0.75))
         )
+        .adaptiveBorder(cornerRadius: 10, opacity: 0.12)
         .padding(.horizontal)
         .padding(.vertical, 4)
     }
@@ -288,7 +288,7 @@ struct CalendarView: View {
             }
             .padding(.horizontal, 4)
 
-            Rectangle().fill(Color.white.opacity(0.08)).frame(height: 0.5)
+            Rectangle().fill(Color.glassSeparator).frame(height: 0.5)
 
             // Week events timeline
             ScrollView {
@@ -308,7 +308,7 @@ struct CalendarView: View {
                                 ZStack {
                                     RoundedRectangle(cornerRadius: 16).fill(.ultraThinMaterial)
                                     RoundedRectangle(cornerRadius: 16).fill(Color.warmSoft.opacity(0.08))
-                                    RoundedRectangle(cornerRadius: 16).strokeBorder(Color.white.opacity(0.12), lineWidth: 0.75)
+                                    RoundedRectangle(cornerRadius: 16).strokeBorder(Color.glassBorder, lineWidth: 0.75)
                                 }
                             )
                             .padding()
@@ -350,7 +350,7 @@ struct CalendarView: View {
                 }
                 .padding(.vertical, 6)
 
-                Rectangle().fill(Color.white.opacity(0.08)).frame(height: 0.5)
+                Rectangle().fill(Color.glassSeparator).frame(height: 0.5)
             }
 
             // Timeline
@@ -368,7 +368,7 @@ struct CalendarView: View {
 
                                     VStack(spacing: 0) {
                                         Rectangle()
-                                            .fill(Color.white.opacity(0.07))
+                                            .fill(Color.glassSeparator)
                                             .frame(height: 0.5)
                                         Spacer()
                                     }
@@ -513,7 +513,7 @@ struct CalendarView: View {
                                     ZStack {
                                         RoundedRectangle(cornerRadius: 16).fill(.ultraThinMaterial)
                                         RoundedRectangle(cornerRadius: 16).fill(Color.warmSoft.opacity(0.08))
-                                        RoundedRectangle(cornerRadius: 16).strokeBorder(Color.white.opacity(0.12), lineWidth: 0.75)
+                                        RoundedRectangle(cornerRadius: 16).strokeBorder(Color.glassBorder, lineWidth: 0.75)
                                     }
                                 )
                                 .padding()
@@ -528,7 +528,7 @@ struct CalendarView: View {
             ZStack {
                 Rectangle().fill(.ultraThinMaterial)
                 Rectangle().fill(Color.warmAccent.opacity(0.05))
-                Rectangle().fill(Color.white.opacity(0.10)).frame(height: 0.5).frame(maxHeight: .infinity, alignment: .top)
+                Rectangle().fill(Color.glassSeparator).frame(height: 0.5).frame(maxHeight: .infinity, alignment: .top)
             }
         )
     }
@@ -612,7 +612,7 @@ struct DayCell: View {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(.ultraThinMaterial)
                 RoundedRectangle(cornerRadius: 8).fill(Color.warmPrimary.opacity(0.80))
-                RoundedRectangle(cornerRadius: 8).strokeBorder(Color.white.opacity(0.30), lineWidth: 0.75)
+                RoundedRectangle(cornerRadius: 8).strokeBorder(Color.white.opacity(0.25), lineWidth: 0.75)
             }
             .shadow(color: Color.warmPrimary.opacity(0.30), radius: 8, x: 0, y: 2)
         } else if isCurrentMonth && eventCount >= 3 {
@@ -739,7 +739,7 @@ struct EventRow: View {
             ZStack {
                 RoundedRectangle(cornerRadius: 10).fill(.ultraThinMaterial)
                 RoundedRectangle(cornerRadius: 10).fill(Color.warmSoft.opacity(0.05))
-                RoundedRectangle(cornerRadius: 10).strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
+                RoundedRectangle(cornerRadius: 10).strokeBorder(Color.glassBorder, lineWidth: 0.5)
             }
             .shadow(color: .black.opacity(0.04), radius: 4, x: 0, y: 1)
         )
@@ -817,7 +817,7 @@ struct WeekEventRow: View {
             ZStack {
                 RoundedRectangle(cornerRadius: 10).fill(.ultraThinMaterial)
                 RoundedRectangle(cornerRadius: 10).fill(Color.warmSoft.opacity(0.05))
-                RoundedRectangle(cornerRadius: 10).strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
+                RoundedRectangle(cornerRadius: 10).strokeBorder(Color.glassBorder, lineWidth: 0.5)
             }
             .shadow(color: .black.opacity(0.04), radius: 4, x: 0, y: 1)
         )
@@ -917,7 +917,7 @@ struct DayEventBlock: View {
                 // Top edge specular
                 VStack {
                     RoundedRectangle(cornerRadius: 8)
-                        .strokeBorder(Color.white.opacity(0.20), lineWidth: 0.5)
+                        .strokeBorder(Color.glassBorder, lineWidth: 0.5)
                         .frame(height: 1)
                     Spacer()
                 }

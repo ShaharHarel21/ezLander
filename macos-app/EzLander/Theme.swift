@@ -1,4 +1,74 @@
 import SwiftUI
+import Combine
+
+// MARK: - Theme Mode
+enum ThemeMode: String, CaseIterable, Identifiable {
+    case system
+    case light
+    case dark
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .system: return "System"
+        case .light: return "Light"
+        case .dark: return "Dark"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .system: return "circle.lefthalf.filled"
+        case .light: return "sun.max.fill"
+        case .dark: return "moon.fill"
+        }
+    }
+}
+
+// MARK: - Theme Manager
+class ThemeManager: ObservableObject {
+    static let shared = ThemeManager()
+
+    @Published var selectedMode: ThemeMode {
+        didSet {
+            UserDefaults.standard.set(selectedMode.rawValue, forKey: "theme_mode")
+            applyAppearance()
+        }
+    }
+
+    /// The resolved color scheme based on the selected mode, or nil for system default.
+    var resolvedColorScheme: ColorScheme? {
+        switch selectedMode {
+        case .system: return nil
+        case .light: return .light
+        case .dark: return .dark
+        }
+    }
+
+    private init() {
+        if let saved = UserDefaults.standard.string(forKey: "theme_mode"),
+           let mode = ThemeMode(rawValue: saved) {
+            self.selectedMode = mode
+        } else {
+            self.selectedMode = .system
+        }
+        applyAppearance()
+    }
+
+    func applyAppearance() {
+        DispatchQueue.main.async {
+            switch self.selectedMode {
+            case .system:
+                NSApp.appearance = nil
+            case .light:
+                NSApp.appearance = NSAppearance(named: .aqua)
+            case .dark:
+                NSApp.appearance = NSAppearance(named: .darkAqua)
+            }
+        }
+    }
+}
 
 // MARK: - Warm & Modern Color Theme
 extension Color {
@@ -59,10 +129,54 @@ extension Color {
     static let glassAmberTint    = Color.warmAccent.opacity(0.07)
     static let glassPeachTint    = Color.warmSoft.opacity(0.12)
     static let glassSpecular     = Color.white.opacity(0.18)
-    static let glassBorder       = Color.white.opacity(0.10)
+    static let glassBorder       = Color.primary.opacity(0.08)
     static let glassHover        = Color.warmPrimary.opacity(0.06)
     static let glassPressed      = Color.warmPrimary.opacity(0.14)
     static let glassSeparator    = Color.primary.opacity(0.10)
+}
+
+// MARK: - Adaptive Edge Color
+/// Returns a border/edge color that works in both light and dark mode.
+/// In dark mode, uses white at the given opacity for glass highlights.
+/// In light mode, uses black at reduced opacity so borders don't appear as white lines.
+struct AdaptiveEdge: View {
+    let opacity: Double
+    @Environment(\.colorScheme) var colorScheme
+
+    var color: Color {
+        colorScheme == .dark
+            ? Color.white.opacity(opacity)
+            : Color.black.opacity(opacity * 0.35)
+    }
+
+    var body: some View { EmptyView() }
+}
+
+/// A helper that vends the adaptive border color for a given base opacity.
+extension View {
+    func adaptiveBorder(cornerRadius: CGFloat, opacity: Double = 0.12, lineWidth: CGFloat = 0.75) -> some View {
+        modifier(AdaptiveBorderModifier(cornerRadius: cornerRadius, opacity: opacity, lineWidth: lineWidth))
+    }
+}
+
+private struct AdaptiveBorderModifier: ViewModifier {
+    let cornerRadius: CGFloat
+    let opacity: Double
+    let lineWidth: CGFloat
+    @Environment(\.colorScheme) var colorScheme
+
+    func body(content: Content) -> some View {
+        content.overlay(
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .strokeBorder(borderColor, lineWidth: lineWidth)
+        )
+    }
+
+    private var borderColor: Color {
+        colorScheme == .dark
+            ? Color.white.opacity(opacity)
+            : Color.black.opacity(opacity * 0.35)
+    }
 }
 
 // MARK: - Glass Infrastructure
@@ -115,6 +229,9 @@ struct GlassPanelBackground: View {
         .glassEffect(.regular, in: RoundedRectangle(cornerRadius: cornerRadius))
     }
 
+    private var specularColor: Color { colorScheme == .dark ? .white : .black }
+    private var specularStrength: Double { colorScheme == .dark ? 0.18 : 0.04 }
+
     private var fallbackGlass: some View {
         ZStack {
             RoundedRectangle(cornerRadius: cornerRadius).fill(.ultraThinMaterial)
@@ -123,7 +240,7 @@ struct GlassPanelBackground: View {
             }
             RoundedRectangle(cornerRadius: cornerRadius)
                 .fill(RadialGradient(
-                    colors: [.white.opacity(0.18), .white.opacity(0)],
+                    colors: [specularColor.opacity(specularStrength), specularColor.opacity(0)],
                     center: UnitPoint(x: 0.2, y: 0.12),
                     startRadius: 0, endRadius: 140
                 ))
@@ -131,16 +248,22 @@ struct GlassPanelBackground: View {
                 .strokeBorder(
                     LinearGradient(
                         colors: [
-                            .white.opacity(edgeOpacity),
-                            .white.opacity(edgeOpacity * 0.22),
-                            .white.opacity(edgeOpacity * 0.12),
-                            .white.opacity(edgeOpacity * 0.40)
+                            borderEdgeColor(edgeOpacity),
+                            borderEdgeColor(edgeOpacity * 0.22),
+                            borderEdgeColor(edgeOpacity * 0.12),
+                            borderEdgeColor(edgeOpacity * 0.40)
                         ],
                         startPoint: .topLeading, endPoint: .bottomTrailing
                     ),
                     lineWidth: 1.0
                 )
         }
+    }
+
+    private func borderEdgeColor(_ opacity: Double) -> Color {
+        colorScheme == .dark
+            ? .white.opacity(opacity)
+            : .black.opacity(opacity * 0.3)
     }
 }
 
@@ -167,13 +290,18 @@ struct GlassCard: ViewModifier {
 struct ShimmerModifier: ViewModifier {
     @State private var phase: CGFloat = -1
     @Environment(\.accessibilityReduceMotion) var reduceMotion
+    @Environment(\.colorScheme) var colorScheme
+
+    private var shimmerColor: Color {
+        colorScheme == .dark ? .white.opacity(0.18) : .black.opacity(0.06)
+    }
 
     func body(content: Content) -> some View {
         content.overlay(
             LinearGradient(
                 stops: [
                     .init(color: .clear, location: max(0, phase - 0.3)),
-                    .init(color: .white.opacity(0.18), location: max(0, min(1, phase))),
+                    .init(color: shimmerColor, location: max(0, min(1, phase))),
                     .init(color: .clear, location: min(1, phase + 0.3))
                 ],
                 startPoint: .topLeading, endPoint: .bottomTrailing

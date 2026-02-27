@@ -100,8 +100,8 @@ struct ChatView: View {
                     .background(
                         RoundedRectangle(cornerRadius: 14)
                             .fill(.ultraThinMaterial)
-                            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5))
                     )
+                    .adaptiveBorder(cornerRadius: 14, opacity: 0.12, lineWidth: 0.5)
                     .onSubmit {
                         sendMessage()
                     }
@@ -119,7 +119,7 @@ struct ChatView: View {
                 ZStack {
                     Rectangle().fill(.regularMaterial)
                     Rectangle().fill(Color.warmSoft.opacity(0.06))
-                    Rectangle().fill(Color.white.opacity(0.10)).frame(height: 0.5).frame(maxHeight: .infinity, alignment: .top)
+                    Rectangle().fill(Color.glassSeparator).frame(height: 0.5).frame(maxHeight: .infinity, alignment: .top)
                 }
             )
         }
@@ -176,6 +176,11 @@ struct QuickActionButton: View {
 struct MessageBubble: View {
     let message: ChatMessage
     @State private var appeared = false
+    @Environment(\.colorScheme) private var colorScheme
+
+    private func edgeColor(_ opacity: Double) -> Color {
+        colorScheme == .dark ? .white.opacity(opacity) : .black.opacity(opacity * 0.3)
+    }
 
     var body: some View {
         HStack {
@@ -194,7 +199,7 @@ struct MessageBubble: View {
                                 RoundedRectangle(cornerRadius: 18).fill(Color.warmSoft.opacity(0.10))
                                 RoundedRectangle(cornerRadius: 18)
                                     .strokeBorder(
-                                        LinearGradient(colors: [.white.opacity(0.40), .white.opacity(0.08)],
+                                        LinearGradient(colors: [edgeColor(0.40), edgeColor(0.08)],
                                                        startPoint: .topLeading, endPoint: .bottomTrailing),
                                         lineWidth: 0.75
                                     )
@@ -277,6 +282,7 @@ struct FormattedTextView: View {
 // MARK: - Tool Call Badge
 struct ToolCallBadge: View {
     let toolCall: ToolCall
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         HStack(spacing: 4) {
@@ -291,7 +297,7 @@ struct ToolCallBadge: View {
             ZStack {
                 Capsule().fill(.ultraThinMaterial)
                 Capsule().fill(Color.warmSoft.opacity(0.08))
-                Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
+                Capsule().strokeBorder(colorScheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.06), lineWidth: 0.5)
             }
         )
     }
@@ -301,6 +307,7 @@ struct ToolCallBadge: View {
 struct TypingIndicator: View {
     @State private var animating = false
     @Environment(\.accessibilityReduceMotion) var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         HStack(spacing: 4) {
@@ -323,7 +330,7 @@ struct TypingIndicator: View {
             ZStack {
                 RoundedRectangle(cornerRadius: 18).fill(.ultraThinMaterial)
                 RoundedRectangle(cornerRadius: 18).fill(Color.warmSoft.opacity(0.10))
-                RoundedRectangle(cornerRadius: 18).strokeBorder(Color.white.opacity(0.18), lineWidth: 0.75)
+                RoundedRectangle(cornerRadius: 18).strokeBorder(colorScheme == .dark ? Color.white.opacity(0.18) : Color.black.opacity(0.06), lineWidth: 0.75)
             }
         )
         .clipShape(RoundedRectangle(cornerRadius: 18))

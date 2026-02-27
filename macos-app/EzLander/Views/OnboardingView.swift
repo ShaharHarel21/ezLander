@@ -70,7 +70,7 @@ struct OnboardingView: View {
                     Circle()
                         .fill(.ultraThinMaterial)
                         .overlay(Circle().fill(Color.warmSoft.opacity(0.10)))
-                        .overlay(Circle().strokeBorder(Color.white.opacity(0.20), lineWidth: 1.0))
+                        .overlay(Circle().strokeBorder(Color.glassBorder, lineWidth: 1.0))
                         .frame(width: 100, height: 100)
                         .shadow(color: Color.warmPrimary.opacity(0.15), radius: 20)
 
@@ -119,7 +119,7 @@ struct OnboardingView: View {
                 ZStack {
                     RoundedRectangle(cornerRadius: 20).fill(.ultraThinMaterial)
                     RoundedRectangle(cornerRadius: 20).fill(Color.warmSoft.opacity(0.06))
-                    RoundedRectangle(cornerRadius: 20).strokeBorder(Color.white.opacity(0.12), lineWidth: 0.75)
+                    RoundedRectangle(cornerRadius: 20).strokeBorder(Color.glassBorder, lineWidth: 0.75)
                 }
                 .shadow(color: .black.opacity(0.10), radius: 20)
             )
@@ -197,7 +197,7 @@ struct OnboardingView: View {
                     ZStack {
                         RoundedRectangle(cornerRadius: 14).fill(.ultraThinMaterial)
                         RoundedRectangle(cornerRadius: 14).fill(Color.warmSoft.opacity(0.10))
-                        RoundedRectangle(cornerRadius: 14).strokeBorder(Color.white.opacity(0.18), lineWidth: 0.75)
+                        RoundedRectangle(cornerRadius: 14).strokeBorder(Color.glassBorder, lineWidth: 0.75)
                     }
                 )
                 .buttonStyle(.plain)
@@ -215,7 +215,7 @@ struct OnboardingView: View {
                     ZStack {
                         RoundedRectangle(cornerRadius: 14).fill(.ultraThinMaterial)
                         RoundedRectangle(cornerRadius: 14).fill(Color.warmSoft.opacity(0.10))
-                        RoundedRectangle(cornerRadius: 14).strokeBorder(Color.white.opacity(0.18), lineWidth: 0.75)
+                        RoundedRectangle(cornerRadius: 14).strokeBorder(Color.glassBorder, lineWidth: 0.75)
                     }
                 )
                 .buttonStyle(.plain)
@@ -236,7 +236,7 @@ struct OnboardingView: View {
                 ZStack {
                     RoundedRectangle(cornerRadius: 14).fill(.ultraThinMaterial)
                     RoundedRectangle(cornerRadius: 14).fill(Color.warmSoft.opacity(0.10))
-                    RoundedRectangle(cornerRadius: 14).strokeBorder(Color.white.opacity(0.18), lineWidth: 0.75)
+                    RoundedRectangle(cornerRadius: 14).strokeBorder(Color.glassBorder, lineWidth: 0.75)
                 }
             )
             .buttonStyle(.plain)

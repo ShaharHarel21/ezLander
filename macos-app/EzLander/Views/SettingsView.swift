@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @StateObject private var viewModel = SettingsViewModel()
     @ObservedObject private var updateService = UpdateService.shared
+    @ObservedObject private var themeManager = ThemeManager.shared
     @State private var selectedSettingsTab: SettingsTab = .account
 
     enum SettingsTab: String, CaseIterable {
@@ -121,6 +122,10 @@ struct SettingsView: View {
     // MARK: - General Tab
     private var generalTabContent: some View {
         VStack(alignment: .leading, spacing: 16) {
+            SettingsSection(title: "Appearance") {
+                themePickerView
+            }
+
             SettingsSection(title: "Preferences") {
                 preferencesView
             }
@@ -345,6 +350,22 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - Theme Picker View
+    private var themePickerView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Choose how ezLander appears")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            Picker("Theme", selection: $themeManager.selectedMode) {
+                ForEach(ThemeMode.allCases) { mode in
+                    Label(mode.label, systemImage: mode.icon).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+        }
+    }
+
     // MARK: - Preferences View
     private var preferencesView: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -546,7 +567,7 @@ struct SettingsSection<Content: View>: View {
                     ZStack {
                         RoundedRectangle(cornerRadius: 14).fill(.ultraThinMaterial)
                         RoundedRectangle(cornerRadius: 14).fill(Color.warmSoft.opacity(0.06))
-                        RoundedRectangle(cornerRadius: 14).strokeBorder(Color.white.opacity(0.12), lineWidth: 0.75)
+                        RoundedRectangle(cornerRadius: 14).strokeBorder(Color.glassBorder, lineWidth: 0.75)
                     }
                     .shadow(color: .black.opacity(0.06), radius: 10, x: 0, y: 2)
                 )
@@ -687,7 +708,7 @@ struct APIKeyRow: View {
                         .background(
                             RoundedRectangle(cornerRadius: 10)
                                 .fill(.ultraThinMaterial)
-                                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5))
+                                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.glassBorder, lineWidth: 0.5))
                         )
                     Button("Save") {
                         onSaveKey()
