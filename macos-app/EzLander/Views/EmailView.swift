@@ -196,39 +196,89 @@ struct EmailView: View {
 
     // MARK: - Header
     private var emailHeader: some View {
-        HStack {
-            if openedEmail != nil {
+        HStack(spacing: 12) {
+            if let email = openedEmail {
+                // Back button
                 Button(action: { openedEmail = nil }) {
                     Image(systemName: "chevron.left")
                 }
                 .buttonStyle(.borderless)
-            }
 
-            if openedEmail != nil {
-                Text("Email")
-                    .font(.headline)
+                Spacer()
+
+                // Action buttons inline
+                Button(action: { replyToEmail = email }) {
+                    Image(systemName: "arrowshape.turn.up.left")
+                }
+                .buttonStyle(.borderless)
+                .help("Reply")
+
+                Button(action: {
+                    viewModel.archiveEmail(email)
+                    openedEmail = nil
+                }) {
+                    Image(systemName: "archivebox")
+                }
+                .buttonStyle(.borderless)
+                .help("Archive")
+
+                Button(action: {
+                    viewModel.deleteEmail(email)
+                    openedEmail = nil
+                }) {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+                .help("Delete")
+
+                if !viewModel.availableLabels.isEmpty {
+                    Menu {
+                        ForEach(viewModel.availableLabels) { label in
+                            Button(action: {
+                                viewModel.moveEmail(email, to: label)
+                                openedEmail = nil
+                            }) {
+                                Label(label.displayName, systemImage: label.icon)
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "folder")
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    .help("Move to")
+                }
+
+                if AIService.shared.hasAnyProviderConfigured {
+                    Button(action: { viewModel.summarizeEmail(email) }) {
+                        Image(systemName: "sparkles")
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(viewModel.isSummarizing)
+                    .help("Summarize")
+                }
             } else {
                 folderMenu
-            }
 
-            Spacer()
+                Spacer()
 
-            if viewModel.isLoading {
-                ProgressView()
-                    .scaleEffect(0.7)
-            }
+                if viewModel.isLoading {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                }
 
-            Button(action: { showingCompose = true }) {
-                Image(systemName: "square.and.pencil")
-            }
-            .buttonStyle(.borderless)
-            .help("Compose")
+                Button(action: { showingCompose = true }) {
+                    Image(systemName: "square.and.pencil")
+                }
+                .buttonStyle(.borderless)
+                .help("Compose")
 
-            Button(action: { viewModel.refresh() }) {
-                Image(systemName: "arrow.clockwise")
+                Button(action: { viewModel.refresh() }) {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.borderless)
+                .disabled(viewModel.isLoading)
             }
-            .buttonStyle(.borderless)
-            .disabled(viewModel.isLoading)
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
@@ -394,49 +444,6 @@ struct EmailView: View {
     // MARK: - Email Detail View
     private func emailDetailView(email: Email) -> some View {
         VStack(spacing: 0) {
-            // Email header info
-            VStack(alignment: .leading, spacing: 8) {
-                Text(email.subject)
-                    .font(.headline)
-                    .lineLimit(2)
-
-                HStack {
-                    // Sender avatar
-                    SenderAvatarView(
-                        email: email.senderEmail,
-                        name: email.senderName,
-                        size: 36
-                    )
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(email.senderName)
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                        Text(email.senderEmail)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-
-                    Spacer()
-
-                    Text(email.formattedDate)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-
-                // Summarize button
-                if AIService.shared.hasAnyProviderConfigured {
-                    Button(action: { viewModel.summarizeEmail(email) }) {
-                        Label("Summarize", systemImage: "sparkles")
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .disabled(viewModel.isSummarizing)
-                }
-            }
-            .padding()
-            .background(Color(NSColor.controlBackgroundColor))
-
             // AI Summary section
             if viewModel.isSummarizing {
                 HStack(spacing: 8) {
@@ -507,9 +514,7 @@ struct EmailView: View {
                 .padding(.vertical, 4)
             }
 
-            Divider()
-
-            // Email body
+            // Email body (expanded to fill all available space)
             if viewModel.loadingEmailId == email.id {
                 ProgressView("Loading...")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -519,54 +524,6 @@ struct EmailView: View {
                     plainContent: viewModel.fullEmailBody ?? email.body
                 )
             }
-
-            Divider()
-
-            // Action buttons
-            HStack(spacing: 16) {
-                Button(action: {
-                    replyToEmail = email
-                }) {
-                    Label("Reply", systemImage: "arrowshape.turn.up.left")
-                }
-                .buttonStyle(.bordered)
-
-                Button(action: {
-                    viewModel.archiveEmail(email)
-                    openedEmail = nil
-                }) {
-                    Label("Archive", systemImage: "archivebox")
-                }
-                .buttonStyle(.bordered)
-
-                Button(role: .destructive, action: {
-                    viewModel.deleteEmail(email)
-                    openedEmail = nil
-                }) {
-                    Label("Delete", systemImage: "trash")
-                }
-                .buttonStyle(.bordered)
-
-                if !viewModel.availableLabels.isEmpty {
-                    Menu {
-                        ForEach(viewModel.availableLabels) { label in
-                            Button(action: {
-                                viewModel.moveEmail(email, to: label)
-                                openedEmail = nil
-                            }) {
-                                Label(label.displayName, systemImage: label.icon)
-                            }
-                        }
-                    } label: {
-                        Label("Move to", systemImage: "folder")
-                    }
-                    .menuStyle(.borderlessButton)
-                }
-
-                Spacer()
-            }
-            .padding()
-            .background(Color(NSColor.controlBackgroundColor))
         }
         .onAppear {
             viewModel.loadFullEmail(email)
