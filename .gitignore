@@ -51,7 +51,8 @@ coverage/
 .nyc_output/
 
 # Claude Code
-.claude/
+.claude/*
+!.claude/plugins/
 
 # Misc
 *.pem
