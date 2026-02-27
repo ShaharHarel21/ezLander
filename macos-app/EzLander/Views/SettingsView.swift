@@ -329,6 +329,7 @@ struct SettingsView: View {
                         OpenAIOAuthRow(
                             isConnected: provider.isOAuthConnected,
                             isSigningIn: viewModel.isSigningInOpenAI,
+                            errorMessage: viewModel.openAIOAuthError,
                             onSignIn: { viewModel.signInWithOpenAI() },
                             onDisconnect: { viewModel.disconnectOpenAIOAuth() }
                         )
@@ -684,49 +685,59 @@ struct APIKeyRow: View {
 struct OpenAIOAuthRow: View {
     let isConnected: Bool
     let isSigningIn: Bool
+    let errorMessage: String?
     let onSignIn: () -> Void
     let onDisconnect: () -> Void
 
     var body: some View {
-        HStack {
-            Image(systemName: "brain")
-                .frame(width: 24)
-                .foregroundColor(.warmAccent)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Image(systemName: "brain")
+                    .frame(width: 24)
+                    .foregroundColor(.warmAccent)
 
-            Text("OpenAI Account")
-                .fontWeight(.medium)
+                Text("OpenAI Account")
+                    .fontWeight(.medium)
 
-            Spacer()
+                Spacer()
 
-            if isConnected {
-                HStack(spacing: 8) {
-                    Text("Connected")
-                        .font(.caption)
-                        .foregroundColor(.green)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(Color.green.opacity(0.12))
-                        .cornerRadius(8)
+                if isConnected {
+                    HStack(spacing: 8) {
+                        Text("Connected")
+                            .font(.caption)
+                            .foregroundColor(.green)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(Color.green.opacity(0.12))
+                            .cornerRadius(8)
 
-                    Button("Disconnect") {
-                        onDisconnect()
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                }
-            } else {
-                Button(action: onSignIn) {
-                    HStack(spacing: 4) {
-                        if isSigningIn {
-                            ProgressView()
-                                .scaleEffect(0.6)
+                        Button("Disconnect") {
+                            onDisconnect()
                         }
-                        Text("Sign in with OpenAI")
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
                     }
+                } else {
+                    Button(action: onSignIn) {
+                        HStack(spacing: 4) {
+                            if isSigningIn {
+                                ProgressView()
+                                    .scaleEffect(0.6)
+                            }
+                            Text("Sign in with OpenAI")
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(isSigningIn)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-                .disabled(isSigningIn)
+            }
+
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.caption)
+                    .foregroundColor(.red)
+                    .padding(.leading, 28)
             }
         }
         .padding()
@@ -779,6 +790,7 @@ class SettingsViewModel: ObservableObject {
 
     // OpenAI OAuth
     @Published var isSigningInOpenAI: Bool = false
+    @Published var openAIOAuthError: String?
 
     // AI Provider settings
     @Published var selectedAIProvider: AIProvider = .claude {
@@ -866,6 +878,7 @@ class SettingsViewModel: ObservableObject {
     // MARK: - OpenAI OAuth
     func signInWithOpenAI() {
         isSigningInOpenAI = true
+        openAIOAuthError = nil
         Task {
             do {
                 try await OAuthService.shared.signInWithOpenAI()
@@ -877,6 +890,7 @@ class SettingsViewModel: ObservableObject {
             } catch {
                 await MainActor.run {
                     isSigningInOpenAI = false
+                    openAIOAuthError = error.localizedDescription
                 }
                 print("OpenAI OAuth sign in error: \(error)")
             }

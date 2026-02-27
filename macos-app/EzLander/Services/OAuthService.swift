@@ -335,6 +335,13 @@ class OAuthService: NSObject {
 
     // MARK: - OpenAI Sign In
     func signInWithOpenAI() async throws {
+        // Guard against placeholder/missing client ID to avoid opening a blank browser page
+        guard !openAIClientId.isEmpty,
+              openAIClientId != "REPLACE_WITH_OPENAI_CLIENT_ID" else {
+            print("OAuthService: OpenAI Client ID not configured")
+            throw OAuthError.clientNotConfigured
+        }
+
         let verifier = generateCodeVerifier()
         codeVerifier = verifier
         let challenge = generateCodeChallenge(from: verifier)
@@ -746,6 +753,7 @@ enum OAuthError: Error, LocalizedError {
     case refreshTokenRevoked
     case noRefreshToken
     case notSignedIn
+    case clientNotConfigured
     case unknownError
 
     var errorDescription: String? {
@@ -762,6 +770,8 @@ enum OAuthError: Error, LocalizedError {
             return "No refresh token available. Please sign in again in Settings."
         case .notSignedIn:
             return "User is not signed in"
+        case .clientNotConfigured:
+            return "OpenAI OAuth is not configured. Please use an API key instead — tap \"Get Key\" to create one at platform.openai.com."
         case .unknownError:
             return "An unknown error occurred"
         }
