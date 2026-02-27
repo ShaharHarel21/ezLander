@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
+  darkMode: 'media',
   content: [
     './app/**/*.{js,ts,jsx,tsx,mdx}',
     './components/**/*.{js,ts,jsx,tsx,mdx}',
@@ -18,6 +19,7 @@ module.exports = {
           700: '#01599f',
           800: '#064b83',
           900: '#0b3f6c',
+          950: '#062a4d',
         },
         accent: {
           50: '#fdf4ff',
@@ -30,6 +32,7 @@ module.exports = {
           700: '#a21caf',
           800: '#86198f',
           900: '#701a75',
+          950: '#4a044e',
         },
       },
       fontFamily: {

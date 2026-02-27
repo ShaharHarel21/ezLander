@@ -69,7 +69,7 @@ struct ChatView: View {
             }
 
             Rectangle()
-                .fill(Color.white.opacity(0.10))
+                .fill(Color.glassSeparator)
                 .frame(height: 0.5)
 
             // Quick action buttons
@@ -155,6 +155,7 @@ struct QuickActionButton: View {
                     .font(.caption)
                 Text(label)
                     .font(.caption)
+                    .lineLimit(1)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
@@ -166,7 +167,6 @@ struct QuickActionButton: View {
                 }
             )
             .foregroundColor(.warmPrimary)
-            .cornerRadius(16)
         }
         .buttonStyle(.plain)
     }
@@ -201,9 +201,10 @@ struct MessageBubble: View {
                             }
                             .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 2)
                         )
-                        .cornerRadius(16)
+                        .clipShape(RoundedRectangle(cornerRadius: 18))
                 } else {
                     Text(message.content)
+                        .textSelection(.enabled)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
                         .background(
@@ -228,7 +229,7 @@ struct MessageBubble: View {
                         )
                         .shadow(color: Color.warmPrimary.opacity(0.28), radius: 10, x: 0, y: 3)
                         .foregroundColor(.white)
-                        .cornerRadius(16)
+                        .clipShape(RoundedRectangle(cornerRadius: 18))
                 }
 
                 if let toolCall = message.toolCall {
@@ -286,14 +287,20 @@ struct ToolCallBadge: View {
         .foregroundColor(.secondary)
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .background(Color(NSColor.controlBackgroundColor))
-        .cornerRadius(8)
+        .background(
+            ZStack {
+                Capsule().fill(.ultraThinMaterial)
+                Capsule().fill(Color.warmSoft.opacity(0.08))
+                Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
+            }
+        )
     }
 }
 
 // MARK: - Typing Indicator
 struct TypingIndicator: View {
     @State private var animating = false
+    @Environment(\.accessibilityReduceMotion) var reduceMotion
 
     var body: some View {
         HStack(spacing: 4) {
@@ -319,9 +326,11 @@ struct TypingIndicator: View {
                 RoundedRectangle(cornerRadius: 18).strokeBorder(Color.white.opacity(0.18), lineWidth: 0.75)
             }
         )
-        .cornerRadius(16)
+        .clipShape(RoundedRectangle(cornerRadius: 18))
         .onAppear {
-            animating = true
+            if !reduceMotion {
+                animating = true
+            }
         }
     }
 }
@@ -329,6 +338,10 @@ struct TypingIndicator: View {
 // MARK: - View Model
 class ChatViewModel: ObservableObject {
     static let shared = ChatViewModel()
+
+    /// Maximum number of messages to keep in memory. Oldest messages are trimmed
+    /// when this limit is exceeded to prevent unbounded memory growth.
+    private static let maxMessages = 200
 
     @Published var messages: [ChatMessage] = []
     @Published var isLoading: Bool = false
@@ -345,6 +358,14 @@ class ChatViewModel: ObservableObject {
             role: .assistant,
             content: "Hi! I'm your AI assistant. I can help you manage your calendar, send emails, and more. What would you like to do?\n\nWhen I want to create events or send emails, I'll show you a preview first so you can confirm."
         ))
+    }
+
+    /// Trim oldest messages when the array exceeds the cap to prevent unbounded memory growth.
+    private func trimMessagesIfNeeded() {
+        if messages.count > Self.maxMessages {
+            let overflow = messages.count - Self.maxMessages
+            messages.removeFirst(overflow)
+        }
     }
 
     func clearConversation() {
@@ -423,6 +444,7 @@ class ChatViewModel: ObservableObject {
                     } else {
                         messages.append(response)
                     }
+                    trimMessagesIfNeeded()
                 }
             } catch {
                 await MainActor.run {
@@ -431,6 +453,7 @@ class ChatViewModel: ObservableObject {
                         role: .assistant,
                         content: "Sorry, I encountered an error: \(error.localizedDescription)"
                     ))
+                    trimMessagesIfNeeded()
                 }
             }
         }

@@ -12,7 +12,7 @@ export default function PricingPage() {
   return (
     <>
       <Navbar />
-      <div className="pt-20">
+      <div className="pt-24">
         <Pricing />
         <FAQ />
       </div>

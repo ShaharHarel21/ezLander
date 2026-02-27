@@ -86,6 +86,9 @@ export default function Pricing() {
             <button
               onClick={() => setIsYearly(!isYearly)}
               className="relative w-14 h-8 rounded-full bg-primary-500 transition-colors"
+              role="switch"
+              aria-checked={isYearly}
+              aria-label="Toggle yearly pricing"
             >
               <span
                 className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow transition-transform ${
@@ -103,7 +106,7 @@ export default function Pricing() {
         </div>
 
         {/* Pricing cards */}
-        <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+        <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto mt-4">
           {plans.map((plan, index) => (
             <motion.div
               key={plan.name}

@@ -35,6 +35,7 @@ body {
 /* Smooth scrolling */
 html {
   scroll-behavior: smooth;
+  scroll-padding-top: 5rem; /* Clear the fixed navbar on anchor scroll */
 }
 
 /* Custom scrollbar */
@@ -67,6 +68,7 @@ html {
 
 /* Gradient text */
 .gradient-text {
+  color: #0c8ce6; /* Fallback for unsupported browsers */
   background: linear-gradient(135deg, #0c8ce6 0%, #d946ef 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -86,4 +88,23 @@ html {
     background: rgba(0, 0, 0, 0.2);
     border: 1px solid rgba(255, 255, 255, 0.1);
   }
+}
+
+/* Respect reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Focus-visible ring for keyboard accessibility */
+*:focus-visible {
+  outline: 2px solid #0c8ce6;
+  outline-offset: 2px;
+  border-radius: 4px;
 }

@@ -15,14 +15,14 @@ struct MainPopover: View {
             headerView
 
             Rectangle()
-                .fill(Color.white.opacity(0.10))
+                .fill(Color.glassSeparator)
                 .frame(height: 0.5)
 
             // Content
             contentView
 
             Rectangle()
-                .fill(Color.white.opacity(0.10))
+                .fill(Color.glassSeparator)
                 .frame(height: 0.5)
 
             // Tab bar
@@ -60,6 +60,8 @@ struct MainPopover: View {
                     Text("Hi, \(viewModel.userName)!")
                         .font(.caption)
                         .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
             }
 
@@ -68,6 +70,8 @@ struct MainPopover: View {
             Text(aiService.currentProvider.displayName)
                 .font(.system(size: 11))
                 .foregroundColor(.secondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
                 .padding(.trailing, 6)
 
             if viewModel.isSubscribed {
@@ -92,7 +96,13 @@ struct MainPopover: View {
                     .foregroundColor(selectedTab == .settings ? .warmPrimary : .secondary)
             }
             .buttonStyle(.plain)
-            .background(Circle().fill(Color.warmPrimary.opacity(0.0)))
+            .contentShape(Circle())
+            .onHover { isHovered in }
+            .background(
+                Circle()
+                    .fill(Color.glassHover)
+                    .opacity(selectedTab == .settings ? 1 : 0)
+            )
         }
         .padding()
         .background(
@@ -148,10 +158,7 @@ struct MainPopover: View {
             .padding(.vertical, 6)
             .background {
                 if selectedTab == tab {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(.ultraThinMaterial)
-                        .overlay(RoundedRectangle(cornerRadius: 12).fill(Color.warmPrimary.opacity(0.16)))
-                        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.warmPrimary.opacity(0.28), lineWidth: 0.75))
+                    GlassPanelBackground(cornerRadius: 12, tint: Color.warmPrimary.opacity(0.12))
                         .shadow(color: Color.warmPrimary.opacity(0.20), radius: 8)
                         .animation(.spring(response: 0.35, dampingFraction: 0.72), value: selectedTab)
                 }
@@ -336,22 +343,9 @@ class CalendarQuickViewModel: ObservableObject {
     }
 
     private func logToFile(_ message: String) {
-        let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-        let logMessage = "[\(timestamp)] \(message)\n"
-        DispatchQueue.global(qos: .background).async {
-            guard let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first,
-                  let data = logMessage.data(using: .utf8) else { return }
-            let logPath = documentsPath.appendingPathComponent("ezlander_calendar.log")
-            if FileManager.default.fileExists(atPath: logPath.path) {
-                if let fileHandle = try? FileHandle(forWritingTo: logPath) {
-                    fileHandle.seekToEndOfFile()
-                    fileHandle.write(data)
-                    try? fileHandle.close()
-                }
-            } else {
-                try? data.write(to: logPath)
-            }
-        }
+        #if DEBUG
+        print("CalendarQuick: \(message)")
+        #endif
     }
 
     func refresh() {

@@ -48,10 +48,10 @@ struct SettingsView: View {
                         .background(
                             Group {
                                 if selectedSettingsTab == tab {
-                                    RoundedRectangle(cornerRadius: 10)
+                                    RoundedRectangle(cornerRadius: 12)
                                         .fill(.ultraThinMaterial)
-                                        .overlay(RoundedRectangle(cornerRadius: 10).fill(Color.warmPrimary.opacity(0.14)))
-                                        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.warmPrimary.opacity(0.25), lineWidth: 0.75))
+                                        .overlay(RoundedRectangle(cornerRadius: 12).fill(Color.warmPrimary.opacity(0.14)))
+                                        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.warmPrimary.opacity(0.25), lineWidth: 0.75))
                                         .shadow(color: Color.warmPrimary.opacity(0.12), radius: 6)
                                 }
                             }
@@ -62,6 +62,7 @@ struct SettingsView: View {
                 }
             }
             .padding(.horizontal, 8)
+            .padding(.top, 8)
 
             Divider()
 

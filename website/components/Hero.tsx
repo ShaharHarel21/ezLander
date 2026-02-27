@@ -10,8 +10,8 @@ export default function Hero() {
       <div className="absolute inset-0 bg-gradient-to-b from-primary-50 to-transparent dark:from-primary-950/30 dark:to-transparent -z-10" />
 
       {/* Decorative blobs */}
-      <div className="absolute top-20 left-10 w-72 h-72 bg-primary-300 rounded-full mix-blend-multiply filter blur-xl opacity-30 animate-float" />
-      <div className="absolute top-40 right-10 w-72 h-72 bg-accent-300 rounded-full mix-blend-multiply filter blur-xl opacity-30 animate-float" style={{ animationDelay: '2s' }} />
+      <div className="hidden sm:block absolute top-20 left-10 w-72 h-72 bg-primary-300 rounded-full mix-blend-multiply dark:mix-blend-soft-light filter blur-xl opacity-30 dark:opacity-20 animate-float" />
+      <div className="hidden sm:block absolute top-40 right-10 w-72 h-72 bg-accent-300 rounded-full mix-blend-multiply dark:mix-blend-soft-light filter blur-xl opacity-30 dark:opacity-20 animate-float" style={{ animationDelay: '2s' }} />
 
       <div className="max-w-7xl mx-auto">
         <div className="text-center">
@@ -96,7 +96,7 @@ export default function Hero() {
               <div className="absolute -inset-4 bg-gradient-to-r from-primary-500 to-accent-500 rounded-2xl blur-2xl opacity-20" />
 
               {/* App screenshot placeholder */}
-              <div className="relative bg-gray-900 rounded-2xl overflow-hidden shadow-2xl border border-gray-800">
+              <div className="relative bg-gray-900 rounded-2xl overflow-hidden shadow-2xl border border-gray-800" aria-hidden="true">
                 {/* Menu bar */}
                 <div className="h-8 bg-gray-800 flex items-center px-4 gap-2">
                   <div className="flex gap-1.5">

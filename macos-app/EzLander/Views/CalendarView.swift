@@ -28,6 +28,8 @@ struct CalendarView: View {
                     dayView
                 }
             }
+            .frame(maxHeight: .infinity)
+            .clipped()
             .transition(.asymmetric(
                 insertion: .opacity.combined(with: .move(edge: .trailing)),
                 removal: .opacity.combined(with: .move(edge: .leading))
@@ -213,37 +215,39 @@ struct CalendarView: View {
 
     // MARK: - Month View
     private var monthView: some View {
-        VStack(spacing: 0) {
-            // Day headers
-            HStack(spacing: 0) {
-                ForEach(["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], id: \.self) { day in
-                    Text(day)
-                        .font(.caption2)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.tertiary)
-                        .frame(maxWidth: .infinity)
+        ScrollView {
+            VStack(spacing: 0) {
+                // Day headers
+                HStack(spacing: 0) {
+                    ForEach(["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], id: \.self) { day in
+                        Text(day)
+                            .font(.caption2)
+                            .fontWeight(.medium)
+                            .foregroundStyle(.tertiary)
+                            .frame(maxWidth: .infinity)
+                    }
                 }
-            }
-            .padding(.vertical, 4)
+                .padding(.vertical, 4)
 
-            // Calendar grid
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 7), spacing: 0) {
-                ForEach(viewModel.monthDays, id: \.self) { date in
-                    DayCell(
-                        date: date,
-                        isSelected: viewModel.isSameDay(date, viewModel.selectedDate),
-                        isToday: viewModel.isSameDay(date, Date()),
-                        isCurrentMonth: viewModel.isCurrentMonth(date),
-                        eventCount: viewModel.eventCountForDate(date),
-                        events: viewModel.eventsForDate(date),
-                        onTap: {
-                            viewModel.selectDate(date)
-                        }
-                    )
+                // Calendar grid
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 7), spacing: 0) {
+                    ForEach(viewModel.monthDays, id: \.self) { date in
+                        DayCell(
+                            date: date,
+                            isSelected: viewModel.isSameDay(date, viewModel.selectedDate),
+                            isToday: viewModel.isSameDay(date, Date()),
+                            isCurrentMonth: viewModel.isCurrentMonth(date),
+                            eventCount: viewModel.eventCountForDate(date),
+                            events: viewModel.eventsForDate(date),
+                            onTap: {
+                                viewModel.selectDate(date)
+                            }
+                        )
+                    }
                 }
             }
+            .padding(.horizontal, 4)
         }
-        .padding(.horizontal, 4)
     }
 
     // MARK: - Week View
