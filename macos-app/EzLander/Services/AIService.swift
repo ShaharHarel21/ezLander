@@ -65,17 +65,11 @@ enum AIProvider: String, CaseIterable, Codable, Identifiable {
     }
 
     var supportsOAuth: Bool {
-        switch self {
-        case .claude: return true
-        default: return false
-        }
+        return false
     }
 
     var isOAuthConnected: Bool {
-        switch self {
-        case .claude: return ClaudeOAuthService.shared.isSignedIn
-        default: return false
-        }
+        return false
     }
 }
 
