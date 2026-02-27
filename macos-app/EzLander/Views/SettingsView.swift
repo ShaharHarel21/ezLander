@@ -321,21 +321,38 @@ struct SettingsView: View {
 
             Divider()
 
-            // API Keys for each provider
+            // API Keys (and OAuth) for each provider
             ForEach(AIProvider.allCases) { provider in
-                APIKeyRow(
-                    provider: provider,
-                    isConfigured: provider.isConfigured,
-                    showInput: viewModel.showKeyInput[provider] ?? false,
-                    keyInput: Binding(
-                        get: { viewModel.keyInputs[provider] ?? "" },
-                        set: { viewModel.keyInputs[provider] = $0 }
-                    ),
-                    onAddKey: { viewModel.showKeyInput[provider] = true },
-                    onSaveKey: { viewModel.saveAPIKey(for: provider) },
-                    onRemoveKey: { viewModel.removeAPIKey(for: provider) },
-                    onGetKey: { viewModel.openKeyURL(for: provider) }
-                )
+                VStack(alignment: .leading, spacing: 8) {
+                    // OAuth row for providers that support it
+                    if provider.supportsOAuth {
+                        OpenAIOAuthRow(
+                            isConnected: provider.isOAuthConnected,
+                            isSigningIn: viewModel.isSigningInOpenAI,
+                            onSignIn: { viewModel.signInWithOpenAI() },
+                            onDisconnect: { viewModel.disconnectOpenAIOAuth() }
+                        )
+
+                        Text("Or use an API key:")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .padding(.leading, 4)
+                    }
+
+                    APIKeyRow(
+                        provider: provider,
+                        isConfigured: provider.isConfigured && !provider.isOAuthConnected,
+                        showInput: viewModel.showKeyInput[provider] ?? false,
+                        keyInput: Binding(
+                            get: { viewModel.keyInputs[provider] ?? "" },
+                            set: { viewModel.keyInputs[provider] = $0 }
+                        ),
+                        onAddKey: { viewModel.showKeyInput[provider] = true },
+                        onSaveKey: { viewModel.saveAPIKey(for: provider) },
+                        onRemoveKey: { viewModel.removeAPIKey(for: provider) },
+                        onGetKey: { viewModel.openKeyURL(for: provider) }
+                    )
+                }
             }
         }
     }
@@ -663,6 +680,60 @@ struct APIKeyRow: View {
     }
 }
 
+// MARK: - OpenAI OAuth Row
+struct OpenAIOAuthRow: View {
+    let isConnected: Bool
+    let isSigningIn: Bool
+    let onSignIn: () -> Void
+    let onDisconnect: () -> Void
+
+    var body: some View {
+        HStack {
+            Image(systemName: "brain")
+                .frame(width: 24)
+                .foregroundColor(.warmAccent)
+
+            Text("OpenAI Account")
+                .fontWeight(.medium)
+
+            Spacer()
+
+            if isConnected {
+                HStack(spacing: 8) {
+                    Text("Connected")
+                        .font(.caption)
+                        .foregroundColor(.green)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color.green.opacity(0.12))
+                        .cornerRadius(8)
+
+                    Button("Disconnect") {
+                        onDisconnect()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+            } else {
+                Button(action: onSignIn) {
+                    HStack(spacing: 4) {
+                        if isSigningIn {
+                            ProgressView()
+                                .scaleEffect(0.6)
+                        }
+                        Text("Sign in with OpenAI")
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .disabled(isSigningIn)
+            }
+        }
+        .padding()
+        .padding(.vertical, 2)
+    }
+}
+
 // MARK: - View Model
 class SettingsViewModel: ObservableObject {
     @Published var isSignedIn: Bool = false
@@ -705,6 +776,9 @@ class SettingsViewModel: ObservableObject {
             UserDefaults.standard.set(swipeLeftAction.rawValue, forKey: "swipe_left_action")
         }
     }
+
+    // OpenAI OAuth
+    @Published var isSigningInOpenAI: Bool = false
 
     // AI Provider settings
     @Published var selectedAIProvider: AIProvider = .claude {
@@ -786,6 +860,31 @@ class SettingsViewModel: ObservableObject {
 
     func removeAPIKey(for provider: AIProvider) {
         AIService.shared.removeAPIKey(for: provider)
+        objectWillChange.send()
+    }
+
+    // MARK: - OpenAI OAuth
+    func signInWithOpenAI() {
+        isSigningInOpenAI = true
+        Task {
+            do {
+                try await OAuthService.shared.signInWithOpenAI()
+                await MainActor.run {
+                    isSigningInOpenAI = false
+                    OpenAIService.shared.reloadAPIKey()
+                    objectWillChange.send()
+                }
+            } catch {
+                await MainActor.run {
+                    isSigningInOpenAI = false
+                }
+                print("OpenAI OAuth sign in error: \(error)")
+            }
+        }
+    }
+
+    func disconnectOpenAIOAuth() {
+        AIService.shared.disconnectOAuth(for: .openai)
         objectWillChange.send()
     }
 

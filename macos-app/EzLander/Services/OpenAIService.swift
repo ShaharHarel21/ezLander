@@ -4,6 +4,7 @@ class OpenAIService {
     static let shared = OpenAIService()
 
     private var apiKey: String = ""
+    private(set) var isUsingOAuth: Bool = false
     private let baseURL = "https://api.openai.com/v1/chat/completions"
 
     private init() {
@@ -11,16 +12,33 @@ class OpenAIService {
     }
 
     func reloadAPIKey() {
-        if let key = KeychainService.shared.get(key: "openai_api_key")?.trimmingCharacters(in: .whitespacesAndNewlines), !key.isEmpty {
+        // Prefer OAuth token over manual API key
+        if let oauthToken = KeychainService.shared.get(key: "openai_oauth_access_token"), !oauthToken.isEmpty {
+            apiKey = oauthToken
+            isUsingOAuth = true
+        } else if let key = KeychainService.shared.get(key: "openai_api_key")?.trimmingCharacters(in: .whitespacesAndNewlines), !key.isEmpty {
             apiKey = key
+            isUsingOAuth = false
         } else {
             apiKey = ""
+            isUsingOAuth = false
         }
     }
 
     var isConfigured: Bool {
         reloadAPIKey()
         return !apiKey.isEmpty
+    }
+
+    var hasOAuthToken: Bool {
+        KeychainService.shared.get(key: "openai_oauth_access_token") != nil
+    }
+
+    var hasAPIKey: Bool {
+        if let key = KeychainService.shared.get(key: "openai_api_key")?.trimmingCharacters(in: .whitespacesAndNewlines) {
+            return !key.isEmpty
+        }
+        return false
     }
 
     // Available models
@@ -42,6 +60,12 @@ class OpenAIService {
 
     func sendMessage(_ text: String, conversationHistory: [ChatMessage]) async throws -> ChatMessage {
         reloadAPIKey()
+
+        // If using OAuth, refresh the token if needed before making the request
+        if isUsingOAuth {
+            let freshToken = try await OAuthService.shared.getValidOpenAIAccessToken()
+            apiKey = freshToken
+        }
 
         guard !apiKey.isEmpty else {
             throw OpenAIError.noAPIKey

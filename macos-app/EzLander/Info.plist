@@ -43,6 +43,8 @@
             <string>Editor</string>
         </dict>
     </array>
+    <key>OPENAI_CLIENT_ID</key>
+    <string>REPLACE_WITH_OPENAI_CLIENT_ID</string>
     <key>SUFeedURL</key>
     <string>https://ezlander.app/appcast.xml</string>
     <key>SUPublicEDKey</key>

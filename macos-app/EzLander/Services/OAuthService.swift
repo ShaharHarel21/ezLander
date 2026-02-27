@@ -14,6 +14,15 @@ class OAuthService: NSObject {
     }()
     private let googleRedirectURI = "com.ezlander.app:/oauth2callback"
 
+    private let openAIClientId: String = {
+        if let clientId = Bundle.main.object(forInfoDictionaryKey: "OPENAI_CLIENT_ID") as? String, !clientId.isEmpty {
+            return clientId
+        }
+        // Placeholder — register an OAuth app at https://platform.openai.com and set OPENAI_CLIENT_ID in Info.plist
+        return "REPLACE_WITH_OPENAI_CLIENT_ID"
+    }()
+    private let openAIRedirectURI = "com.ezlander.app:/oauth2callback"
+
     private var authSession: ASWebAuthenticationSession?
 
     // PKCE parameters
@@ -30,6 +39,11 @@ class OAuthService: NSObject {
     private let refreshLock = NSLock()
     private var isRefreshing = false
     private var refreshWaiters: [CheckedContinuation<String, Error>] = []
+
+    // OpenAI token refresh deduplication
+    private let openAIRefreshLock = NSLock()
+    private var isRefreshingOpenAI = false
+    private var openAIRefreshWaiters: [CheckedContinuation<String, Error>] = []
 
     // User email from Google sign-in
     var userEmail: String? {
@@ -322,6 +336,222 @@ class OAuthService: NSObject {
             waiters.forEach { $0.resume(throwing: error) }
             throw error
         }
+    }
+
+    // MARK: - OpenAI Sign In
+    func signInWithOpenAI() async throws {
+        let verifier = generateCodeVerifier()
+        codeVerifier = verifier
+        let challenge = generateCodeChallenge(from: verifier)
+
+        let scopes = "openai.organization.read openai.models.read"
+
+        let authURLString = "https://auth.openai.com/authorize?" +
+            "client_id=\(openAIClientId)&" +
+            "redirect_uri=\(openAIRedirectURI.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!)&" +
+            "response_type=code&" +
+            "scope=\(scopes.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!)&" +
+            "state=openai&" +
+            "code_challenge=\(challenge)&" +
+            "code_challenge_method=S256"
+
+        guard let authURL = URL(string: authURLString) else {
+            throw OAuthError.unknownError
+        }
+
+        print("OAuthService: Opening OpenAI OAuth URL in browser...")
+
+        cancelPendingAuth()
+
+        let callbackURL = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<URL, Error>) in
+            self.authContinuation = continuation
+
+            self.authTimeoutTask = Task { [weak self] in
+                try? await Task.sleep(nanoseconds: Self.authTimeoutSeconds * 1_000_000_000)
+                guard !Task.isCancelled else { return }
+                print("OAuthService: OpenAI OAuth flow timed out after \(Self.authTimeoutSeconds)s")
+                self?.cancelPendingAuth()
+            }
+
+            DispatchQueue.main.async {
+                NSWorkspace.shared.open(authURL)
+            }
+        }
+
+        authTimeoutTask?.cancel()
+        authTimeoutTask = nil
+
+        guard let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false),
+              let code = components.queryItems?.first(where: { $0.name == "code" })?.value else {
+            throw OAuthError.noAuthorizationCode
+        }
+
+        print("OAuthService: Got OpenAI authorization code, exchanging for tokens...")
+
+        let tokens = try await exchangeOpenAICodeForTokens(code: code)
+
+        KeychainService.shared.save(key: "openai_oauth_access_token", value: tokens.accessToken)
+        UserDefaults.standard.set(Date().timeIntervalSince1970 + Double(tokens.expiresIn), forKey: "openai_oauth_token_expiry")
+        if let refreshToken = tokens.refreshToken {
+            KeychainService.shared.save(key: "openai_oauth_refresh_token", value: refreshToken)
+        }
+
+        print("OAuthService: OpenAI OAuth sign in complete!")
+    }
+
+    // MARK: - Exchange OpenAI Code for Tokens
+    private func exchangeOpenAICodeForTokens(code: String) async throws -> TokenResponse {
+        let tokenURL = URL(string: "https://auth.openai.com/oauth/token")!
+
+        var request = URLRequest(url: tokenURL)
+        request.httpMethod = "POST"
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+
+        var bodyParams = [
+            "client_id": openAIClientId,
+            "code": code,
+            "grant_type": "authorization_code",
+            "redirect_uri": openAIRedirectURI
+        ]
+
+        if let verifier = codeVerifier {
+            bodyParams["code_verifier"] = verifier
+        }
+
+        var components = URLComponents()
+        components.queryItems = bodyParams.map { URLQueryItem(name: $0.key, value: $0.value) }
+        request.httpBody = components.percentEncodedQuery?.data(using: .utf8)
+
+        let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
+
+        if httpResponse.statusCode != 200 {
+            print("OAuthService: OpenAI token exchange failed with status \(httpResponse.statusCode)")
+            throw OAuthError.tokenExchangeFailed
+        }
+
+        return try JSONDecoder().decode(TokenResponse.self, from: data)
+    }
+
+    // MARK: - Refresh OpenAI Token
+    func refreshOpenAIAccessToken() async throws -> String {
+        guard let refreshToken = KeychainService.shared.get(key: "openai_oauth_refresh_token") else {
+            print("OAuthService: No OpenAI refresh token found in keychain")
+            throw OAuthError.noRefreshToken
+        }
+
+        let tokenURL = URL(string: "https://auth.openai.com/oauth/token")!
+
+        var request = URLRequest(url: tokenURL)
+        request.httpMethod = "POST"
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+
+        var components = URLComponents()
+        components.queryItems = [
+            URLQueryItem(name: "client_id", value: openAIClientId),
+            URLQueryItem(name: "refresh_token", value: refreshToken),
+            URLQueryItem(name: "grant_type", value: "refresh_token")
+        ]
+        request.httpBody = components.percentEncodedQuery?.data(using: .utf8)
+
+        let (data, httpResponse) = try await APIRetryHelper.performRequest(request)
+
+        guard httpResponse.statusCode == 200 else {
+            var oauthError: String?
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                oauthError = json["error"] as? String
+            }
+            print("OAuthService: OpenAI token refresh failed — status \(httpResponse.statusCode), error: \(oauthError ?? "unknown")")
+
+            if httpResponse.statusCode == 400 || httpResponse.statusCode == 401 {
+                if oauthError == "invalid_grant" {
+                    print("OAuthService: OpenAI refresh token revoked — clearing stored tokens")
+                    signOutOpenAI()
+                    throw OAuthError.refreshTokenRevoked
+                }
+            }
+
+            throw OAuthError.tokenRefreshFailed
+        }
+
+        let tokens = try JSONDecoder().decode(TokenResponse.self, from: data)
+        KeychainService.shared.save(key: "openai_oauth_access_token", value: tokens.accessToken)
+        UserDefaults.standard.set(Date().timeIntervalSince1970 + Double(tokens.expiresIn), forKey: "openai_oauth_token_expiry")
+
+        print("OAuthService: OpenAI token refreshed successfully, expires in \(tokens.expiresIn)s")
+        return tokens.accessToken
+    }
+
+    // MARK: - Get Valid OpenAI Access Token
+    func getValidOpenAIAccessToken() async throws -> String {
+        guard let accessToken = KeychainService.shared.get(key: "openai_oauth_access_token") else {
+            throw OAuthError.notSignedIn
+        }
+
+        let expiryTime = UserDefaults.standard.double(forKey: "openai_oauth_token_expiry")
+        if expiryTime > 0 && Date().timeIntervalSince1970 < expiryTime - 300 {
+            return accessToken
+        }
+
+        print("OAuthService: OpenAI access token expired or expiring soon, refreshing...")
+
+        let shouldWait: Bool = openAIRefreshLock.withLock {
+            if isRefreshingOpenAI {
+                return true
+            }
+            isRefreshingOpenAI = true
+            return false
+        }
+
+        if shouldWait {
+            return try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { continuation in
+                    openAIRefreshLock.withLock {
+                        openAIRefreshWaiters.append(continuation)
+                    }
+                }
+            } onCancel: { [self] in
+                openAIRefreshLock.withLock {
+                    let waiters = openAIRefreshWaiters
+                    openAIRefreshWaiters.removeAll()
+                    for waiter in waiters {
+                        waiter.resume(throwing: CancellationError())
+                    }
+                }
+            }
+        }
+
+        do {
+            let newToken = try await refreshOpenAIAccessToken()
+            let waiters: [CheckedContinuation<String, Error>] = openAIRefreshLock.withLock {
+                isRefreshingOpenAI = false
+                let w = openAIRefreshWaiters
+                openAIRefreshWaiters.removeAll()
+                return w
+            }
+            waiters.forEach { $0.resume(returning: newToken) }
+            return newToken
+        } catch {
+            let waiters: [CheckedContinuation<String, Error>] = openAIRefreshLock.withLock {
+                isRefreshingOpenAI = false
+                let w = openAIRefreshWaiters
+                openAIRefreshWaiters.removeAll()
+                return w
+            }
+            waiters.forEach { $0.resume(throwing: error) }
+            throw error
+        }
+    }
+
+    // MARK: - OpenAI Sign In Status
+    var isSignedInWithOpenAI: Bool {
+        KeychainService.shared.get(key: "openai_oauth_access_token") != nil
+    }
+
+    // MARK: - OpenAI Sign Out
+    func signOutOpenAI() {
+        KeychainService.shared.delete(key: "openai_oauth_access_token")
+        KeychainService.shared.delete(key: "openai_oauth_refresh_token")
+        UserDefaults.standard.removeObject(forKey: "openai_oauth_token_expiry")
     }
 
     // MARK: - Cancel Pending Auth

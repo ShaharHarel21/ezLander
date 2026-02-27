@@ -65,11 +65,17 @@ enum AIProvider: String, CaseIterable, Codable, Identifiable {
     }
 
     var supportsOAuth: Bool {
-        return false
+        switch self {
+        case .openai: return true
+        default: return false
+        }
     }
 
     var isOAuthConnected: Bool {
-        return false
+        switch self {
+        case .openai: return OAuthService.shared.isSignedInWithOpenAI
+        default: return false
+        }
     }
 }
 
@@ -171,6 +177,17 @@ class AIService: ObservableObject {
         case .claude: ClaudeService.shared.reloadAPIKey()
         case .gemini: GeminiService.shared.reloadAPIKey()
         case .kimi: KimiService.shared.reloadAPIKey()
+        }
+    }
+
+    // MARK: - Disconnect OAuth
+    func disconnectOAuth(for provider: AIProvider) {
+        switch provider {
+        case .openai:
+            OAuthService.shared.signOutOpenAI()
+            OpenAIService.shared.reloadAPIKey()
+        default:
+            break
         }
     }
 
