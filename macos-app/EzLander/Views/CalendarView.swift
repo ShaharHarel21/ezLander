@@ -316,11 +316,47 @@ struct CalendarView: View {
                             }
                         }
 
-                    if viewModel.weekEvents.isEmpty && !viewModel.isLoading {
-                        Text("No events this week")
-                            .foregroundColor(.secondary)
-                            .padding()
+                        // Day columns
+                        ForEach(viewModel.weekDays, id: \.self) { date in
+                            ZStack(alignment: .topLeading) {
+                                // Hourly grid lines
+                                VStack(spacing: 0) {
+                                    ForEach(0..<24, id: \.self) { _ in
+                                        VStack(spacing: 0) {
+                                            Divider()
+                                            Spacer()
+                                        }
+                                        .frame(height: hourHeight)
+                                    }
+                                }
+
+                                // Timed events
+                                ForEach(viewModel.eventsForDate(date).filter { !$0.isAllDay }, id: \.id) { event in
+                                    WeekColumnEventBlock(event: event) {
+                                        selectedEvent = event
+                                    }
+                                    .frame(height: max(20, eventHeightForDuration(event, hourHeight: hourHeight)))
+                                    .padding(.horizontal, 1)
+                                    .offset(y: yPositionForTime(event.startDate, hourHeight: hourHeight))
+                                }
+
+                                // Current time indicator
+                                if viewModel.isSameDay(date, viewModel.currentTime) {
+                                    HStack(spacing: 0) {
+                                        Circle()
+                                            .fill(Color.red)
+                                            .frame(width: 6, height: 6)
+                                        Rectangle()
+                                            .fill(Color.red)
+                                            .frame(height: 1)
+                                    }
+                                    .offset(y: yPositionForTime(viewModel.currentTime, hourHeight: hourHeight) - 3)
+                                }
+                            }
                             .frame(maxWidth: .infinity)
+                            .frame(height: totalHeight)
+                            .clipped()
+                        }
                     }
                 }
                 .onAppear {
@@ -767,36 +803,7 @@ struct WeekColumnEventBlock: View {
             .padding(.leading, 2)
             .padding(.vertical, 1)
 
-            Spacer()
-
-            // Video call indicator
-            if event.hasVideoCall {
-                Image(systemName: "video.fill")
-                    .font(.caption)
-                    .foregroundColor(.warmPrimary)
-            }
-
-            // Attendee count
-            if event.attendeeCount > 0 {
-                HStack(spacing: 2) {
-                    Image(systemName: "person.2.fill")
-                        .font(.system(size: 9))
-                    Text("\(event.attendeeCount)")
-                        .font(.caption2)
-                }
-                .foregroundColor(.secondary)
-            }
-        }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color(NSColor.controlBackgroundColor))
-        )
-        .padding(.horizontal, 4)
-        .padding(.vertical, 2)
-        .onTapGesture {
-            onTap()
+            Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity)
         .background(barColor.opacity(0.15))
