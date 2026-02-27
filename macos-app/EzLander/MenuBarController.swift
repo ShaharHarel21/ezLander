@@ -187,6 +187,8 @@ class MenuBarController: NSObject {
             return
         }
         if let button = statusItem.button {
+            // Reset to the default Chat (AI Agent) tab each time
+            NotificationCenter.default.post(name: Self.switchTabNotification, object: "chat")
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             eventMonitor?.start()
         }
