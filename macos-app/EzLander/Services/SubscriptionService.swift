@@ -5,8 +5,8 @@ import Combine
 class SubscriptionService: ObservableObject {
     static let shared = SubscriptionService()
 
-    private let verifyURL = "https://ezlander.app/api/license/verify"
-    private let purchaseURL = "https://ezlander.app/pricing"
+    private let verifyURL = "https://website-seven-eta-91.vercel.app/api/license/verify"
+    private let purchaseURL = "https://website-seven-eta-91.vercel.app/pricing"
     private let reVerifyInterval: TimeInterval = 24 * 60 * 60 // 24 hours
     private let offlineGracePeriod: TimeInterval = 7 * 24 * 60 * 60 // 7 days
 
