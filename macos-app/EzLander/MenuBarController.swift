@@ -81,35 +81,126 @@ class MenuBarController: NSObject {
 
     private func setupMenu() {
         statusMenu = NSMenu()
+        rebuildMenu()
+    }
 
-        // App name header
-        let appNameItem = NSMenuItem(title: "ezLander", action: nil, keyEquivalent: "")
-        appNameItem.isEnabled = false
-        statusMenu.addItem(appNameItem)
+    private func rebuildMenu() {
+        statusMenu.removeAllItems()
 
-        // Version
-        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
-        let versionItem = NSMenuItem(title: "Version \(version)", action: nil, keyEquivalent: "")
-        versionItem.isEnabled = false
-        statusMenu.addItem(versionItem)
+        // ── Quick Actions ──
+        let quickHeader = NSMenuItem(title: "Quick Actions", action: nil, keyEquivalent: "")
+        quickHeader.isEnabled = false
+        statusMenu.addItem(quickHeader)
+
+        let newChatItem = NSMenuItem(title: "New Chat", action: #selector(openChat), keyEquivalent: "")
+        newChatItem.target = self
+        newChatItem.image = NSImage(systemSymbolName: "bubble.left.fill", accessibilityDescription: nil)
+        statusMenu.addItem(newChatItem)
+
+        let newEmailItem = NSMenuItem(title: "Compose Email", action: #selector(openEmail), keyEquivalent: "")
+        newEmailItem.target = self
+        newEmailItem.image = NSImage(systemSymbolName: "envelope.fill", accessibilityDescription: nil)
+        statusMenu.addItem(newEmailItem)
+
+        let newEventItem = NSMenuItem(title: "New Event", action: #selector(openNewEvent), keyEquivalent: "")
+        newEventItem.target = self
+        newEventItem.image = NSImage(systemSymbolName: "calendar.badge.plus", accessibilityDescription: nil)
+        statusMenu.addItem(newEventItem)
 
         statusMenu.addItem(NSMenuItem.separator())
 
-        // Check for Updates
-        let updateItem = NSMenuItem(title: "Check for Updates...", action: #selector(checkForUpdates), keyEquivalent: "")
-        updateItem.target = self
-        statusMenu.addItem(updateItem)
+        // ── Navigation ──
+        let navHeader = NSMenuItem(title: "Navigation", action: nil, keyEquivalent: "")
+        navHeader.isEnabled = false
+        statusMenu.addItem(navHeader)
 
-        // Open Settings
-        let settingsItem = NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ",")
+        let chatItem = NSMenuItem(title: "Open Chat", action: #selector(openChat), keyEquivalent: "1")
+        chatItem.target = self
+        chatItem.image = NSImage(systemSymbolName: "bubble.left.and.bubble.right.fill", accessibilityDescription: nil)
+        statusMenu.addItem(chatItem)
+
+        let calendarItem = NSMenuItem(title: "Open Calendar", action: #selector(openCalendar), keyEquivalent: "2")
+        calendarItem.target = self
+        calendarItem.image = NSImage(systemSymbolName: "calendar", accessibilityDescription: nil)
+        statusMenu.addItem(calendarItem)
+
+        let emailItem = NSMenuItem(title: "Open Email", action: #selector(openEmail), keyEquivalent: "3")
+        emailItem.target = self
+        emailItem.image = NSImage(systemSymbolName: "envelope.fill", accessibilityDescription: nil)
+        statusMenu.addItem(emailItem)
+
+        let settingsItem = NSMenuItem(title: "Open Settings", action: #selector(openSettings), keyEquivalent: ",")
         settingsItem.target = self
+        settingsItem.image = NSImage(systemSymbolName: "gearshape.fill", accessibilityDescription: nil)
         statusMenu.addItem(settingsItem)
 
         statusMenu.addItem(NSMenuItem.separator())
 
-        // Quit
+        // ── Tools ──
+        let refreshItem = NSMenuItem(title: "Refresh", action: #selector(refreshContent), keyEquivalent: "r")
+        refreshItem.target = self
+        refreshItem.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: nil)
+        statusMenu.addItem(refreshItem)
+
+        // Theme submenu
+        let themeItem = NSMenuItem(title: "Theme", action: nil, keyEquivalent: "")
+        themeItem.image = NSImage(systemSymbolName: "paintbrush.fill", accessibilityDescription: nil)
+        let themeSubmenu = NSMenu()
+        let currentMode = ThemeManager.shared.selectedMode
+        for mode in ThemeMode.allCases {
+            let modeItem = NSMenuItem(title: mode.label, action: #selector(setThemeMode(_:)), keyEquivalent: "")
+            modeItem.target = self
+            modeItem.representedObject = mode.rawValue
+            modeItem.image = NSImage(systemSymbolName: mode.icon, accessibilityDescription: nil)
+            modeItem.state = (mode == currentMode) ? .on : .off
+            themeSubmenu.addItem(modeItem)
+        }
+        themeItem.submenu = themeSubmenu
+        statusMenu.addItem(themeItem)
+
+        statusMenu.addItem(NSMenuItem.separator())
+
+        // ── Account ──
+        let sub = SubscriptionService.shared
+        let statusLabel: String
+        if sub.isSubscribed {
+            let planText = sub.plan.isEmpty ? "Active" : sub.plan.capitalized
+            statusLabel = "Pro — \(planText)"
+        } else {
+            statusLabel = "Free — Not Subscribed"
+        }
+        let accountItem = NSMenuItem(title: statusLabel, action: nil, keyEquivalent: "")
+        accountItem.isEnabled = false
+        accountItem.image = NSImage(systemSymbolName: sub.isSubscribed ? "crown.fill" : "person.crop.circle", accessibilityDescription: nil)
+        statusMenu.addItem(accountItem)
+
+        let manageSubItem = NSMenuItem(
+            title: sub.isSubscribed ? "Manage Subscription..." : "Subscribe...",
+            action: #selector(manageSubscription),
+            keyEquivalent: ""
+        )
+        manageSubItem.target = self
+        manageSubItem.image = NSImage(systemSymbolName: "creditcard.fill", accessibilityDescription: nil)
+        statusMenu.addItem(manageSubItem)
+
+        statusMenu.addItem(NSMenuItem.separator())
+
+        // ── App ──
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+        let versionItem = NSMenuItem(title: "ezLander v\(version)", action: nil, keyEquivalent: "")
+        versionItem.isEnabled = false
+        statusMenu.addItem(versionItem)
+
+        let updateItem = NSMenuItem(title: "Check for Updates...", action: #selector(checkForUpdates), keyEquivalent: "")
+        updateItem.target = self
+        updateItem.image = NSImage(systemSymbolName: "arrow.down.circle", accessibilityDescription: nil)
+        statusMenu.addItem(updateItem)
+
+        statusMenu.addItem(NSMenuItem.separator())
+
         let quitItem = NSMenuItem(title: "Quit ezLander", action: #selector(quitApp), keyEquivalent: "q")
         quitItem.target = self
+        quitItem.image = NSImage(systemSymbolName: "power", accessibilityDescription: nil)
         statusMenu.addItem(quitItem)
     }
 
@@ -117,7 +208,8 @@ class MenuBarController: NSObject {
         guard let event = NSApp.currentEvent else { return }
 
         if event.type == .rightMouseUp {
-            // Right click - show menu
+            // Right click - rebuild and show menu (so dynamic items are current)
+            rebuildMenu()
             statusItem.menu = statusMenu
             statusItem.button?.performClick(nil)
             // Reset menu so left click works normally
@@ -148,9 +240,46 @@ class MenuBarController: NSObject {
         }
     }
 
+    @objc private func openChat() {
+        showPopover()
+        NotificationCenter.default.post(name: Self.switchTabNotification, object: "chat")
+    }
+
+    @objc private func openCalendar() {
+        showPopover()
+        NotificationCenter.default.post(name: Self.switchTabNotification, object: "calendar")
+    }
+
+    @objc private func openEmail() {
+        showPopover()
+        NotificationCenter.default.post(name: Self.switchTabNotification, object: "email")
+    }
+
     @objc private func openSettings() {
         showPopover()
         NotificationCenter.default.post(name: Self.switchTabNotification, object: "settings")
+    }
+
+    @objc private func openNewEvent() {
+        showPopover()
+        NotificationCenter.default.post(name: Self.switchTabNotification, object: "calendar")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            NotificationCenter.default.post(name: Notification.Name("NewEventRequested"), object: nil)
+        }
+    }
+
+    @objc private func refreshContent() {
+        NotificationCenter.default.post(name: Notification.Name("RefreshRequested"), object: nil)
+    }
+
+    @objc private func setThemeMode(_ sender: NSMenuItem) {
+        guard let rawValue = sender.representedObject as? String,
+              let mode = ThemeMode(rawValue: rawValue) else { return }
+        ThemeManager.shared.selectedMode = mode
+    }
+
+    @objc private func manageSubscription() {
+        SubscriptionService.shared.openPurchasePage()
     }
 
     @objc private func quitApp() {

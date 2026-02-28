@@ -14,10 +14,20 @@ struct EzLanderApp: App {
     }
 }
 
+/// Prevents the user from closing onboarding/license windows without completing the flow.
+class NonClosableWindowDelegate: NSObject, NSWindowDelegate {
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        // Block close — user must complete onboarding or license activation
+        NSSound.beep()
+        return false
+    }
+}
+
 class AppDelegate: NSObject, NSApplicationDelegate {
     var menuBarController: MenuBarController?
     private var onboardingWindow: NSWindow?
     private var licenseWindow: NSWindow?
+    private let windowDelegate = NonClosableWindowDelegate()
     static var isPreviewMode: Bool {
         CommandLine.arguments.contains("--preview-mode")
     }
@@ -111,11 +121,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window.center()
         window.title = "Welcome to ezLander"
         window.isReleasedWhenClosed = false
+        window.delegate = windowDelegate
+        window.level = .floating
 
         let onboardingView = OnboardingView(isOnboardingComplete: Binding(
             get: { UserDefaults.standard.bool(forKey: "onboardingComplete") },
             set: { [weak self] complete in
                 if complete {
+                    self?.onboardingWindow?.delegate = nil
                     self?.onboardingWindow?.close()
                     self?.onboardingWindow = nil
                 }
@@ -140,11 +153,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window.center()
         window.title = "Activate ezLander"
         window.isReleasedWhenClosed = false
+        window.delegate = windowDelegate
+        window.level = .floating
 
         let licenseView = LicenseView(isLicenseActivated: Binding(
             get: { SubscriptionService.shared.isSubscribed },
             set: { [weak self] activated in
                 if activated {
+                    self?.licenseWindow?.delegate = nil
                     self?.licenseWindow?.close()
                     self?.licenseWindow = nil
                 }

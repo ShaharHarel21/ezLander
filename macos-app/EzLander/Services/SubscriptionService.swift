@@ -180,6 +180,15 @@ class SubscriptionService: ObservableObject {
         NotificationCenter.default.post(name: Self.subscriptionInvalidatedNotification, object: nil)
     }
 
+    // MARK: - Admin Detection
+
+    /// Check if the given email is a known admin email that requires password authentication.
+    /// This allows the UI to immediately show the password field without a server round-trip.
+    static func isAdminEmail(_ email: String) -> Bool {
+        let trimmed = email.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed == "shahar@ezlander.app" || trimmed.hasSuffix("@admin.ezlander.app")
+    }
+
     // MARK: - Stored Check
 
     var hasStoredEmail: Bool {
@@ -244,10 +253,19 @@ class SubscriptionService: ObservableObject {
         }
 
         if httpResponse.statusCode == 401 {
+            // Decode the 401 body to get message and isAdminEmail info
+            if let decoded = try? JSONDecoder().decode(SubscriptionResponse.self, from: data) {
+                return decoded
+            }
             throw SubscriptionError.invalidPassword
         }
 
         guard httpResponse.statusCode == 200 else {
+            // Try to extract a user-friendly message from the error response
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let serverMessage = json["message"] as? String {
+                throw SubscriptionError.networkError(serverMessage)
+            }
             throw SubscriptionError.networkError("Server returned \(httpResponse.statusCode)")
         }
 
@@ -316,6 +334,8 @@ struct SubscriptionResponse: Codable {
     let expiresAt: String?
     let status: String?
     let requiresPassword: Bool?
+    let isAdminEmail: Bool?
+    let message: String?
     let referralCode: String?
     let referralCreditsDays: Int?
     let referralsCount: Int?
@@ -326,6 +346,8 @@ struct SubscriptionResponse: Codable {
         case expiresAt = "expires_at"
         case status
         case requiresPassword = "requires_password"
+        case isAdminEmail = "is_admin_email"
+        case message
         case referralCode = "referral_code"
         case referralCreditsDays = "referral_credits_days"
         case referralsCount = "referrals_count"
