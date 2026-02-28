@@ -98,6 +98,69 @@ struct SettingsView: View {
             SettingsSection(title: "License") {
                 licenseInfoView
             }
+
+            if !viewModel.referralCode.isEmpty {
+                SettingsSection(title: "Referrals") {
+                    referralInfoView
+                }
+            }
+        }
+    }
+
+    // MARK: - Referral Info View
+    private var referralInfoView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Referral code row
+            HStack {
+                Text(viewModel.referralCode)
+                    .font(.system(.body, design: .monospaced))
+                    .textSelection(.enabled)
+
+                Spacer()
+
+                Button(viewModel.codeCopied ? "Copied!" : "Copy") {
+                    viewModel.copyReferralCode()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+
+                Button("Share") {
+                    viewModel.shareReferralCode()
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            }
+
+            // Stats row
+            HStack(spacing: 16) {
+                VStack {
+                    Text("\(viewModel.referralsCount)")
+                        .font(.headline)
+                    Text("Referrals")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                VStack {
+                    Text("\(viewModel.referralCreditsDays)")
+                        .font(.headline)
+                    Text("Days Earned")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                VStack {
+                    Text("\(max(0, 12 - viewModel.referralsCount))")
+                        .font(.headline)
+                    Text("Slots Left")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            Text("Share your code with friends. When they subscribe, you earn 7 days of free access!")
+                .font(.caption)
+                .foregroundColor(.secondary)
         }
     }
 
@@ -780,6 +843,12 @@ class SettingsViewModel: ObservableObject {
         }
     }
 
+    // Referral
+    @Published var referralCode: String = ""
+    @Published var referralCreditsDays: Int = 0
+    @Published var referralsCount: Int = 0
+    @Published var codeCopied: Bool = false
+
     // OpenAI OAuth
     @Published var isSigningInOpenAI: Bool = false
     @Published var openAIOAuthError: String?
@@ -854,6 +923,22 @@ class SettingsViewModel: ObservableObject {
 
         // Load subscription info
         licenseEmail = SubscriptionService.shared.subscribedEmail
+
+        // Load referral info
+        referralCode = SubscriptionService.shared.referralCode
+        referralCreditsDays = SubscriptionService.shared.referralCreditsDays
+        referralsCount = SubscriptionService.shared.referralsCount
+
+        if referralCode.isEmpty && !licenseEmail.isEmpty {
+            Task {
+                try? await SubscriptionService.shared.fetchReferralCode()
+                await MainActor.run {
+                    referralCode = SubscriptionService.shared.referralCode
+                    referralCreditsDays = SubscriptionService.shared.referralCreditsDays
+                    referralsCount = SubscriptionService.shared.referralsCount
+                }
+            }
+        }
     }
 
     // MARK: - AI Key Management
@@ -997,6 +1082,23 @@ class SettingsViewModel: ObservableObject {
     func disconnectGmail() {
         GmailService.shared.signOut()
         gmailConnected = false
+    }
+
+    // MARK: - Referral
+
+    func copyReferralCode() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(referralCode, forType: .string)
+        codeCopied = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+            self?.codeCopied = false
+        }
+    }
+
+    func shareReferralCode() {
+        let shareText = "Check out ezLander! Use my referral code \(referralCode) for a 14-day free trial: https://ezlander.app/pricing?ref=\(referralCode)"
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(shareText, forType: .string)
     }
 
 }

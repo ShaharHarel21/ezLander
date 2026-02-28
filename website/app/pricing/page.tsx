@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import Navbar from '@/components/Navbar'
 import Pricing from '@/components/Pricing'
 import FAQ from '@/components/FAQ'
@@ -13,7 +14,9 @@ export default function PricingPage() {
     <>
       <Navbar />
       <div className="pt-24">
-        <Pricing />
+        <Suspense>
+          <Pricing />
+        </Suspense>
         <FAQ />
       </div>
       <Footer />

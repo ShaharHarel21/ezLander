@@ -5,6 +5,7 @@ import SwiftUI
 struct LicenseView: View {
     @State private var email: String = ""
     @State private var password: String = ""
+    @State private var referralCode: String = ""
     @State private var needsPassword: Bool = false
     @State private var isActivating: Bool = false
     @State private var errorMessage: String?
@@ -37,9 +38,27 @@ struct LicenseView: View {
 
             Spacer().frame(height: 24)
 
+            // Referral code input
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Have a referral code?")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                TextField("Enter referral code", text: $referralCode)
+                    .textFieldStyle(.roundedBorder)
+            }
+            .padding(.horizontal, 48)
+
+            Spacer().frame(height: 12)
+
             // Subscribe button
             Button(action: {
-                SubscriptionService.shared.openPurchasePage()
+                let trimmedCode = referralCode.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmedCode.isEmpty,
+                   let url = URL(string: "https://ezlander.app/pricing?ref=\(trimmedCode)") {
+                    NSWorkspace.shared.open(url)
+                } else {
+                    SubscriptionService.shared.openPurchasePage()
+                }
             }) {
                 HStack {
                     Image(systemName: "arrow.clockwise")

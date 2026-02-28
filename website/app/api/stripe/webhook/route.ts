@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
+import { db } from '@/lib/db'
+import { users, referrals } from '@/lib/db/schema'
+import { eq, and } from 'drizzle-orm'
+import { generateReferralCode, REFERRAL_CAP, REFERRAL_REWARD_DAYS } from '@/lib/referral'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2023-10-16',
@@ -82,18 +86,83 @@ export async function POST(request: NextRequest) {
 
 async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
   const customerId = session.customer as string
-  const email = session.customer_email
+  const email = session.customer_email || session.customer_details?.email
 
   console.log(`Checkout completed for customer: ${customerId}, email: ${email}`)
 
-  // Store subscription info in your database
-  // await db.users.update({
-  //   where: { email },
-  //   data: {
-  //     stripeCustomerId: customerId,
-  //     subscriptionStatus: 'active',
-  //   },
-  // })
+  if (!email) return
+
+  // Ensure referred user has a DB record
+  const existingUser = await db.query.users.findFirst({
+    where: eq(users.email, email),
+  })
+
+  if (!existingUser) {
+    await db.insert(users).values({
+      email,
+      referralCode: generateReferralCode(),
+    })
+  }
+
+  // Check for referral code in subscription metadata
+  const subscriptionId = session.subscription as string
+  if (!subscriptionId) return
+
+  const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+  const referralCode = subscription.metadata?.referral_code
+
+  if (!referralCode) return
+
+  // Find referrer
+  const referrer = await db.query.users.findFirst({
+    where: eq(users.referralCode, referralCode),
+  })
+
+  if (!referrer) return
+
+  // Validate: not self-referral
+  if (referrer.email === email) {
+    console.log(`Self-referral blocked: ${email}`)
+    return
+  }
+
+  // Validate: not duplicate
+  const existingReferral = await db.query.referrals.findFirst({
+    where: and(
+      eq(referrals.referrerEmail, referrer.email),
+      eq(referrals.referredEmail, email)
+    ),
+  })
+
+  if (existingReferral) {
+    console.log(`Duplicate referral blocked: ${referrer.email} -> ${email}`)
+    return
+  }
+
+  // Validate: not at cap
+  if (referrer.referralsCount >= REFERRAL_CAP) {
+    console.log(`Referral cap reached for: ${referrer.email}`)
+    return
+  }
+
+  // Record the referral
+  await db.insert(referrals).values({
+    referrerEmail: referrer.email,
+    referredEmail: email,
+    status: 'completed',
+    completedAt: new Date().toISOString(),
+  })
+
+  // Credit the referrer
+  await db
+    .update(users)
+    .set({
+      referralCreditsDays: referrer.referralCreditsDays + REFERRAL_REWARD_DAYS,
+      referralsCount: referrer.referralsCount + 1,
+    })
+    .where(eq(users.email, referrer.email))
+
+  console.log(`Referral completed: ${referrer.email} earned ${REFERRAL_REWARD_DAYS} days from ${email}`)
 }
 
 async function handleSubscriptionCreated(subscription: Stripe.Subscription) {
@@ -102,54 +171,40 @@ async function handleSubscriptionCreated(subscription: Stripe.Subscription) {
 
   console.log(`Subscription created: ${subscription.id}, plan: ${plan}`)
 
-  // Update user subscription in database
-  // await db.subscriptions.create({
-  //   data: {
-  //     stripeSubscriptionId: subscription.id,
-  //     stripeCustomerId: customerId,
-  //     plan,
-  //     status: subscription.status,
-  //     currentPeriodEnd: new Date(subscription.current_period_end * 1000),
-  //   },
-  // })
+  // When a user re-subscribes, pause credit consumption
+  const customer = await stripe.customers.retrieve(customerId) as Stripe.Customer
+  const email = customer.email
+
+  if (email) {
+    const user = await db.query.users.findFirst({
+      where: eq(users.email, email),
+    })
+
+    if (user && user.creditsActivatedAt) {
+      await db
+        .update(users)
+        .set({ creditsActivatedAt: null })
+        .where(eq(users.email, email))
+
+      console.log(`Credits paused for re-subscribing user: ${email}`)
+    }
+  }
 }
 
 async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
   console.log(`Subscription updated: ${subscription.id}, status: ${subscription.status}`)
-
-  // Update subscription status in database
-  // await db.subscriptions.update({
-  //   where: { stripeSubscriptionId: subscription.id },
-  //   data: {
-  //     status: subscription.status,
-  //     currentPeriodEnd: new Date(subscription.current_period_end * 1000),
-  //   },
-  // })
 }
 
 async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
   console.log(`Subscription deleted: ${subscription.id}`)
-
-  // Mark subscription as canceled in database
-  // await db.subscriptions.update({
-  //   where: { stripeSubscriptionId: subscription.id },
-  //   data: {
-  //     status: 'canceled',
-  //   },
-  // })
 }
 
 async function handlePaymentSucceeded(invoice: Stripe.Invoice) {
   const customerId = invoice.customer as string
   console.log(`Payment succeeded for customer: ${customerId}`)
-
-  // You could send a receipt email here
 }
 
 async function handlePaymentFailed(invoice: Stripe.Invoice) {
   const customerId = invoice.customer as string
   console.log(`Payment failed for customer: ${customerId}`)
-
-  // Send payment failed notification to user
-  // await sendPaymentFailedEmail(customerId)
 }

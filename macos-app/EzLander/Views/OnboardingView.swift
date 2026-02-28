@@ -4,6 +4,7 @@ struct OnboardingView: View {
     @State private var currentStep = 0
     @State private var email: String = ""
     @State private var password: String = ""
+    @State private var referralCode: String = ""
     @State private var needsPassword: Bool = false
     @State private var showEmailInput: Bool = false
     @State private var isActivating: Bool = false
@@ -172,9 +173,25 @@ struct OnboardingView: View {
 
         case .subscribe:
             VStack(spacing: 16) {
+                // Referral code input
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Have a referral code?")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    TextField("Enter referral code", text: $referralCode)
+                        .textFieldStyle(.roundedBorder)
+                }
+                .padding(.horizontal, 48)
+
                 // Subscribe button
                 Button(action: {
-                    SubscriptionService.shared.openPurchasePage()
+                    let trimmedCode = referralCode.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmedCode.isEmpty,
+                       let url = URL(string: "https://ezlander.app/pricing?ref=\(trimmedCode)") {
+                        NSWorkspace.shared.open(url)
+                    } else {
+                        SubscriptionService.shared.openPurchasePage()
+                    }
                 }) {
                     HStack {
                         Image(systemName: "crown.fill")

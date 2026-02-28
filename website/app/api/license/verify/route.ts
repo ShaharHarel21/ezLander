@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import bcrypt from 'bcryptjs'
+import { db } from '@/lib/db'
+import { users } from '@/lib/db/schema'
+import { eq } from 'drizzle-orm'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2023-10-16',
@@ -12,6 +15,24 @@ function getPlanLookupKey(subscription: Stripe.Subscription): string {
       (item) => typeof item.price?.lookup_key === 'string'
     )?.price.lookup_key || 'unknown'
   )
+}
+
+async function getReferralData(email: string) {
+  try {
+    const user = await db.query.users.findFirst({
+      where: eq(users.email, email),
+    })
+    if (user) {
+      return {
+        referral_code: user.referralCode,
+        referral_credits_days: user.referralCreditsDays,
+        referrals_count: user.referralsCount,
+      }
+    }
+  } catch (e) {
+    console.error('Error fetching referral data:', e)
+  }
+  return {}
 }
 
 export async function POST(request: NextRequest) {
@@ -67,11 +88,8 @@ export async function POST(request: NextRequest) {
     })
 
     if (customers.data.length === 0) {
-      return NextResponse.json({
-        is_active: false,
-        plan: null,
-        expires_at: null,
-      })
+      // No Stripe customer — check referral credits
+      return await checkReferralCredits(email)
     }
 
     const customer = customers.data[0]
@@ -96,32 +114,32 @@ export async function POST(request: NextRequest) {
         const endDate = new Date(sub.current_period_end * 1000)
 
         if (endDate > new Date()) {
-          // Still valid until end of period
+          const referralData = await getReferralData(email)
           return NextResponse.json({
             is_active: true,
             plan: getPlanLookupKey(sub),
             expires_at: endDate.toISOString(),
             status: 'canceled',
+            ...referralData,
           })
         }
       }
 
-      return NextResponse.json({
-        is_active: false,
-        plan: null,
-        expires_at: null,
-      })
+      // No active subscription — check referral credits
+      return await checkReferralCredits(email)
     }
 
     const subscription = subscriptions.data[0]
     const plan = getPlanLookupKey(subscription)
     const expiresAt = new Date(subscription.current_period_end * 1000)
+    const referralData = await getReferralData(email)
 
     return NextResponse.json({
       is_active: true,
       plan,
       expires_at: expiresAt.toISOString(),
       status: subscription.status,
+      ...referralData,
     })
   } catch (error) {
     console.error('License verification error:', error)
@@ -130,4 +148,48 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
+}
+
+async function checkReferralCredits(email: string) {
+  try {
+    const user = await db.query.users.findFirst({
+      where: eq(users.email, email),
+    })
+
+    if (user && user.referralCreditsDays > 0) {
+      // First-time credit use: activate
+      if (!user.creditsActivatedAt) {
+        await db
+          .update(users)
+          .set({ creditsActivatedAt: new Date().toISOString() })
+          .where(eq(users.email, email))
+        user.creditsActivatedAt = new Date().toISOString()
+      }
+
+      const activatedAt = new Date(user.creditsActivatedAt)
+      const expiresAt = new Date(
+        activatedAt.getTime() + user.referralCreditsDays * 24 * 60 * 60 * 1000
+      )
+
+      if (expiresAt > new Date()) {
+        return NextResponse.json({
+          is_active: true,
+          plan: 'referral_credit',
+          expires_at: expiresAt.toISOString(),
+          status: 'referral_credit',
+          referral_code: user.referralCode,
+          referral_credits_days: user.referralCreditsDays,
+          referrals_count: user.referralsCount,
+        })
+      }
+    }
+  } catch (e) {
+    console.error('Error checking referral credits:', e)
+  }
+
+  return NextResponse.json({
+    is_active: false,
+    plan: null,
+    expires_at: null,
+  })
 }

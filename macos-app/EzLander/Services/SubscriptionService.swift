@@ -18,6 +18,9 @@ class SubscriptionService: ObservableObject {
     private let udKeyIsActive = "subscription_is_active"
     private let udKeyPlan = "subscription_plan"
     private let udKeyExpiresAt = "subscription_expiry"
+    private let udKeyReferralCode = "referral_code"
+    private let udKeyReferralCreditsDays = "referral_credits_days"
+    private let udKeyReferralsCount = "referrals_count"
 
     // Notification posted when a previously active subscription becomes invalid
     static let subscriptionInvalidatedNotification = Notification.Name("SubscriptionInvalidated")
@@ -25,6 +28,9 @@ class SubscriptionService: ObservableObject {
     @Published var isSubscribed: Bool = false
     @Published var subscribedEmail: String = ""
     @Published var plan: String = ""
+    @Published var referralCode: String = ""
+    @Published var referralCreditsDays: Int = 0
+    @Published var referralsCount: Int = 0
 
     private var reVerifyTimer: Timer?
 
@@ -103,6 +109,9 @@ class SubscriptionService: ObservableObject {
             isSubscribed = true
             subscribedEmail = email
             plan = response.plan ?? ""
+            referralCode = response.referralCode ?? ""
+            referralCreditsDays = response.referralCreditsDays ?? 0
+            referralsCount = response.referralsCount ?? 0
         }
 
         startReVerifyTimer()
@@ -122,6 +131,9 @@ class SubscriptionService: ObservableObject {
             isSubscribed = true
             subscribedEmail = email
             plan = response.plan ?? ""
+            referralCode = response.referralCode ?? ""
+            referralCreditsDays = response.referralCreditsDays ?? 0
+            referralsCount = response.referralsCount ?? 0
         }
 
         startReVerifyTimer()
@@ -162,6 +174,9 @@ class SubscriptionService: ObservableObject {
         isSubscribed = false
         subscribedEmail = ""
         plan = ""
+        referralCode = ""
+        referralCreditsDays = 0
+        referralsCount = 0
         NotificationCenter.default.post(name: Self.subscriptionInvalidatedNotification, object: nil)
     }
 
@@ -169,6 +184,31 @@ class SubscriptionService: ObservableObject {
 
     var hasStoredEmail: Bool {
         KeychainService.shared.get(key: keychainKeyEmail) != nil
+    }
+
+    // MARK: - Referral
+
+    func fetchReferralCode() async throws {
+        guard !subscribedEmail.isEmpty else { return }
+
+        let url = URL(string: "https://ezlander.app/api/referral/code")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(["email": subscribedEmail])
+
+        let (data, _) = try await URLSession.shared.data(for: request)
+        let response = try JSONDecoder().decode(ReferralCodeResponse.self, from: data)
+
+        await MainActor.run {
+            self.referralCode = response.referralCode
+            self.referralCreditsDays = response.referralCreditsDays
+            self.referralsCount = response.referralsCount
+            // Cache
+            UserDefaults.standard.set(response.referralCode, forKey: udKeyReferralCode)
+            UserDefaults.standard.set(response.referralCreditsDays, forKey: udKeyReferralCreditsDays)
+            UserDefaults.standard.set(response.referralsCount, forKey: udKeyReferralsCount)
+        }
     }
 
     // MARK: - Purchase URL
@@ -217,6 +257,9 @@ class SubscriptionService: ObservableObject {
     private func loadCachedState() {
         subscribedEmail = KeychainService.shared.get(key: keychainKeyEmail) ?? ""
         plan = UserDefaults.standard.string(forKey: udKeyPlan) ?? ""
+        referralCode = UserDefaults.standard.string(forKey: udKeyReferralCode) ?? ""
+        referralCreditsDays = UserDefaults.standard.integer(forKey: udKeyReferralCreditsDays)
+        referralsCount = UserDefaults.standard.integer(forKey: udKeyReferralsCount)
     }
 
     private func cacheValidation(response: SubscriptionResponse) {
@@ -227,6 +270,15 @@ class SubscriptionService: ObservableObject {
         }
         if let expiresAt = response.expiresAt {
             UserDefaults.standard.set(expiresAt, forKey: udKeyExpiresAt)
+        }
+        if let referralCode = response.referralCode {
+            UserDefaults.standard.set(referralCode, forKey: udKeyReferralCode)
+        }
+        if let referralCreditsDays = response.referralCreditsDays {
+            UserDefaults.standard.set(referralCreditsDays, forKey: udKeyReferralCreditsDays)
+        }
+        if let referralsCount = response.referralsCount {
+            UserDefaults.standard.set(referralsCount, forKey: udKeyReferralsCount)
         }
     }
 
@@ -241,6 +293,9 @@ class SubscriptionService: ObservableObject {
         UserDefaults.standard.removeObject(forKey: udKeyIsActive)
         UserDefaults.standard.removeObject(forKey: udKeyPlan)
         UserDefaults.standard.removeObject(forKey: udKeyExpiresAt)
+        UserDefaults.standard.removeObject(forKey: udKeyReferralCode)
+        UserDefaults.standard.removeObject(forKey: udKeyReferralCreditsDays)
+        UserDefaults.standard.removeObject(forKey: udKeyReferralsCount)
     }
 
     private func startReVerifyTimer() {
@@ -261,6 +316,9 @@ struct SubscriptionResponse: Codable {
     let expiresAt: String?
     let status: String?
     let requiresPassword: Bool?
+    let referralCode: String?
+    let referralCreditsDays: Int?
+    let referralsCount: Int?
 
     enum CodingKeys: String, CodingKey {
         case isActive = "is_active"
@@ -268,6 +326,21 @@ struct SubscriptionResponse: Codable {
         case expiresAt = "expires_at"
         case status
         case requiresPassword = "requires_password"
+        case referralCode = "referral_code"
+        case referralCreditsDays = "referral_credits_days"
+        case referralsCount = "referrals_count"
+    }
+}
+
+struct ReferralCodeResponse: Codable {
+    let referralCode: String
+    let referralCreditsDays: Int
+    let referralsCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case referralCode = "referral_code"
+        case referralCreditsDays = "referral_credits_days"
+        case referralsCount = "referrals_count"
     }
 }
 

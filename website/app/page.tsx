@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import Hero from '@/components/Hero'
 import Features from '@/components/Features'
 import Pricing from '@/components/Pricing'
@@ -126,7 +127,9 @@ export default function Home() {
       <Navbar />
       <Hero />
       <Features />
-      <Pricing />
+      <Suspense>
+        <Pricing />
+      </Suspense>
       <FAQ />
       <Footer />
     </>

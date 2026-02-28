@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
+import { db } from '@/lib/db'
+import { users } from '@/lib/db/schema'
+import { eq } from 'drizzle-orm'
+import { REFERRAL_CAP, REFERRED_TRIAL_DAYS } from '@/lib/referral'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2023-10-16',
@@ -12,11 +16,11 @@ const PRICES = {
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, plan } = await request.json()
+    const { email, plan, referral_code } = await request.json()
 
-    if (!email || !plan) {
+    if (!plan) {
       return NextResponse.json(
-        { error: 'Email and plan are required' },
+        { error: 'Plan is required' },
         { status: 400 }
       )
     }
@@ -28,22 +32,39 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Validate referral code if provided
+    let validReferralCode: string | null = null
+    if (referral_code) {
+      const referrer = await db.query.users.findFirst({
+        where: eq(users.referralCode, referral_code),
+      })
+      if (referrer && referrer.referralsCount < REFERRAL_CAP) {
+        validReferralCode = referral_code
+      }
+    }
+
+    // Determine trial period
+    let trialDays = plan === 'yearly' ? 14 : 7
+    if (validReferralCode) {
+      trialDays = REFERRED_TRIAL_DAYS
+    }
+
     // Check if customer already exists
-    const customers = await stripe.customers.list({
-      email,
-      limit: 1,
-    })
-
     let customerId: string | undefined
-
-    if (customers.data.length > 0) {
-      customerId = customers.data[0].id
+    if (email) {
+      const customers = await stripe.customers.list({
+        email,
+        limit: 1,
+      })
+      if (customers.data.length > 0) {
+        customerId = customers.data[0].id
+      }
     }
 
     // Create checkout session
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
-      customer_email: customerId ? undefined : email,
+      customer_email: customerId ? undefined : (email || undefined),
       mode: 'subscription',
       payment_method_types: ['card'],
       line_items: [
@@ -53,9 +74,10 @@ export async function POST(request: NextRequest) {
         },
       ],
       subscription_data: {
-        trial_period_days: plan === 'yearly' ? 14 : 7,
+        trial_period_days: trialDays,
         metadata: {
           plan,
+          ...(validReferralCode ? { referral_code: validReferralCode } : {}),
         },
       },
       success_url: `${process.env.NEXT_PUBLIC_APP_URL}/download?success=true&session_id={CHECKOUT_SESSION_ID}`,
