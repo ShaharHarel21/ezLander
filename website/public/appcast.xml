@@ -14,7 +14,7 @@
             <enclosure
                 url="https://github.com/ShaharHarel21/ezLander/releases/download/v1.18.0/EzLander-v1.18.0.zip"
                 sparkle:edSignature="SIGNATURE_PLACEHOLDER"
-                length="1356366"
+                length="1484131"
                 type="application/octet-stream"/>
             <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
         </item>
