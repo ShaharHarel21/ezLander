@@ -868,6 +868,134 @@ struct EmailListRow: View {
     }
 }
 
+// MARK: - Contact Autocomplete Field
+
+struct ContactAutocompleteField: View {
+    @Binding var text: String
+    let placeholder: String
+
+    @State private var suggestions: [ContactSuggestion] = []
+    @State private var showSuggestions = false
+    @State private var selectedIndex: Int = -1
+    @FocusState private var isFieldFocused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            TextField(placeholder, text: $text)
+                .textFieldStyle(.plain)
+                .focused($isFieldFocused)
+                .onChange(of: text) { _ in
+                    updateSuggestions()
+                }
+                .onChange(of: isFieldFocused) { focused in
+                    if !focused {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                            showSuggestions = false
+                        }
+                    }
+                }
+
+            if showSuggestions && !suggestions.isEmpty {
+                suggestionsDropdown
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.15), value: showSuggestions)
+        .task {
+            await ContactsService.shared.loadContactsIfNeeded()
+        }
+    }
+
+    private var suggestionsDropdown: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(suggestions.enumerated()), id: \.element.id) { index, suggestion in
+                suggestionRow(suggestion, isSelected: index == selectedIndex)
+                    .onTapGesture { selectSuggestion(suggestion) }
+                    .onHover { hovering in
+                        if hovering { selectedIndex = index }
+                    }
+
+                if index < suggestions.count - 1 {
+                    Divider().padding(.leading, 36)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color(NSColor.controlBackgroundColor))
+                .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+        )
+        .padding(.top, 4)
+    }
+
+    private func suggestionRow(_ suggestion: ContactSuggestion, isSelected: Bool) -> some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(Color.warmPrimary.opacity(0.15))
+                .frame(width: 28, height: 28)
+                .overlay(
+                    Text(initials(for: suggestion))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.warmPrimary)
+                )
+
+            VStack(alignment: .leading, spacing: 1) {
+                if !suggestion.name.isEmpty {
+                    Text(suggestion.name)
+                        .font(.system(size: 12, weight: .medium))
+                        .lineLimit(1)
+                }
+                Text(suggestion.email)
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(isSelected ? Color.warmPrimary.opacity(0.1) : Color.clear)
+        .contentShape(Rectangle())
+    }
+
+    private func updateSuggestions() {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        if trimmed.count < 2 {
+            suggestions = []
+            showSuggestions = false
+            selectedIndex = -1
+            return
+        }
+        suggestions = ContactsService.shared.suggestions(for: trimmed, limit: 5)
+        showSuggestions = !suggestions.isEmpty && isFieldFocused
+        selectedIndex = -1
+    }
+
+    private func selectSuggestion(_ suggestion: ContactSuggestion) {
+        text = suggestion.email
+        showSuggestions = false
+        suggestions = []
+        selectedIndex = -1
+    }
+
+    private func initials(for suggestion: ContactSuggestion) -> String {
+        if !suggestion.name.isEmpty {
+            let parts = suggestion.name.split(separator: " ")
+            if parts.count >= 2 {
+                return "\(parts[0].prefix(1))\(parts[1].prefix(1))".uppercased()
+            }
+            return String(suggestion.name.prefix(1)).uppercased()
+        }
+        return String(suggestion.email.prefix(1)).uppercased()
+    }
+}
+
 // MARK: - Compose Email View
 struct ComposeEmailView: View {
     let onSend: (Email) -> Void
@@ -912,15 +1040,19 @@ struct ComposeEmailView: View {
 
             // Form
             VStack(spacing: 0) {
-                HStack {
+                HStack(alignment: .top) {
                     Text("To:")
                         .foregroundColor(.secondary)
                         .frame(width: 60, alignment: .leading)
-                    TextField("recipient@email.com", text: $toField)
-                        .textFieldStyle(.plain)
+                        .padding(.top, 2)
+                    ContactAutocompleteField(
+                        text: $toField,
+                        placeholder: "recipient@email.com"
+                    )
                 }
                 .padding(.horizontal)
                 .padding(.vertical, 8)
+                .zIndex(1)
 
                 Divider()
 
@@ -1547,6 +1679,8 @@ class EmailViewModel: ObservableObject {
             if browsableLabels.isEmpty {
                 loadLabels()
             }
+            // Preload contacts for autocomplete
+            Task { await ContactsService.shared.loadContactsIfNeeded() }
         }
     }
 

@@ -42,6 +42,7 @@
 		1A0000000000000000000068 /* EventParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000067 /* EventParser.swift */; };
 		1A000000000000000000006A /* EmailParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000069 /* EmailParser.swift */; };
 		1A000000000000000000006C /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A000000000000000000006B /* OnboardingView.swift */; };
+		1A000000000000000000006E /* ContactsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A000000000000000000006D /* ContactsService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -83,6 +84,7 @@
 		1A0000000000000000000067 /* EventParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventParser.swift; sourceTree = "<group>"; };
 		1A0000000000000000000069 /* EmailParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmailParser.swift; sourceTree = "<group>"; };
 		1A000000000000000000006B /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		1A000000000000000000006D /* ContactsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactsService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -166,6 +168,7 @@
 				1A0000000000000000000065 /* APIRetryHelper.swift */,
 				1A0000000000000000000067 /* EventParser.swift */,
 				1A0000000000000000000069 /* EmailParser.swift */,
+				1A000000000000000000006D /* ContactsService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -291,6 +294,7 @@
 				1A0000000000000000000068 /* EventParser.swift in Sources */,
 				1A000000000000000000006A /* EmailParser.swift in Sources */,
 				1A000000000000000000006C /* OnboardingView.swift in Sources */,
+				1A000000000000000000006E /* ContactsService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

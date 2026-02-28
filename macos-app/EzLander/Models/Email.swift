@@ -81,6 +81,32 @@ struct Attachment: Identifiable, Codable {
     }
 }
 
+// MARK: - Contact Suggestion (for autocomplete)
+struct ContactSuggestion: Identifiable, Hashable {
+    let id: String          // email address (lowercased)
+    let name: String        // display name, empty if unknown
+    let email: String       // email address
+    let source: ContactSource
+
+    enum ContactSource: Int, Hashable, Comparable {
+        case googleContacts = 0
+        case recentEmail = 1
+        case appleContacts = 2
+
+        static func < (lhs: Self, rhs: Self) -> Bool {
+            lhs.rawValue < rhs.rawValue
+        }
+    }
+
+    var displayString: String {
+        name.isEmpty ? email : "\(name) <\(email)>"
+    }
+
+    var searchableText: String {
+        "\(name.lowercased()) \(email.lowercased())"
+    }
+}
+
 // MARK: - Email Draft
 struct EmailDraft: Identifiable {
     let id: String
