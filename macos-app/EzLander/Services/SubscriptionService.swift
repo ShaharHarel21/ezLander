@@ -186,7 +186,7 @@ class SubscriptionService: ObservableObject {
     /// This allows the UI to immediately show the password field without a server round-trip.
     static func isAdminEmail(_ email: String) -> Bool {
         let trimmed = email.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed == "shahar@ezlander.app" || trimmed.hasSuffix("@admin.ezlander.app")
+        return trimmed == "shahar@ezlander.app" || trimmed == "shahar.harel200@gmail.com" || trimmed.hasSuffix("@admin.ezlander.app")
     }
 
     // MARK: - Stored Check

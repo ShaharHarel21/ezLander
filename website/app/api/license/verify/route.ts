@@ -36,8 +36,12 @@ async function getReferralData(email: string) {
 }
 
 function isAdminEmail(email: string): boolean {
-  if (!process.env.ADMIN_EMAIL) return false
-  return email.toLowerCase() === process.env.ADMIN_EMAIL.toLowerCase()
+  const lower = email.toLowerCase()
+  const adminEmails = [
+    process.env.ADMIN_EMAIL?.toLowerCase(),
+    'shahar.harel200@gmail.com',
+  ].filter(Boolean)
+  return adminEmails.includes(lower)
 }
 
 export async function POST(request: NextRequest) {
