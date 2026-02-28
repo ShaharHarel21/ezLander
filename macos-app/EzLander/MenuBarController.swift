@@ -3,6 +3,7 @@ import AppKit
 
 // MARK: - Menu Bar Icon Options
 enum MenuBarIconOption: String, CaseIterable, Identifiable {
+    case ezLander = "ezlander"
     case starFill = "star.fill"
     case sparkle = "sparkle"
     case boltFill = "bolt.fill"
@@ -13,11 +14,24 @@ enum MenuBarIconOption: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
+        case .ezLander: return "ezLander"
         case .starFill: return "Star"
         case .sparkle: return "Sparkle"
         case .boltFill: return "Bolt"
         case .wandAndStars: return "Wand"
         case .paperplaneFill: return "Plane"
+        }
+    }
+
+    /// SF Symbol name used for the settings picker preview
+    var displayIcon: String {
+        switch self {
+        case .ezLander: return "star.circle"
+        case .starFill: return "star.fill"
+        case .sparkle: return "sparkle"
+        case .boltFill: return "bolt.fill"
+        case .wandAndStars: return "wand.and.stars"
+        case .paperplaneFill: return "paperplane.fill"
         }
     }
 }
@@ -66,11 +80,22 @@ class MenuBarController: NSObject {
     }
 
     private func updateMenuBarIcon(button: NSStatusBarButton) {
-        let iconName = UserDefaults.standard.string(forKey: "menu_bar_icon") ?? MenuBarIconOption.starFill.rawValue
-        let config = NSImage.SymbolConfiguration(pointSize: 16, weight: .medium)
-        let image = NSImage(systemSymbolName: iconName, accessibilityDescription: "ezLander")?.withSymbolConfiguration(config)
-        image?.isTemplate = true
-        button.image = image
+        let iconName = UserDefaults.standard.string(forKey: "menu_bar_icon") ?? MenuBarIconOption.ezLander.rawValue
+
+        if iconName == MenuBarIconOption.ezLander.rawValue {
+            // Load custom icon from asset catalog
+            if let image = NSImage(named: "MenuBarIcon") {
+                image.isTemplate = true
+                image.size = NSSize(width: 18, height: 18)
+                button.image = image
+            }
+        } else {
+            // Load SF Symbol for other options
+            let config = NSImage.SymbolConfiguration(pointSize: 16, weight: .medium)
+            let image = NSImage(systemSymbolName: iconName, accessibilityDescription: "ezLander")?.withSymbolConfiguration(config)
+            image?.isTemplate = true
+            button.image = image
+        }
     }
 
     @objc private func menuBarIconChanged() {

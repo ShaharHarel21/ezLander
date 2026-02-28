@@ -457,7 +457,7 @@ struct SettingsView: View {
                     let isSelected = viewModel.selectedMenuBarIcon == option
                     Button(action: { viewModel.selectedMenuBarIcon = option }) {
                         VStack(spacing: 4) {
-                            Image(systemName: option.rawValue)
+                            Image(systemName: option.displayIcon)
                                 .font(.system(size: 20))
                                 .frame(width: 40, height: 40)
                                 .background(
@@ -826,7 +826,7 @@ class SettingsViewModel: ObservableObject {
             UserDefaults.standard.set(showNotifications, forKey: "show_notifications")
         }
     }
-    @Published var selectedMenuBarIcon: MenuBarIconOption = .starFill {
+    @Published var selectedMenuBarIcon: MenuBarIconOption = .ezLander {
         didSet {
             UserDefaults.standard.set(selectedMenuBarIcon.rawValue, forKey: "menu_bar_icon")
             NotificationCenter.default.post(name: Notification.Name("MenuBarIconChanged"), object: nil)
