@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
+import bcrypt from 'bcryptjs'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2023-10-16',
@@ -15,13 +16,48 @@ function getPlanLookupKey(subscription: Stripe.Subscription): string {
 
 export async function POST(request: NextRequest) {
   try {
-    const { email } = await request.json()
+    const { email, password } = await request.json()
 
     if (!email) {
       return NextResponse.json(
         { error: 'Email is required' },
         { status: 400 }
       )
+    }
+
+    // Admin email bypass
+    if (
+      process.env.ADMIN_EMAIL &&
+      email.toLowerCase() === process.env.ADMIN_EMAIL.toLowerCase()
+    ) {
+      if (!password) {
+        return NextResponse.json({
+          is_active: false,
+          requires_password: true,
+        })
+      }
+
+      const hash = process.env.ADMIN_PASSWORD_HASH
+      if (!hash) {
+        return NextResponse.json(
+          { error: 'Admin not configured' },
+          { status: 500 }
+        )
+      }
+
+      const valid = await bcrypt.compare(password, hash)
+      if (!valid) {
+        return NextResponse.json(
+          { error: 'Invalid password' },
+          { status: 401 }
+        )
+      }
+
+      return NextResponse.json({
+        is_active: true,
+        plan: 'admin',
+        status: 'admin',
+      })
     }
 
     // Find customer by email

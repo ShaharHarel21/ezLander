@@ -3,6 +3,8 @@ import SwiftUI
 struct OnboardingView: View {
     @State private var currentStep = 0
     @State private var email: String = ""
+    @State private var password: String = ""
+    @State private var needsPassword: Bool = false
     @State private var showEmailInput: Bool = false
     @State private var isActivating: Bool = false
     @State private var errorMessage: String?
@@ -199,7 +201,7 @@ struct OnboardingView: View {
                         HStack {
                             TextField("your@email.com", text: $email)
                                 .textFieldStyle(.roundedBorder)
-                                .disabled(isActivating)
+                                .disabled(isActivating || needsPassword)
 
                             Button(action: verifySubscription) {
                                 if isActivating {
@@ -211,7 +213,27 @@ struct OnboardingView: View {
                                 }
                             }
                             .buttonStyle(.borderedProminent)
-                            .disabled(email.isEmpty || isActivating)
+                            .disabled(email.isEmpty || isActivating || needsPassword)
+                        }
+
+                        if needsPassword {
+                            HStack {
+                                SecureField("Password", text: $password)
+                                    .textFieldStyle(.roundedBorder)
+                                    .disabled(isActivating)
+
+                                Button(action: authenticateAdmin) {
+                                    if isActivating {
+                                        ProgressView()
+                                            .scaleEffect(0.7)
+                                            .frame(width: 16, height: 16)
+                                    } else {
+                                        Text("Authenticate")
+                                    }
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(password.isEmpty || isActivating)
+                            }
                         }
 
                         if let errorMessage {
@@ -253,6 +275,34 @@ struct OnboardingView: View {
             do {
                 try await SubscriptionService.shared.activateSubscription(
                     email: email.trimmingCharacters(in: .whitespacesAndNewlines)
+                )
+                await MainActor.run {
+                    isActivating = false
+                    completeOnboarding()
+                }
+            } catch SubscriptionError.passwordRequired {
+                await MainActor.run {
+                    isActivating = false
+                    needsPassword = true
+                }
+            } catch {
+                await MainActor.run {
+                    isActivating = false
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func authenticateAdmin() {
+        isActivating = true
+        errorMessage = nil
+
+        Task {
+            do {
+                try await SubscriptionService.shared.activateAdminSubscription(
+                    email: email.trimmingCharacters(in: .whitespacesAndNewlines),
+                    password: password
                 )
                 await MainActor.run {
                     isActivating = false

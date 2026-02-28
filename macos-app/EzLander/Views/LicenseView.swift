@@ -4,6 +4,8 @@ import SwiftUI
 /// First-time users see OnboardingView instead.
 struct LicenseView: View {
     @State private var email: String = ""
+    @State private var password: String = ""
+    @State private var needsPassword: Bool = false
     @State private var isActivating: Bool = false
     @State private var errorMessage: String?
     @Binding var isLicenseActivated: Bool
@@ -59,7 +61,7 @@ struct LicenseView: View {
                 HStack {
                     TextField("your@email.com", text: $email)
                         .textFieldStyle(.roundedBorder)
-                        .disabled(isActivating)
+                        .disabled(isActivating || needsPassword)
 
                     Button(action: activate) {
                         if isActivating {
@@ -71,7 +73,27 @@ struct LicenseView: View {
                         }
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(email.isEmpty || isActivating)
+                    .disabled(email.isEmpty || isActivating || needsPassword)
+                }
+
+                if needsPassword {
+                    HStack {
+                        SecureField("Password", text: $password)
+                            .textFieldStyle(.roundedBorder)
+                            .disabled(isActivating)
+
+                        Button(action: authenticateAdmin) {
+                            if isActivating {
+                                ProgressView()
+                                    .scaleEffect(0.7)
+                                    .frame(width: 16, height: 16)
+                            } else {
+                                Text("Authenticate")
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(password.isEmpty || isActivating)
+                    }
                 }
 
                 if let errorMessage {
@@ -97,6 +119,34 @@ struct LicenseView: View {
             do {
                 try await SubscriptionService.shared.activateSubscription(
                     email: email.trimmingCharacters(in: .whitespacesAndNewlines)
+                )
+                await MainActor.run {
+                    isActivating = false
+                    isLicenseActivated = true
+                }
+            } catch SubscriptionError.passwordRequired {
+                await MainActor.run {
+                    isActivating = false
+                    needsPassword = true
+                }
+            } catch {
+                await MainActor.run {
+                    isActivating = false
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func authenticateAdmin() {
+        isActivating = true
+        errorMessage = nil
+
+        Task {
+            do {
+                try await SubscriptionService.shared.activateAdminSubscription(
+                    email: email.trimmingCharacters(in: .whitespacesAndNewlines),
+                    password: password
                 )
                 await MainActor.run {
                     isActivating = false

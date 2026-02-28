@@ -84,6 +84,10 @@ class SubscriptionService: ObservableObject {
     func activateSubscription(email: String) async throws {
         let response = try await verifyWithServer(email: email)
 
+        if response.requiresPassword == true {
+            throw SubscriptionError.passwordRequired
+        }
+
         guard response.isActive else {
             throw SubscriptionError.noActiveSubscription
         }
@@ -95,6 +99,25 @@ class SubscriptionService: ObservableObject {
         cacheValidation(response: response)
 
         // Update published state
+        await MainActor.run {
+            isSubscribed = true
+            subscribedEmail = email
+            plan = response.plan ?? ""
+        }
+
+        startReVerifyTimer()
+    }
+
+    func activateAdminSubscription(email: String, password: String) async throws {
+        let response = try await verifyWithServer(email: email, password: password)
+
+        guard response.isActive else {
+            throw SubscriptionError.invalidPassword
+        }
+
+        KeychainService.shared.save(key: keychainKeyEmail, value: email)
+        cacheValidation(response: response)
+
         await MainActor.run {
             isSubscribed = true
             subscribedEmail = email
@@ -158,7 +181,7 @@ class SubscriptionService: ObservableObject {
 
     // MARK: - Private
 
-    private func verifyWithServer(email: String) async throws -> SubscriptionResponse {
+    private func verifyWithServer(email: String, password: String? = nil) async throws -> SubscriptionResponse {
         guard let url = URL(string: verifyURL) else {
             throw SubscriptionError.networkError("Invalid URL")
         }
@@ -168,13 +191,20 @@ class SubscriptionService: ObservableObject {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 15
 
-        let body = ["email": email]
+        var body: [String: String] = ["email": email]
+        if let password = password {
+            body["password"] = password
+        }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw SubscriptionError.invalidResponse
+        }
+
+        if httpResponse.statusCode == 401 {
+            throw SubscriptionError.invalidPassword
         }
 
         guard httpResponse.statusCode == 200 else {
@@ -230,12 +260,14 @@ struct SubscriptionResponse: Codable {
     let plan: String?
     let expiresAt: String?
     let status: String?
+    let requiresPassword: Bool?
 
     enum CodingKeys: String, CodingKey {
         case isActive = "is_active"
         case plan
         case expiresAt = "expires_at"
         case status
+        case requiresPassword = "requires_password"
     }
 }
 
@@ -245,6 +277,8 @@ enum SubscriptionError: Error, LocalizedError {
     case noActiveSubscription
     case networkError(String)
     case invalidResponse
+    case passwordRequired
+    case invalidPassword
 
     var errorDescription: String? {
         switch self {
@@ -254,6 +288,10 @@ enum SubscriptionError: Error, LocalizedError {
             return "Network error: \(message). Please check your connection."
         case .invalidResponse:
             return "Unexpected response from server."
+        case .passwordRequired:
+            return "Password required."
+        case .invalidPassword:
+            return "Invalid password."
         }
     }
 }
