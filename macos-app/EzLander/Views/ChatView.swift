@@ -129,14 +129,23 @@ struct ChatView: View {
             // Quick action buttons
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    QuickActionButton(icon: "calendar", label: "Today's Schedule") {
+                    QuickActionButton(icon: "calendar", label: "Today") {
                         viewModel.sendMessage("What's on my calendar today?")
+                    }
+                    QuickActionButton(icon: "calendar.badge.plus", label: "Tomorrow") {
+                        viewModel.sendMessage("What's on my calendar tomorrow?")
                     }
                     QuickActionButton(icon: "envelope", label: "Draft Email") {
                         viewModel.sendMessage("Help me draft an email")
                     }
-                    QuickActionButton(icon: "magnifyingglass", label: "Search Emails") {
+                    QuickActionButton(icon: "envelope.open", label: "Summarize Emails") {
+                        viewModel.sendMessage("Summarize my latest unread emails")
+                    }
+                    QuickActionButton(icon: "magnifyingglass", label: "Search") {
                         viewModel.sendMessage("Search my recent emails")
+                    }
+                    QuickActionButton(icon: "clock", label: "Next Meeting") {
+                        viewModel.sendMessage("When is my next meeting and help me prepare for it")
                     }
                 }
                 .padding(.horizontal)
@@ -157,6 +166,10 @@ struct ChatView: View {
                     )
                     .onSubmit {
                         sendMessage()
+                    }
+                    .onKeyPress(.return, modifiers: .command) {
+                        sendMessage()
+                        return .handled
                     }
 
                 VStack(spacing: 2) {
@@ -348,10 +361,33 @@ struct MessageBubble: View {
             .opacity(appeared ? 1.0 : 0)
             .animation(.easeInOut(duration: 0.2), value: appeared)
             .onAppear { appeared = true }
+            .contextMenu {
+                Button(action: { copyToClipboard(message.content) }) {
+                    Label("Copy", systemImage: "doc.on.doc")
+                }
+                if message.role == .assistant {
+                    Button(action: { regenerateMessage() }) {
+                        Label("Regenerate", systemImage: "arrow.clockwise")
+                    }
+                }
+            }
 
             if message.role == .assistant {
                 Spacer(minLength: 60)
             }
+        }
+    }
+
+    private func copyToClipboard(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
+
+    private func regenerateMessage() {
+        // Find the last user message before this assistant message and resend it
+        let viewModel = ChatViewModel.shared
+        if let lastUserMsg = viewModel.messages.last(where: { $0.role == .user }) {
+            viewModel.sendMessage(lastUserMsg.content)
         }
     }
 }
