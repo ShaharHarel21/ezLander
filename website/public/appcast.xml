@@ -6,6 +6,19 @@
         <description>Most recent updates to ezLander</description>
         <language>en</language>
         <item>
+            <title>Version 1.21.0</title>
+            <sparkle:version>31</sparkle:version>
+            <sparkle:shortVersionString>1.21.0</sparkle:shortVersionString>
+            <sparkle:releaseNotesLink>https://github.com/ShaharHarel21/ezLander/releases/tag/v1.21.0</sparkle:releaseNotesLink>
+            <pubDate>Sat, 01 Mar 2026 18:00:00 +0000</pubDate>
+            <enclosure
+                url="https://github.com/ShaharHarel21/ezLander/releases/download/v1.21.0/EzLander-v1.21.0.zip"
+                sparkle:edSignature="SIGNATURE_PLACEHOLDER"
+                length="0"
+                type="application/octet-stream"/>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+        </item>
+        <item>
             <title>Version 1.20.0</title>
             <sparkle:version>30</sparkle:version>
             <sparkle:shortVersionString>1.20.0</sparkle:shortVersionString>
