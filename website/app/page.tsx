@@ -19,7 +19,7 @@ const softwareJsonLd = {
     price: '9.99',
     priceCurrency: 'USD',
   },
-  softwareVersion: '1.12.2',
+  softwareVersion: '1.20.0',
   author: {
     '@type': 'Organization',
     name: 'ezLander',

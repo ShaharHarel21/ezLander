@@ -59,7 +59,7 @@ struct ChatView: View {
                     }
                     .padding()
                 }
-                .onChange(of: viewModel.messages.count) { _ in
+                .onChange(of: viewModel.messages.count) {
                     if let lastMessage = viewModel.messages.last {
                         withAnimation {
                             proxy.scrollTo(lastMessage.id, anchor: .bottom)
@@ -307,12 +307,31 @@ class ChatViewModel: ObservableObject {
 
     private let aiService = AIService.shared
 
+    // MARK: - Persistence
+    private static let messagesKey = "saved_chat_messages"
+
+    private func saveMessages() {
+        if let data = try? JSONEncoder().encode(messages) {
+            UserDefaults.standard.set(data, forKey: Self.messagesKey)
+        }
+    }
+
+    private func loadMessages() -> [ChatMessage]? {
+        guard let data = UserDefaults.standard.data(forKey: Self.messagesKey),
+              let saved = try? JSONDecoder().decode([ChatMessage].self, from: data),
+              !saved.isEmpty else { return nil }
+        return saved
+    }
+
+    private static let welcomeMessage = "Hi! I'm your AI assistant. I can help you manage your calendar, send emails, and more. What would you like to do?\n\nWhen I want to create events or send emails, I'll show you a preview first so you can confirm."
+
     init() {
-        // Welcome message
-        messages.append(ChatMessage(
-            role: .assistant,
-            content: "Hi! I'm your AI assistant. I can help you manage your calendar, send emails, and more. What would you like to do?\n\nWhen I want to create events or send emails, I'll show you a preview first so you can confirm."
-        ))
+        // Restore previous conversation or show welcome
+        if let saved = loadMessages() {
+            messages = saved
+        } else {
+            messages.append(ChatMessage(role: .assistant, content: Self.welcomeMessage))
+        }
     }
 
     /// Trim oldest messages when the array exceeds the cap to prevent unbounded memory growth.
@@ -321,6 +340,7 @@ class ChatViewModel: ObservableObject {
             let overflow = messages.count - Self.maxMessages
             messages.removeFirst(overflow)
         }
+        saveMessages()
     }
 
     func clearConversation() {
@@ -329,11 +349,9 @@ class ChatViewModel: ObservableObject {
         pendingActionMessageId = nil
         actionResult = nil
         actionResultMessageId = nil
+        UserDefaults.standard.removeObject(forKey: Self.messagesKey)
         // Re-add welcome message
-        messages.append(ChatMessage(
-            role: .assistant,
-            content: "Hi! I'm your AI assistant. I can help you manage your calendar, send emails, and more. What would you like to do?\n\nWhen I want to create events or send emails, I'll show you a preview first so you can confirm."
-        ))
+        messages.append(ChatMessage(role: .assistant, content: Self.welcomeMessage))
     }
 
     // MARK: - Daily Briefing

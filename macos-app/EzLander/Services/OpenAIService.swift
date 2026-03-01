@@ -44,14 +44,14 @@ class OpenAIService {
     // Available models
     enum Model: String, CaseIterable {
         case gpt4o = "gpt-4o"
-        case gpt4 = "gpt-4-turbo"
-        case gpt35 = "gpt-3.5-turbo"
+        case gpt4oMini = "gpt-4o-mini"
+        case o3Mini = "o3-mini"
 
         var displayName: String {
             switch self {
             case .gpt4o: return "GPT-4o"
-            case .gpt4: return "GPT-4 Turbo"
-            case .gpt35: return "GPT-3.5 Turbo"
+            case .gpt4oMini: return "GPT-4o Mini"
+            case .o3Mini: return "o3 Mini"
             }
         }
     }
@@ -78,7 +78,9 @@ class OpenAIService {
             ["role": "system", "content": SystemPromptProvider.buildSystemPrompt(calendarContext: calendarContext)]
         ]
 
-        for message in conversationHistory {
+        // Keep only last 20 messages to avoid exceeding context window
+        let recentHistory = Array(conversationHistory.suffix(20))
+        for message in recentHistory {
             messages.append([
                 "role": message.role.rawValue,
                 "content": message.content
