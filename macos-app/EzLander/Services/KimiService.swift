@@ -119,3 +119,75 @@ enum KimiError: Error, LocalizedError {
         }
     }
 }
+
+// MARK: - Streaming
+extension KimiService {
+    /// Stream a response using NVIDIA's OpenAI-compatible SSE endpoint.
+    func streamMessage(_ text: String, conversationHistory: [ChatMessage]) -> AsyncThrowingStream<String, Error> {
+        AsyncThrowingStream { continuation in
+            Task {
+                do {
+                    self.reloadAPIKey()
+
+                    guard !self.apiKey.isEmpty else {
+                        continuation.finish(throwing: KimiError.noAPIKey)
+                        return
+                    }
+
+                    let calendarContext = await CalendarContextService.shared.buildTodayContext()
+
+                    var messages: [[String: Any]] = [
+                        ["role": "system", "content": SystemPromptProvider.buildSystemPrompt(calendarContext: calendarContext)]
+                    ]
+                    let recentHistory = Array(conversationHistory.suffix(20))
+                    for message in recentHistory {
+                        messages.append(["role": message.role.rawValue, "content": message.content])
+                    }
+                    messages.append(["role": "user", "content": text])
+
+                    let requestBody: [String: Any] = [
+                        "model": self.model,
+                        "messages": messages,
+                        "temperature": 0.6,
+                        "max_tokens": 4096,
+                        "stream": true,
+                        "chat_template_kwargs": ["thinking": false]
+                    ]
+
+                    var request = URLRequest(url: URL(string: self.baseURL)!)
+                    request.httpMethod = "POST"
+                    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                    request.setValue("application/json", forHTTPHeaderField: "Accept")
+                    request.setValue("Bearer \(self.apiKey)", forHTTPHeaderField: "Authorization")
+                    request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+
+                    let (bytes, response) = try await URLSession.shared.bytes(for: request)
+
+                    guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+                        let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+                        continuation.finish(throwing: KimiError.apiError(statusCode: statusCode, message: "Stream request failed"))
+                        return
+                    }
+
+                    for try await line in bytes.lines {
+                        guard line.hasPrefix("data: ") else { continue }
+                        let jsonStr = String(line.dropFirst(6))
+                        if jsonStr == "[DONE]" { break }
+
+                        guard let data = jsonStr.data(using: .utf8),
+                              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                              let choices = json["choices"] as? [[String: Any]],
+                              let delta = choices.first?["delta"] as? [String: Any],
+                              let content = delta["content"] as? String else { continue }
+
+                        continuation.yield(content)
+                    }
+
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+        }
+    }
+}

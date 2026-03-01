@@ -3,13 +3,47 @@ import SwiftUI
 struct ChatView: View {
     @ObservedObject private var viewModel = ChatViewModel.shared
     @State private var inputText: String = ""
+    @State private var searchText: String = ""
+    @State private var isSearching: Bool = false
     @FocusState private var isInputFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
-            // Chat header with clear button
-            HStack {
-                Spacer()
+            // Chat header with search and clear button
+            HStack(spacing: 8) {
+                if isSearching {
+                    HStack(spacing: 4) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        TextField("Search messages...", text: $searchText)
+                            .textFieldStyle(.plain)
+                            .font(.caption)
+                        Button(action: {
+                            searchText = ""
+                            isSearching = false
+                        }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Color(NSColor.controlBackgroundColor)))
+                    .padding(.leading, 12)
+                } else {
+                    Spacer()
+                }
+
+                Button(action: { isSearching.toggle() }) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+
                 Button(action: { viewModel.clearConversation() }) {
                     HStack(spacing: 4) {
                         Image(systemName: "trash")
@@ -21,14 +55,14 @@ struct ChatView: View {
                 }
                 .buttonStyle(.plain)
                 .padding(.trailing, 12)
-                .padding(.top, 6)
             }
+            .padding(.top, 6)
 
             // Messages
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 12) {
-                        ForEach(viewModel.messages) { message in
+                        ForEach(filteredMessages) { message in
                             MessageBubble(message: message)
                                 .id(message.id)
 
@@ -123,6 +157,11 @@ struct ChatView: View {
                 viewModel.requestMeetingPrep(for: event)
             }
         }
+    }
+
+    private var filteredMessages: [ChatMessage] {
+        guard !searchText.isEmpty else { return viewModel.messages }
+        return viewModel.messages.filter { $0.content.localizedCaseInsensitiveContains(searchText) }
     }
 
     private func sendMessage() {
