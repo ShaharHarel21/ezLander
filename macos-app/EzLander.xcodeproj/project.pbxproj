@@ -43,6 +43,8 @@
 		1A000000000000000000006A /* EmailParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000069 /* EmailParser.swift */; };
 		1A000000000000000000006C /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A000000000000000000006B /* OnboardingView.swift */; };
 		1A000000000000000000006E /* ContactsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A000000000000000000006D /* ContactsService.swift */; };
+		1A0000000000000000000070 /* ConversationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A000000000000000000006F /* ConversationStore.swift */; };
+		1A0000000000000000000072 /* TokenEstimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000071 /* TokenEstimator.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -85,6 +87,8 @@
 		1A0000000000000000000069 /* EmailParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmailParser.swift; sourceTree = "<group>"; };
 		1A000000000000000000006B /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		1A000000000000000000006D /* ContactsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactsService.swift; sourceTree = "<group>"; };
+		1A000000000000000000006F /* ConversationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationStore.swift; sourceTree = "<group>"; };
+		1A0000000000000000000071 /* TokenEstimator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenEstimator.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -169,6 +173,8 @@
 				1A0000000000000000000067 /* EventParser.swift */,
 				1A0000000000000000000069 /* EmailParser.swift */,
 				1A000000000000000000006D /* ContactsService.swift */,
+				1A000000000000000000006F /* ConversationStore.swift */,
+				1A0000000000000000000071 /* TokenEstimator.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -295,6 +301,8 @@
 				1A000000000000000000006A /* EmailParser.swift in Sources */,
 				1A000000000000000000006C /* OnboardingView.swift in Sources */,
 				1A000000000000000000006E /* ContactsService.swift in Sources */,
+				1A0000000000000000000070 /* ConversationStore.swift in Sources */,
+				1A0000000000000000000072 /* TokenEstimator.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

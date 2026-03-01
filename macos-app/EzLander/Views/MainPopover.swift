@@ -134,9 +134,16 @@ struct MainPopover: View {
             }
         }) {
             VStack(spacing: 3) {
-                Image(systemName: icon)
-                    .font(.system(size: 18, weight: selectedTab == tab ? .semibold : .regular))
-                    .symbolEffect(.bounce, value: selectedTab == tab)
+                Group {
+                    if #available(macOS 14.0, *) {
+                        Image(systemName: icon)
+                            .font(.system(size: 18, weight: selectedTab == tab ? .semibold : .regular))
+                            .symbolEffect(.bounce, value: selectedTab == tab)
+                    } else {
+                        Image(systemName: icon)
+                            .font(.system(size: 18, weight: selectedTab == tab ? .semibold : .regular))
+                    }
+                }
                 Text(label)
                     .font(.system(size: 10, weight: .medium, design: .rounded))
             }

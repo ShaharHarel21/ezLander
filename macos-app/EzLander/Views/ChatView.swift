@@ -172,10 +172,6 @@ struct ChatView: View {
                     .onSubmit {
                         sendMessage()
                     }
-                    .onKeyPress(.return, modifiers: .command) {
-                        sendMessage()
-                        return .handled
-                    }
 
                 VStack(spacing: 2) {
                     Button(action: sendMessage) {
@@ -216,41 +212,7 @@ struct ChatView: View {
                 ScrollView {
                     LazyVStack(spacing: 2) {
                         ForEach(store.conversations) { conv in
-                            Button(action: {
-                                store.activeConversationId = conv.id
-                                viewModel.loadConversation(conv)
-                                showConversationList = false
-                            }) {
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(conv.title)
-                                            .font(.caption)
-                                            .fontWeight(conv.id == store.activeConversationId ? .semibold : .regular)
-                                            .lineLimit(1)
-                                        Text(relativeDate(conv.updatedAt))
-                                            .font(.caption2)
-                                            .foregroundColor(.secondary)
-                                    }
-                                    Spacer()
-                                    if conv.id == store.activeConversationId {
-                                        Circle()
-                                            .fill(Color.warmPrimary)
-                                            .frame(width: 6, height: 6)
-                                    }
-                                }
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .fill(conv.id == store.activeConversationId ? Color.warmPrimary.opacity(0.1) : Color.clear)
-                                )
-                            }
-                            .buttonStyle(.plain)
-                            .contextMenu {
-                                Button("Delete", role: .destructive) {
-                                    store.deleteConversation(conv.id)
-                                }
-                            }
+                            conversationRow(conv)
                         }
                     }
                     .padding(8)
@@ -261,6 +223,45 @@ struct ChatView: View {
             .cornerRadius(8)
             .shadow(radius: 4)
             .padding(.horizontal, 12)
+        }
+    }
+
+    private func conversationRow(_ conv: Conversation) -> some View {
+        let isActive = conv.id == store.activeConversationId
+        return Button(action: {
+            store.activeConversationId = conv.id
+            viewModel.loadConversation(conv)
+            showConversationList = false
+        }) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(conv.title)
+                        .font(.caption)
+                        .fontWeight(isActive ? .semibold : .regular)
+                        .lineLimit(1)
+                    Text(relativeDate(conv.updatedAt))
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+                if isActive {
+                    Circle()
+                        .fill(Color.warmPrimary)
+                        .frame(width: 6, height: 6)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isActive ? Color.warmPrimary.opacity(0.1) : Color.clear)
+            )
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button("Delete", role: .destructive) {
+                store.deleteConversation(conv.id)
+            }
         }
     }
 
@@ -279,7 +280,7 @@ struct ChatView: View {
         panel.allowedContentTypes = [.plainText]
         panel.begin { response in
             if response == .OK, let url = panel.url {
-                try? text.write(to: url, atomically: true, encoding: .utf8)
+                try? text.write(to: url, atomically: true, encoding: String.Encoding.utf8)
             }
         }
     }
