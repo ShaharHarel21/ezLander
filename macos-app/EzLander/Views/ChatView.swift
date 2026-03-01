@@ -137,13 +137,21 @@ struct ChatView: View {
                         sendMessage()
                     }
 
-                Button(action: sendMessage) {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.title2)
-                        .foregroundColor(inputText.isEmpty ? .secondary : .warmPrimary)
+                VStack(spacing: 2) {
+                    Button(action: sendMessage) {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.title2)
+                            .foregroundColor(inputText.isEmpty ? .secondary : .warmPrimary)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(inputText.isEmpty || viewModel.isLoading)
+
+                    if viewModel.sessionInputTokens + viewModel.sessionOutputTokens > 0 {
+                        Text(TokenEstimator.format(viewModel.sessionInputTokens + viewModel.sessionOutputTokens))
+                            .font(.system(size: 8))
+                            .foregroundColor(.secondary)
+                    }
                 }
-                .buttonStyle(.plain)
-                .disabled(inputText.isEmpty || viewModel.isLoading)
             }
             .padding()
             .background(Color(NSColor.controlBackgroundColor))
@@ -255,22 +263,68 @@ struct FormattedTextView: View {
     let text: String
 
     var body: some View {
-        // Use SwiftUI's built-in markdown support for simple cases
-        // This is much faster than custom regex parsing
-        Text(LocalizedStringKey(convertToMarkdown(text)))
-            .textSelection(.enabled)
+        if containsCodeBlock(text) {
+            // Render with code block handling
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(Array(splitByCodeBlocks(text).enumerated()), id: \.offset) { _, segment in
+                    if segment.isCode {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            Text(segment.content)
+                                .font(.system(.caption, design: .monospaced))
+                                .textSelection(.enabled)
+                                .padding(8)
+                        }
+                        .background(RoundedRectangle(cornerRadius: 6).fill(Color(NSColor.textBackgroundColor)))
+                    } else {
+                        Text(LocalizedStringKey(convertToMarkdown(segment.content)))
+                            .textSelection(.enabled)
+                    }
+                }
+            }
+        } else {
+            Text(LocalizedStringKey(convertToMarkdown(text)))
+                .textSelection(.enabled)
+        }
     }
 
-    // Convert common patterns to SwiftUI-compatible markdown
+    private func containsCodeBlock(_ input: String) -> Bool {
+        input.contains("```")
+    }
+
+    private struct TextSegment {
+        let content: String
+        let isCode: Bool
+    }
+
+    private func splitByCodeBlocks(_ input: String) -> [TextSegment] {
+        var segments: [TextSegment] = []
+        let parts = input.components(separatedBy: "```")
+
+        for (index, part) in parts.enumerated() {
+            let trimmed = part.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+
+            if index % 2 == 1 {
+                // Code block — strip optional language identifier on first line
+                var code = part
+                if let firstNewline = code.firstIndex(of: "\n") {
+                    let firstLine = String(code[code.startIndex..<firstNewline]).trimmingCharacters(in: .whitespaces)
+                    if firstLine.allSatisfy({ $0.isLetter || $0 == "+" || $0 == "#" }) && firstLine.count < 20 {
+                        code = String(code[code.index(after: firstNewline)...])
+                    }
+                }
+                segments.append(TextSegment(content: code.trimmingCharacters(in: .whitespacesAndNewlines), isCode: true))
+            } else {
+                segments.append(TextSegment(content: trimmed, isCode: false))
+            }
+        }
+        return segments
+    }
+
     private func convertToMarkdown(_ input: String) -> String {
         var result = input
-
-        // Convert ==highlight== to **highlight** (bold as fallback)
         result = result.replacingOccurrences(of: "==([^=]+)==", with: "**$1**", options: .regularExpression)
-
-        // Convert ++underline++ to _underline_ (italic as fallback)
         result = result.replacingOccurrences(of: "\\+\\+([^+]+)\\+\\+", with: "_$1_", options: .regularExpression)
-
         return result
     }
 }
@@ -345,6 +399,8 @@ class ChatViewModel: ObservableObject {
     @Published var actionResultMessageId: UUID?
 
     private let aiService = AIService.shared
+    @Published var sessionInputTokens: Int = 0
+    @Published var sessionOutputTokens: Int = 0
 
     // MARK: - Persistence
     private static let messagesKey = "saved_chat_messages"
@@ -434,6 +490,7 @@ class ChatViewModel: ObservableObject {
 
         isLoading = true
         actionResult = nil
+        sessionInputTokens += TokenEstimator.estimate(text)
 
         Task {
             // Try streaming first (OpenAI and Claude support it)
@@ -479,6 +536,9 @@ class ChatViewModel: ObservableObject {
             await MainActor.run {
                 isLoading = false
 
+                // Track estimated tokens
+                sessionOutputTokens += TokenEstimator.estimate(fullText)
+
                 // Check if the completed response contains an action
                 if let action = parseActionFromResponse(fullText, userMessage: userMessage) {
                     // Replace the streamed message with the action prompt
@@ -511,6 +571,9 @@ class ChatViewModel: ObservableObject {
 
             await MainActor.run {
                 isLoading = false
+
+                // Track estimated tokens
+                sessionOutputTokens += TokenEstimator.estimate(response.content)
 
                 if response.toolCall != nil {
                     messages.append(response)
