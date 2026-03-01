@@ -48,6 +48,11 @@ export const metadata: Metadata = {
     description: 'Manage your calendar and email with natural language from your Mac menu bar.',
     images: ['/og-image.png'],
   },
+  icons: {
+    icon: '/favicon.ico',
+    apple: '/apple-touch-icon.png',
+    shortcut: '/favicon.png',
+  },
 }
 
 export default function RootLayout({
