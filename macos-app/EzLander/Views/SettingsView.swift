@@ -829,7 +829,7 @@ class SettingsViewModel: ObservableObject {
     @Published var selectedMenuBarIcon: MenuBarIconOption = .ezLander {
         didSet {
             UserDefaults.standard.set(selectedMenuBarIcon.rawValue, forKey: "menu_bar_icon")
-            NotificationCenter.default.post(name: Notification.Name("MenuBarIconChanged"), object: nil)
+            NotificationCenter.default.post(name: MenuBarController.menuBarIconChangedNotification, object: nil)
         }
     }
     @Published var swipeRightAction: EmailSwipeAction = .archive {

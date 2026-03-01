@@ -25,14 +25,7 @@ enum MenuBarIconOption: String, CaseIterable, Identifiable {
 
     /// SF Symbol name used for the settings picker preview
     var displayIcon: String {
-        switch self {
-        case .ezLander: return "star.circle"
-        case .starFill: return "star.fill"
-        case .sparkle: return "sparkle"
-        case .boltFill: return "bolt.fill"
-        case .wandAndStars: return "wand.and.stars"
-        case .paperplaneFill: return "paperplane.fill"
-        }
+        self == .ezLander ? "star.circle" : rawValue
     }
 }
 
@@ -46,6 +39,7 @@ class MenuBarController: NSObject {
 
     // Notification for tab switching
     static let switchTabNotification = Notification.Name("SwitchTabNotification")
+    static let menuBarIconChangedNotification = Notification.Name("MenuBarIconChanged")
 
     override init() {
         super.init()
@@ -74,7 +68,7 @@ class MenuBarController: NSObject {
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(menuBarIconChanged),
-            name: Notification.Name("MenuBarIconChanged"),
+            name: Self.menuBarIconChangedNotification,
             object: nil
         )
     }
