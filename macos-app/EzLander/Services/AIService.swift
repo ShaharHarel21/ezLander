@@ -149,8 +149,10 @@ class AIService: ObservableObject {
             return OpenAIService.shared.streamMessage(text, conversationHistory: conversationHistory)
         case .claude:
             return ClaudeService.shared.streamMessage(text, conversationHistory: conversationHistory)
-        case .gemini, .kimi:
-            return nil  // These providers fall back to non-streaming
+        case .gemini:
+            return GeminiService.shared.streamMessage(text, conversationHistory: conversationHistory)
+        case .kimi:
+            return KimiService.shared.streamMessage(text, conversationHistory: conversationHistory)
         }
     }
 
