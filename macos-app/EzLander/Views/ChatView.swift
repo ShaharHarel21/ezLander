@@ -5,6 +5,8 @@ struct ChatView: View {
     @State private var inputText: String = ""
     @State private var searchText: String = ""
     @State private var isSearching: Bool = false
+    @State private var showConversationList: Bool = false
+    @ObservedObject private var store = ConversationStore.shared
     @FocusState private var isInputFocused: Bool
 
     var body: some View {
@@ -37,6 +39,13 @@ struct ChatView: View {
                     Spacer()
                 }
 
+                Button(action: { showConversationList.toggle() }) {
+                    Image(systemName: "list.bullet")
+                        .font(.caption)
+                        .foregroundColor(showConversationList ? .warmPrimary : .secondary)
+                }
+                .buttonStyle(.plain)
+
                 Button(action: { isSearching.toggle() }) {
                     Image(systemName: "magnifyingglass")
                         .font(.caption)
@@ -44,7 +53,18 @@ struct ChatView: View {
                 }
                 .buttonStyle(.plain)
 
-                Button(action: { viewModel.clearConversation() }) {
+                Button(action: { exportCurrentChat() }) {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+
+                Button(action: {
+                    viewModel.clearConversation()
+                    let conv = store.createConversation(provider: AIService.shared.currentProvider.rawValue)
+                    store.activeConversationId = conv.id
+                }) {
                     HStack(spacing: 4) {
                         Image(systemName: "trash")
                             .font(.caption)
@@ -102,6 +122,8 @@ struct ChatView: View {
                 }
             }
 
+            conversationListOverlay
+
             Divider()
 
             // Quick action buttons
@@ -155,6 +177,82 @@ struct ChatView: View {
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("MeetingPrepRequested"))) { notification in
             if let event = notification.object as? CalendarEvent {
                 viewModel.requestMeetingPrep(for: event)
+            }
+        }
+    }
+
+    // MARK: - Conversation List
+    @ViewBuilder
+    private var conversationListOverlay: some View {
+        if showConversationList {
+            VStack(spacing: 0) {
+                ScrollView {
+                    LazyVStack(spacing: 2) {
+                        ForEach(store.conversations) { conv in
+                            Button(action: {
+                                store.activeConversationId = conv.id
+                                viewModel.loadConversation(conv)
+                                showConversationList = false
+                            }) {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(conv.title)
+                                            .font(.caption)
+                                            .fontWeight(conv.id == store.activeConversationId ? .semibold : .regular)
+                                            .lineLimit(1)
+                                        Text(relativeDate(conv.updatedAt))
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    Spacer()
+                                    if conv.id == store.activeConversationId {
+                                        Circle()
+                                            .fill(Color.warmPrimary)
+                                            .frame(width: 6, height: 6)
+                                    }
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .fill(conv.id == store.activeConversationId ? Color.warmPrimary.opacity(0.1) : Color.clear)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                Button("Delete", role: .destructive) {
+                                    store.deleteConversation(conv.id)
+                                }
+                            }
+                        }
+                    }
+                    .padding(8)
+                }
+            }
+            .frame(maxHeight: 200)
+            .background(Color(NSColor.windowBackgroundColor))
+            .cornerRadius(8)
+            .shadow(radius: 4)
+            .padding(.horizontal, 12)
+        }
+    }
+
+    private func relativeDate(_ date: Date) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(for: date, relativeTo: Date())
+    }
+
+    private func exportCurrentChat() {
+        guard let conv = store.activeConversation else { return }
+        let text = store.exportAsText(conv)
+
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "\(conv.title).txt"
+        panel.allowedContentTypes = [.plainText]
+        panel.begin { response in
+            if response == .OK, let url = panel.url {
+                try? text.write(to: url, atomically: true, encoding: .utf8)
             }
         }
     }
@@ -373,6 +471,18 @@ class ChatViewModel: ObservableObject {
         }
     }
 
+    /// Load a saved conversation into the chat.
+    func loadConversation(_ conversation: Conversation) {
+        messages = conversation.messages
+        pendingAction = nil
+        pendingActionMessageId = nil
+        actionResult = nil
+        actionResultMessageId = nil
+        if messages.isEmpty {
+            messages.append(ChatMessage(role: .assistant, content: Self.welcomeMessage))
+        }
+    }
+
     /// Trim oldest messages when the array exceeds the cap to prevent unbounded memory growth.
     private func trimMessagesIfNeeded() {
         if messages.count > Self.maxMessages {
@@ -380,6 +490,10 @@ class ChatViewModel: ObservableObject {
             messages.removeFirst(overflow)
         }
         saveMessages()
+        // Also sync to ConversationStore
+        if let activeId = ConversationStore.shared.activeConversationId {
+            ConversationStore.shared.updateMessages(messages, for: activeId)
+        }
     }
 
     func clearConversation() {
