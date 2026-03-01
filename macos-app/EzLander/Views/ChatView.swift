@@ -125,13 +125,18 @@ struct ChatView: View {
             HStack(spacing: 8) {
                 TextField("Ask me anything...", text: $inputText, axis: .vertical)
                     .textFieldStyle(.plain)
+                    .font(.system(.body, design: .rounded))
                     .lineLimit(1...4)
                     .focused($isInputFocused)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
                     .background(
-                        RoundedRectangle(cornerRadius: 14)
-                            .fill(Color(NSColor.controlBackgroundColor))
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(.ultraThinMaterial)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+                            )
                     )
                     .onSubmit {
                         sendMessage()
@@ -145,8 +150,9 @@ struct ChatView: View {
                 .buttonStyle(.plain)
                 .disabled(inputText.isEmpty || viewModel.isLoading)
             }
-            .padding()
-            .background(Color(NSColor.controlBackgroundColor))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(.ultraThinMaterial)
         }
         .onAppear {
             isInputFocused = true
@@ -180,17 +186,22 @@ struct QuickActionButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 4) {
+            HStack(spacing: 5) {
                 Image(systemName: icon)
-                    .font(.caption)
+                    .font(.system(size: 11, weight: .medium))
                 Text(label)
-                    .font(.caption)
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
                     .lineLimit(1)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
             .background(
-                Capsule().fill(Color.warmPrimary.opacity(0.1))
+                Capsule()
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        Capsule()
+                            .strokeBorder(Color.warmPrimary.opacity(0.2), lineWidth: 0.5)
+                    )
             )
             .foregroundColor(.warmPrimary)
         }
@@ -212,27 +223,33 @@ struct MessageBubble: View {
             VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 4) {
                 if message.role == .assistant {
                     FormattedTextView(text: message.content)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
                         .background(
-                            RoundedRectangle(cornerRadius: 18)
-                                .fill(Color(NSColor.controlBackgroundColor))
+                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                .fill(.ultraThinMaterial)
                         )
-                        .clipShape(RoundedRectangle(cornerRadius: 18))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                .strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5)
+                        )
                 } else {
                     Text(message.content)
                         .textSelection(.enabled)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
                         .background(
-                            LinearGradient(
-                                colors: [Color.warmPrimary, Color.warmAccent],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
+                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [Color.warmPrimary, Color.warmAccent],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .shadow(color: Color.warmPrimary.opacity(0.25), radius: 8, y: 3)
                         )
                         .foregroundColor(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 18))
                 }
 
                 if let toolCall = message.toolCall {
@@ -303,8 +320,8 @@ struct TypingIndicator: View {
         HStack(spacing: 4) {
             ForEach(0..<3, id: \.self) { index in
                 Circle()
-                    .fill(Color.warmAccent)
-                    .frame(width: 8, height: 8)
+                    .fill(Color.warmPrimary.opacity(0.6))
+                    .frame(width: 7, height: 7)
                     .offset(y: animating ? -5 : 0)
                     .animation(
                         Animation.easeInOut(duration: 0.5)
@@ -317,10 +334,9 @@ struct TypingIndicator: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(
-            RoundedRectangle(cornerRadius: 18)
-                .fill(Color(NSColor.controlBackgroundColor))
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(.ultraThinMaterial)
         )
-        .clipShape(RoundedRectangle(cornerRadius: 18))
         .onAppear {
             if !reduceMotion {
                 animating = true
