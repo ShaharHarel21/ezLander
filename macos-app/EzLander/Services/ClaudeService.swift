@@ -568,3 +568,84 @@ enum ClaudeError: Error, LocalizedError {
         }
     }
 }
+// MARK: - Streaming
+extension ClaudeService {
+    /// Stream a response, yielding text chunks as they arrive.
+    /// Falls back to non-streaming for tool-use responses (returns full text at once).
+    func streamMessage(_ text: String, conversationHistory: [ChatMessage]) -> AsyncThrowingStream<String, Error> {
+        AsyncThrowingStream { continuation in
+            Task {
+                do {
+                    let calendarContext = await CalendarContextService.shared.buildTodayContext()
+
+                    let recentHistory = Array(conversationHistory.suffix(20))
+                    var messages: [[String: Any]] = recentHistory.map { message in
+                        ["role": message.role.rawValue, "content": message.content]
+                    }
+                    messages.append(["role": "user", "content": text])
+
+                    let requestBody: [String: Any] = [
+                        "model": self.model,
+                        "max_tokens": 4096,
+                        "system": self.buildSystemPrompt(calendarContext: calendarContext),
+                        "tools": self.tools,
+                        "messages": messages,
+                        "stream": true
+                    ]
+
+                    var request = URLRequest(url: URL(string: self.baseURL)!)
+                    request.httpMethod = "POST"
+                    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                    request.setValue(self.apiKey, forHTTPHeaderField: "x-api-key")
+                    request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+                    request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+
+                    let (bytes, response) = try await URLSession.shared.bytes(for: request)
+
+                    guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+                        let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+                        continuation.finish(throwing: ClaudeError.apiError(statusCode: statusCode, message: "Stream request failed"))
+                        return
+                    }
+
+                    var hasToolUse = false
+
+                    for try await line in bytes.lines {
+                        guard line.hasPrefix("data: ") else { continue }
+                        let jsonStr = String(line.dropFirst(6))
+
+                        guard let data = jsonStr.data(using: .utf8),
+                              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
+
+                        let eventType = json["type"] as? String ?? ""
+
+                        // Detect tool use — fall back to non-streaming path
+                        if eventType == "content_block_start",
+                           let contentBlock = json["content_block"] as? [String: Any],
+                           contentBlock["type"] as? String == "tool_use" {
+                            hasToolUse = true
+                            break
+                        }
+
+                        if eventType == "content_block_delta",
+                           let delta = json["delta"] as? [String: Any],
+                           delta["type"] as? String == "text_delta",
+                           let text = delta["text"] as? String {
+                            continuation.yield(text)
+                        }
+                    }
+
+                    if hasToolUse {
+                        // Tool use detected — fall back to non-streaming to handle tool execution
+                        // Yield a marker so the caller knows to retry non-streaming
+                        continuation.yield("\n[TOOL_USE_DETECTED]")
+                    }
+
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+        }
+    }
+}
