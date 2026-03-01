@@ -68,8 +68,8 @@ html {
 
 /* Gradient text */
 .gradient-text {
-  color: #0c8ce6; /* Fallback for unsupported browsers */
-  background: linear-gradient(135deg, #0c8ce6 0%, #d946ef 100%);
+  color: #615AF5; /* Fallback for unsupported browsers */
+  background: linear-gradient(135deg, #615AF5 0%, #A673FF 50%, #c084fc 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;

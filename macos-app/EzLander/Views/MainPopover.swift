@@ -26,8 +26,8 @@ struct MainPopover: View {
             // Tab bar
             tabBar
         }
-        .frame(width: 400, height: 500)
-        .background(Color(NSColor.windowBackgroundColor))
+        .frame(width: 420, height: 520)
+        .background(Color.surfacePrimary)
         .preferredColorScheme(themeManager.resolvedColorScheme)
         .onReceive(NotificationCenter.default.publisher(for: MenuBarController.switchTabNotification)) { notification in
             if let tabName = notification.object as? String,
@@ -38,55 +38,64 @@ struct MainPopover: View {
     }
 
     private var headerView: some View {
-        HStack {
+        HStack(spacing: 12) {
             Image(nsImage: NSApp.applicationIconImage)
                 .resizable()
                 .aspectRatio(contentMode: .fit)
-                .frame(width: 28, height: 28)
-                .cornerRadius(6)
+                .frame(width: 30, height: 30)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .shadow(color: .black.opacity(0.08), radius: 2, y: 1)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text("ezLander")
-                    .font(.headline)
+                    .font(.system(.headline, design: .rounded))
                 if !viewModel.userName.isEmpty {
-                    Text("Hi, \(viewModel.userName)!")
-                        .font(.caption)
+                    Text("Hi, \(viewModel.userName)")
+                        .font(.system(.caption, design: .rounded))
                         .foregroundColor(.secondary)
                         .lineLimit(1)
-                        .truncationMode(.tail)
                 }
             }
 
             Spacer()
 
+            // Provider pill
             Text(aiService.currentProvider.displayName)
-                .font(.system(size: 11))
-                .foregroundColor(.secondary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .padding(.trailing, 6)
+                .font(.system(size: 10, weight: .medium, design: .rounded))
+                .foregroundColor(.warmPrimary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(
+                    Capsule()
+                        .fill(Color.warmPrimary.opacity(0.1))
+                )
 
             if viewModel.isSubscribed {
-                Label("Pro", systemImage: "crown.fill")
-                    .font(.caption)
+                Text("PRO")
+                    .font(.system(size: 9, weight: .bold, design: .rounded))
                     .foregroundColor(.proBadge)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
                     .background(
-                        Color.proBadge.opacity(0.15)
-                            .cornerRadius(8)
+                        Capsule()
+                            .fill(Color.proBadge.opacity(0.15))
                     )
             }
 
             Button(action: { selectedTab = .settings }) {
                 Image(systemName: "gearshape.fill")
-                    .font(.system(size: 14))
+                    .font(.system(size: 13))
                     .foregroundColor(selectedTab == .settings ? .warmPrimary : .secondary)
+                    .frame(width: 28, height: 28)
+                    .background(
+                        Circle()
+                            .fill(selectedTab == .settings ? Color.warmPrimary.opacity(0.1) : Color.clear)
+                    )
             }
             .buttonStyle(.plain)
-            .contentShape(Circle())
         }
-        .padding()
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
     }
 
     @ViewBuilder
@@ -108,32 +117,38 @@ struct MainPopover: View {
     }
 
     private var tabBar: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: 4) {
             tabButton(tab: .chat, icon: "bubble.left.and.bubble.right.fill", label: "Chat")
             tabButton(tab: .calendar, icon: "calendar", label: "Calendar")
             tabButton(tab: .email, icon: "envelope.fill", label: "Email")
         }
+        .padding(.horizontal, 12)
         .padding(.vertical, 8)
+        .background(.ultraThinMaterial)
     }
 
     private func tabButton(tab: Tab, icon: String, label: String) -> some View {
-        Button(action: { selectedTab = tab }) {
-            VStack(spacing: 4) {
+        Button(action: {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                selectedTab = tab
+            }
+        }) {
+            VStack(spacing: 3) {
                 Image(systemName: icon)
-                    .font(.system(size: 20))
+                    .font(.system(size: 18, weight: selectedTab == tab ? .semibold : .regular))
+                    .symbolEffect(.bounce, value: selectedTab == tab)
                 Text(label)
-                    .font(.caption2)
+                    .font(.system(size: 10, weight: .medium, design: .rounded))
             }
             .frame(maxWidth: .infinity)
             .foregroundColor(selectedTab == tab ? .warmPrimary : .secondary)
-            .padding(.vertical, 6)
+            .padding(.vertical, 8)
             .background {
                 if selectedTab == tab {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.warmPrimary.opacity(0.12))
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.warmPrimary.opacity(0.1))
                 }
             }
-            .padding(.horizontal, 8)
         }
         .buttonStyle(.plain)
     }
