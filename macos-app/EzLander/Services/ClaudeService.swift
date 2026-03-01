@@ -128,7 +128,9 @@ class ClaudeService {
         let calendarContext = await CalendarContextService.shared.buildTodayContext()
 
         // Build messages array
-        var messages: [[String: Any]] = conversationHistory.map { message in
+        // Keep only last 20 messages to avoid exceeding context window
+        let recentHistory = Array(conversationHistory.suffix(20))
+        var messages: [[String: Any]] = recentHistory.map { message in
             ["role": message.role.rawValue, "content": message.content]
         }
         messages.append(["role": "user", "content": text])

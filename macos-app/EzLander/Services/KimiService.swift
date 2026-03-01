@@ -47,7 +47,8 @@ class KimiService {
             ["role": "system", "content": SystemPromptProvider.buildSystemPrompt(calendarContext: calendarContext)]
         ]
 
-        for message in conversationHistory {
+        let recentHistory = Array(conversationHistory.suffix(20))
+        for message in recentHistory {
             messages.append([
                 "role": message.role.rawValue,
                 "content": message.content

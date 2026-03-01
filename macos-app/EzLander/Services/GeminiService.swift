@@ -65,7 +65,8 @@ class GeminiService {
         ])
 
         // Add conversation history
-        for message in conversationHistory {
+        let recentHistory = Array(conversationHistory.suffix(20))
+        for message in recentHistory {
             let role = message.role == .user ? "user" : "model"
             contents.append([
                 "role": role,
