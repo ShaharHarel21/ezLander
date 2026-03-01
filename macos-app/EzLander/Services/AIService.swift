@@ -140,6 +140,20 @@ class AIService: ObservableObject {
         }
     }
 
+    // MARK: - Stream Message
+    /// Returns an AsyncThrowingStream of text chunks for streaming-capable providers.
+    /// Falls back to nil for providers that don't support streaming (Gemini, Kimi).
+    func streamMessage(_ text: String, conversationHistory: [ChatMessage]) -> AsyncThrowingStream<String, Error>? {
+        switch currentProvider {
+        case .openai:
+            return OpenAIService.shared.streamMessage(text, conversationHistory: conversationHistory)
+        case .claude:
+            return ClaudeService.shared.streamMessage(text, conversationHistory: conversationHistory)
+        case .gemini, .kimi:
+            return nil  // These providers fall back to non-streaming
+        }
+    }
+
     // MARK: - Summarize Email
     func summarizeEmail(subject: String, body: String) async throws -> String {
         let prompt = "Summarize this email concisely in 2-3 sentences. Only return the summary, nothing else.\n\nSubject: \(subject)\n\n\(body)"

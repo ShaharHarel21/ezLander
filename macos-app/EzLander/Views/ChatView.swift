@@ -397,37 +397,105 @@ class ChatViewModel: ObservableObject {
         actionResult = nil
 
         Task {
-            do {
-                let response = try await aiService.sendMessage(text, conversationHistory: messages)
+            // Try streaming first (OpenAI and Claude support it)
+            if let stream = aiService.streamMessage(text, conversationHistory: messages) {
+                await handleStreamingResponse(stream: stream, userMessage: text)
+            } else {
+                await handleNonStreamingResponse(text: text)
+            }
+        }
+    }
 
-                await MainActor.run {
-                    isLoading = false
+    /// Handle streaming responses — append a placeholder message and update it incrementally.
+    private func handleStreamingResponse(stream: AsyncThrowingStream<String, Error>, userMessage: String) async {
+        // Create a placeholder assistant message
+        let placeholderId = UUID()
+        await MainActor.run {
+            messages.append(ChatMessage(id: placeholderId, role: .assistant, content: ""))
+            isLoading = false  // Hide typing indicator once streaming begins
+        }
 
-                    // If the AI already executed a tool call (e.g. Claude), don't parse for actions again
-                    if response.toolCall != nil {
-                        messages.append(response)
-                    } else if let action = parseActionFromResponse(response.content, userMessage: text) {
-                        pendingAction = action
-                        let actionMsg = ChatMessage(
-                            role: .assistant,
-                            content: "I've prepared the following action for you. Please review and confirm:"
-                        )
-                        pendingActionMessageId = actionMsg.id
-                        messages.append(actionMsg)
-                    } else {
-                        messages.append(response)
+        var fullText = ""
+        do {
+            for try await chunk in stream {
+                fullText += chunk
+
+                // Check if Claude detected a tool use — fall back to non-streaming
+                if fullText.contains("[TOOL_USE_DETECTED]") {
+                    // Remove placeholder and retry non-streaming
+                    await MainActor.run {
+                        messages.removeAll { $0.id == placeholderId }
                     }
-                    trimMessagesIfNeeded()
+                    await handleNonStreamingResponse(text: userMessage)
+                    return
                 }
-            } catch {
+
                 await MainActor.run {
-                    isLoading = false
-                    messages.append(ChatMessage(
-                        role: .assistant,
-                        content: "Sorry, I encountered an error: \(error.localizedDescription)"
-                    ))
-                    trimMessagesIfNeeded()
+                    if let index = messages.firstIndex(where: { $0.id == placeholderId }) {
+                        messages[index] = ChatMessage(id: placeholderId, role: .assistant, content: fullText)
+                    }
                 }
+            }
+
+            await MainActor.run {
+                isLoading = false
+
+                // Check if the completed response contains an action
+                if let action = parseActionFromResponse(fullText, userMessage: userMessage) {
+                    // Replace the streamed message with the action prompt
+                    messages.removeAll { $0.id == placeholderId }
+                    pendingAction = action
+                    let actionMsg = ChatMessage(
+                        role: .assistant,
+                        content: "I've prepared the following action for you. Please review and confirm:"
+                    )
+                    pendingActionMessageId = actionMsg.id
+                    messages.append(actionMsg)
+                }
+                trimMessagesIfNeeded()
+            }
+        } catch {
+            await MainActor.run {
+                isLoading = false
+                if let index = messages.firstIndex(where: { $0.id == placeholderId }) {
+                    messages[index] = ChatMessage(id: placeholderId, role: .assistant, content: "Sorry, I encountered an error: \(error.localizedDescription)")
+                }
+                trimMessagesIfNeeded()
+            }
+        }
+    }
+
+    /// Handle non-streaming responses (Gemini, Kimi, or Claude tool-use fallback).
+    private func handleNonStreamingResponse(text: String) async {
+        do {
+            let response = try await aiService.sendMessage(text, conversationHistory: messages)
+
+            await MainActor.run {
+                isLoading = false
+
+                if response.toolCall != nil {
+                    messages.append(response)
+                } else if let action = parseActionFromResponse(response.content, userMessage: text) {
+                    pendingAction = action
+                    let actionMsg = ChatMessage(
+                        role: .assistant,
+                        content: "I've prepared the following action for you. Please review and confirm:"
+                    )
+                    pendingActionMessageId = actionMsg.id
+                    messages.append(actionMsg)
+                } else {
+                    messages.append(response)
+                }
+                trimMessagesIfNeeded()
+            }
+        } catch {
+            await MainActor.run {
+                isLoading = false
+                messages.append(ChatMessage(
+                    role: .assistant,
+                    content: "Sorry, I encountered an error: \(error.localizedDescription)"
+                ))
+                trimMessagesIfNeeded()
             }
         }
     }
