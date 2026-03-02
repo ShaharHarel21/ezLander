@@ -17,6 +17,11 @@ struct CalendarView: View {
             // View mode toggle
             viewModeToggle
 
+            // Up Next — shows next 3 upcoming events with relative time
+            if viewModel.viewMode == .month {
+                upNextSection
+            }
+
             // Calendar content with animated transitions
             Group {
                 switch viewModel.viewMode {
@@ -102,75 +107,113 @@ struct CalendarView: View {
 
     // MARK: - Calendar Header
     private var calendarHeader: some View {
-        HStack {
-            Button(action: { viewModel.previousPeriod() }) {
-                Image(systemName: "chevron.left")
-            }
-            .buttonStyle(.borderless)
+        HStack(spacing: 12) {
+            // Navigation arrows
+            HStack(spacing: 2) {
+                Button(action: { viewModel.previousPeriod() }) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 12, weight: .semibold))
+                        .frame(width: 28, height: 28)
+                        .background(Circle().fill(.ultraThinMaterial))
+                }
+                .buttonStyle(.plain)
 
-            Spacer()
+                Button(action: { viewModel.nextPeriod() }) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .frame(width: 28, height: 28)
+                        .background(Circle().fill(.ultraThinMaterial))
+                }
+                .buttonStyle(.plain)
+            }
 
             Text(viewModel.headerTitle)
-                .font(.headline)
+                .font(.system(.headline, design: .rounded))
 
             Spacer()
 
-            Button(action: { viewModel.nextPeriod() }) {
-                Image(systemName: "chevron.right")
-            }
-            .buttonStyle(.borderless)
-
+            // Today pill
             Button(action: { viewModel.goToToday() }) {
                 Text("Today")
-                    .font(.caption)
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .foregroundColor(.warmPrimary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(Color.warmPrimary.opacity(0.1)))
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.plain)
 
+            // Add event
             Button(action: { showingAddEvent = true }) {
                 Image(systemName: "plus")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(width: 28, height: 28)
+                    .background(
+                        Circle().fill(
+                            LinearGradient(colors: [.warmPrimary, .warmAccent], startPoint: .topLeading, endPoint: .bottomTrailing)
+                        )
+                    )
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.small)
+            .buttonStyle(.plain)
 
-            Button(action: { viewModel.refresh() }) {
-                Image(systemName: "arrow.clockwise")
+            if viewModel.isLoading {
+                ProgressView()
+                    .scaleEffect(0.6)
+                    .frame(width: 28, height: 28)
             }
-            .buttonStyle(.borderless)
-            .disabled(viewModel.isLoading)
         }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
     }
 
     // MARK: - View Mode Toggle
     private var viewModeToggle: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: 2) {
             ForEach([CalendarViewMode.month, .week, .day], id: \.self) { mode in
-                Button(action: { viewModel.viewMode = mode }) {
-                    Text(viewModeLabel(mode))
-                        .font(.caption)
-                        .fontWeight(viewModel.viewMode == mode ? .semibold : .regular)
-                        .foregroundColor(viewModel.viewMode == mode ? Color.warmAccent : .secondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
-                        .background {
-                            if viewModel.viewMode == mode {
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(Color.warmPrimary.opacity(0.1))
-                            }
+                Button(action: {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        viewModel.viewMode = mode
+                    }
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: viewModeIcon(mode))
+                            .font(.system(size: 10))
+                        Text(viewModeLabel(mode))
+                            .font(.system(size: 11, weight: .medium, design: .rounded))
+                    }
+                    .foregroundColor(viewModel.viewMode == mode ? .white : .secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                    .background {
+                        if viewModel.viewMode == mode {
+                            Capsule()
+                                .fill(
+                                    LinearGradient(colors: [.warmPrimary, .warmAccent], startPoint: .leading, endPoint: .trailing)
+                                )
+                                .shadow(color: .warmPrimary.opacity(0.3), radius: 4, y: 2)
                         }
-                        .animation(.spring(response: 0.30, dampingFraction: 0.75), value: viewModel.viewMode)
+                    }
                 }
                 .buttonStyle(.plain)
             }
         }
         .padding(3)
         .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color(NSColor.controlBackgroundColor))
+            Capsule()
+                .fill(.ultraThinMaterial)
+                .overlay(Capsule().strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5))
         )
-        .padding(.horizontal)
+        .padding(.horizontal, 14)
         .padding(.vertical, 4)
+    }
+
+    private func viewModeIcon(_ mode: CalendarViewMode) -> String {
+        switch mode {
+        case .month: return "square.grid.3x3"
+        case .week: return "rectangle.split.3x1"
+        case .day: return "rectangle.portrait"
+        }
     }
 
     private func viewModeLabel(_ mode: CalendarViewMode) -> String {
@@ -178,6 +221,35 @@ struct CalendarView: View {
         case .month: return "Month"
         case .week: return "Week"
         case .day: return "Day"
+        }
+    }
+
+    // MARK: - Up Next
+    private var upNextSection: some View {
+        let upcoming = viewModel.upcomingEvents
+        return Group {
+            if !upcoming.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("UP NEXT")
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 14)
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(upcoming.prefix(4), id: \.id) { event in
+                                UpNextCard(event: event) {
+                                    selectedEvent = event
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 14)
+                    }
+                }
+                .padding(.vertical, 6)
+
+                Divider()
+            }
         }
     }
 
@@ -491,23 +563,39 @@ struct CalendarView: View {
     // MARK: - Selected Day Events
     private var selectedDayEvents: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(viewModel.selectedDateFormatted)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+            HStack(spacing: 8) {
+                // Date badge
+                VStack(spacing: 0) {
+                    Text(viewModel.selectedDayOfWeek)
+                        .font(.system(size: 9, weight: .bold, design: .rounded))
+                        .foregroundColor(.warmPrimary)
+                        .textCase(.uppercase)
+                    Text(viewModel.selectedDayNumber)
+                        .font(.system(size: 18, weight: .bold, design: .rounded))
+                }
+                .frame(width: 40, height: 40)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.warmPrimary.opacity(0.1))
+                )
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(viewModel.selectedDateFormatted)
+                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                    Text("\(viewModel.selectedDayEvents.count) event\(viewModel.selectedDayEvents.count == 1 ? "" : "s")")
+                        .font(.system(size: 11, design: .rounded))
+                        .foregroundColor(.secondary)
+                }
+
                 Spacer()
 
                 if viewModel.isLoading {
                     ProgressView()
-                        .scaleEffect(0.7)
-                } else {
-                    Text("\(viewModel.selectedDayEvents.count) events")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                        .scaleEffect(0.6)
                 }
             }
-            .padding(.horizontal)
-            .padding(.top, 8)
+            .padding(.horizontal, 14)
+            .padding(.top, 10)
 
             if !viewModel.isConnected {
                 VStack(spacing: 8) {
@@ -618,15 +706,16 @@ struct DayCell: View {
             .padding(.horizontal, 2)
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 48)
+        .frame(height: 50)
         .background(dayCellBackground)
-        .cornerRadius(isSelected ? 8 : 4)
+        .clipShape(RoundedRectangle(cornerRadius: isSelected ? 10 : 6, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: isSelected ? 8 : 4)
-                .stroke(isHovered && !isSelected ? Color.warmPrimary.opacity(0.3) : Color.clear, lineWidth: 1)
+            RoundedRectangle(cornerRadius: isSelected ? 10 : 6, style: .continuous)
+                .strokeBorder(isHovered && !isSelected ? Color.warmPrimary.opacity(0.3) : Color.clear, lineWidth: 1)
         )
-        .scaleEffect(isSelected ? 1.02 : 1.0)
-        .animation(.spring(response: 0.25, dampingFraction: 0.60), value: isSelected)
+        .scaleEffect(isSelected ? 1.05 : 1.0)
+        .shadow(color: isSelected ? Color.warmPrimary.opacity(0.2) : .clear, radius: 4, y: 2)
+        .animation(.spring(response: 0.25, dampingFraction: 0.70), value: isSelected)
         .onTapGesture {
             onTap()
         }
@@ -640,11 +729,9 @@ struct DayCell: View {
     @ViewBuilder
     private var dayCellBackground: some View {
         if isSelected {
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color.warmPrimary)
+            LinearGradient(colors: [.warmPrimary, .warmAccent], startPoint: .topLeading, endPoint: .bottomTrailing)
         } else if isCurrentMonth && eventCount >= 3 {
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color.warmPrimary.opacity(0.1))
+            Color.warmPrimary.opacity(0.08)
         } else {
             Color.clear
         }
@@ -673,6 +760,82 @@ struct DayCell: View {
 
 }
 
+// MARK: - Up Next Card
+struct UpNextCard: View {
+    let event: CalendarEvent
+    let onTap: () -> Void
+
+    private let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.timeStyle = .short
+        return f
+    }()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(calendarColor)
+                    .frame(width: 6, height: 6)
+                Text(relativeTime)
+                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                    .foregroundColor(isImminent ? .warmPrimary : .secondary)
+            }
+
+            Text(event.title)
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .lineLimit(1)
+
+            if !event.isAllDay {
+                Text(timeFormatter.string(from: event.startDate))
+                    .font(.system(size: 10, design: .rounded))
+                    .foregroundColor(.secondary)
+            }
+
+            if event.hasVideoCall {
+                HStack(spacing: 3) {
+                    Image(systemName: "video.fill")
+                        .font(.system(size: 8))
+                    Text(event.conferenceName ?? "Join")
+                        .font(.system(size: 9, weight: .medium))
+                }
+                .foregroundColor(.warmPrimary)
+            }
+        }
+        .padding(10)
+        .frame(width: 120, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(isImminent ? Color.warmPrimary.opacity(0.3) : Color.primary.opacity(0.06), lineWidth: 0.5)
+                )
+        )
+        .onTapGesture { onTap() }
+    }
+
+    private var calendarColor: Color {
+        if let hex = event.calendarColor { return Color(hex: hex) }
+        return .warmAccent
+    }
+
+    private var isImminent: Bool {
+        event.startDate.timeIntervalSinceNow < 3600 && event.startDate.timeIntervalSinceNow > 0
+    }
+
+    private var relativeTime: String {
+        let interval = event.startDate.timeIntervalSinceNow
+        if interval < 0 { return "Now" }
+        if interval < 60 { return "Now" }
+        if interval < 3600 { return "In \(Int(interval / 60))m" }
+        if interval < 86400 { return "In \(Int(interval / 3600))h" }
+        let days = Int(interval / 86400)
+        if days == 1 { return "Tomorrow" }
+        return "In \(days)d"
+    }
+}
+
 // MARK: - Event Row
 struct EventRow: View {
     let event: CalendarEvent
@@ -684,54 +847,76 @@ struct EventRow: View {
         return f
     }()
 
+    @State private var isHovered = false
+
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
+            // Color bar with rounded ends
             RoundedRectangle(cornerRadius: 2)
                 .fill(calendarBarColor)
                 .frame(width: 3)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(event.title)
-                    .font(.subheadline)
+                    .font(.system(.subheadline, design: .rounded, weight: .medium))
                     .lineLimit(1)
 
-                HStack(spacing: 4) {
+                HStack(spacing: 6) {
                     if event.isAllDay {
                         Text("All Day")
-                            .font(.caption)
+                            .font(.system(size: 11, weight: .medium, design: .rounded))
                             .foregroundColor(.warmPrimary)
                     } else {
-                        Text(timeFormatter.string(from: event.startDate))
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                        HStack(spacing: 3) {
+                            Image(systemName: "clock")
+                                .font(.system(size: 9))
+                            Text(timeFormatter.string(from: event.startDate))
+                                .font(.system(size: 11, design: .rounded))
+                        }
+                        .foregroundColor(.secondary)
                     }
 
                     if let location = event.location, !location.isEmpty {
-                        Text("·")
-                            .foregroundColor(.secondary)
-                        Text(location)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .lineLimit(1)
+                        HStack(spacing: 3) {
+                            Image(systemName: "mappin")
+                                .font(.system(size: 9))
+                            Text(location)
+                                .font(.system(size: 11, design: .rounded))
+                                .lineLimit(1)
+                        }
+                        .foregroundColor(.secondary)
                     }
                 }
             }
 
             Spacer()
 
-            // Attendee count pill
+            // Attendee avatars (stacked circles)
             if event.attendeeCount > 0 {
-                HStack(spacing: 2) {
-                    Image(systemName: "person.2.fill")
-                        .font(.system(size: 9))
-                    Text("\(event.attendeeCount)")
-                        .font(.caption2)
+                HStack(spacing: -4) {
+                    ForEach(0..<min(event.attendeeCount, 3), id: \.self) { i in
+                        Circle()
+                            .fill(Color.warmPrimary.opacity(0.2 + Double(i) * 0.15))
+                            .overlay(
+                                Text(event.attendees?[safe: i]?.initials.prefix(1) ?? "?")
+                                    .font(.system(size: 7, weight: .bold))
+                                    .foregroundColor(.warmPrimary)
+                            )
+                            .frame(width: 18, height: 18)
+                            .overlay(Circle().stroke(Color.surfacePrimary, lineWidth: 1.5))
+                    }
+                    if event.attendeeCount > 3 {
+                        Circle()
+                            .fill(Color.warmPrimary.opacity(0.1))
+                            .overlay(
+                                Text("+\(event.attendeeCount - 3)")
+                                    .font(.system(size: 7, weight: .bold))
+                                    .foregroundColor(.warmPrimary)
+                            )
+                            .frame(width: 18, height: 18)
+                            .overlay(Circle().stroke(Color.surfacePrimary, lineWidth: 1.5))
+                    }
                 }
-                .foregroundColor(.secondary)
-                .padding(.horizontal, 5)
-                .padding(.vertical, 2)
-                .background(Color.secondary.opacity(0.1))
-                .cornerRadius(8)
             }
 
             // Join button for video calls
@@ -741,32 +926,46 @@ struct EventRow: View {
                         NSWorkspace.shared.open(url)
                     }
                 }) {
-                    Text("Join")
-                        .font(.caption2)
-                        .fontWeight(.medium)
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(Color.warmPrimary)
-                        .cornerRadius(6)
+                    HStack(spacing: 3) {
+                        Image(systemName: "video.fill")
+                            .font(.system(size: 9))
+                        Text("Join")
+                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule().fill(
+                            LinearGradient(colors: [.warmPrimary, .warmAccent], startPoint: .leading, endPoint: .trailing)
+                        )
+                        .shadow(color: .warmPrimary.opacity(0.3), radius: 4, y: 2)
+                    )
                 }
                 .buttonStyle(.plain)
             }
 
             Image(systemName: "chevron.right")
-                .font(.caption)
-                .foregroundColor(.secondary)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(.secondary.opacity(0.5))
         }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 8)
+        .padding(.vertical, 8)
+        .padding(.horizontal, 10)
         .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color(NSColor.controlBackgroundColor))
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(isHovered ? 0.1 : 0.04), lineWidth: 0.5)
+                )
+                .shadow(color: .black.opacity(isHovered ? 0.06 : 0.02), radius: isHovered ? 6 : 2, y: isHovered ? 3 : 1)
         )
+        .scaleEffect(isHovered ? 1.01 : 1.0)
         .padding(.horizontal, 4)
-        .padding(.vertical, 2)
-        .onTapGesture {
-            onTap()
+        .padding(.vertical, 1)
+        .onTapGesture { onTap() }
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.15)) { isHovered = hovering }
         }
     }
 
@@ -775,6 +974,13 @@ struct EventRow: View {
             return Color(hex: hex)
         }
         return .warmAccent
+    }
+}
+
+// Safe array subscript
+extension Array {
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
     }
 }
 
@@ -1146,6 +1352,16 @@ class CalendarViewModel: ObservableObject {
         return formatter.string(from: selectedDate)
     }
 
+    var selectedDayOfWeek: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEE"
+        return formatter.string(from: selectedDate)
+    }
+
+    var selectedDayNumber: String {
+        "\(calendar.component(.day, from: selectedDate))"
+    }
+
     // MARK: - Month Days
     var monthDays: [Date] {
         guard let monthInterval = calendar.dateInterval(of: .month, for: currentMonth),
@@ -1193,6 +1409,14 @@ class CalendarViewModel: ObservableObject {
 
     var selectedDayEvents: [CalendarEvent] {
         eventsForDate(selectedDate)
+    }
+
+    /// Next upcoming events (not past, sorted by start time)
+    var upcomingEvents: [CalendarEvent] {
+        let now = Date()
+        return events
+            .filter { $0.endDate > now }
+            .sorted { $0.startDate < $1.startDate }
     }
 
     // MARK: - Helpers
