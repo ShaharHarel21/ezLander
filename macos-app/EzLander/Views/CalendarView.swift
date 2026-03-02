@@ -227,7 +227,7 @@ struct CalendarView: View {
             // Day column headers aligned with grid columns
             HStack(spacing: 0) {
                 Color.clear
-                    .frame(width: 46)
+                    .frame(width: 42)
 
                 ForEach(viewModel.weekDays, id: \.self) { date in
                     VStack(spacing: 2) {
@@ -275,7 +275,7 @@ struct CalendarView: View {
                     Text("All day")
                         .font(.system(size: 9))
                         .foregroundColor(.secondary)
-                        .frame(width: 46, alignment: .trailing)
+                        .frame(width: 42, alignment: .trailing)
                         .padding(.trailing, 4)
 
                     ForEach(viewModel.weekDays, id: \.self) { date in
