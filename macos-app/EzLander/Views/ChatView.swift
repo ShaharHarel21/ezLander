@@ -182,7 +182,7 @@ struct ChatView: View {
                     .buttonStyle(.plain)
                     .disabled(inputText.isEmpty || viewModel.isLoading)
 
-                    if viewModel.sessionInputTokens + viewModel.sessionOutputTokens > 0 {
+                    if viewModel.sessionInputTokens + viewModel.sessionOutputTokens >= 100 {
                         Text(TokenEstimator.format(viewModel.sessionInputTokens + viewModel.sessionOutputTokens))
                             .font(.system(size: 8))
                             .foregroundColor(.secondary)
@@ -675,7 +675,7 @@ class ChatViewModel: ObservableObject {
         let placeholderId = UUID()
         await MainActor.run {
             messages.append(ChatMessage(id: placeholderId, role: .assistant, content: ""))
-            isLoading = false  // Hide typing indicator once streaming begins
+            // Keep isLoading true until first chunk arrives, then the growing message itself indicates activity
         }
 
         var fullText = ""
@@ -694,6 +694,7 @@ class ChatViewModel: ObservableObject {
                 }
 
                 await MainActor.run {
+                    if isLoading { isLoading = false }  // Hide typing indicator after first chunk
                     if let index = messages.firstIndex(where: { $0.id == placeholderId }) {
                         messages[index] = ChatMessage(id: placeholderId, role: .assistant, content: fullText)
                     }
