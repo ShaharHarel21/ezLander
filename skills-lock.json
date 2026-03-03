@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "browser": {
+      "source": "browserbase/skills",
+      "sourceType": "github",
+      "computedHash": "d6de27eb62c454d1a660b1907734497ab114844e1232e0c887725a1f9b890374"
+    }
+  }
+}
