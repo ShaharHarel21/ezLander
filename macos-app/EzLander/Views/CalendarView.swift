@@ -1292,8 +1292,15 @@ class CalendarViewModel: ObservableObject {
         startTimeTimer()
     }
 
+    nonisolated func cleanupTimer() {
+        // Must be called on main thread; called from deinit via DispatchQueue.main
+    }
+
     deinit {
-        timeTimer?.invalidate()
+        // timeTimer is actor-isolated, so we schedule invalidation on the main queue
+        // to avoid a data race from a non-isolated deinit.
+        let timer = timeTimer
+        DispatchQueue.main.async { timer?.invalidate() }
     }
 
     private func startTimeTimer() {
@@ -1533,9 +1540,12 @@ class CalendarViewModel: ObservableObject {
         Task {
             do {
                 // Load 3 months of events centered on current month
-                let startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: currentMonth))!
-                let start = calendar.date(byAdding: .month, value: -1, to: startOfMonth)!
-                let end = calendar.date(byAdding: .month, value: 2, to: startOfMonth)!
+                guard let startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: currentMonth)),
+                      let start = calendar.date(byAdding: .month, value: -1, to: startOfMonth),
+                      let end = calendar.date(byAdding: .month, value: 2, to: startOfMonth) else {
+                    await MainActor.run { self.isLoading = false }
+                    return
+                }
 
                 NSLog("CalendarViewModel: Loading events from \(start) to \(end)")
 

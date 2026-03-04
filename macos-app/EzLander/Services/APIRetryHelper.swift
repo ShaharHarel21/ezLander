@@ -76,7 +76,13 @@ enum APIRetryHelper {
 
             guard attempt < maxRetries else { break }
 
-            let delay = baseDelay * pow(2.0, Double(attempt))
+            // Honour the Retry-After header when present (common on 429 / 503).
+            // Fall back to exponential backoff if the header is absent or unparseable.
+            var delay = baseDelay * pow(2.0, Double(attempt))
+            if let retryAfterStr = lastResponse?.value(forHTTPHeaderField: "Retry-After"),
+               let retryAfterSecs = Double(retryAfterStr) {
+                delay = max(delay, retryAfterSecs)
+            }
             try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
         }
 
