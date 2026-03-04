@@ -9,47 +9,72 @@ struct EventDetailView: View {
     var body: some View {
         VStack(spacing: 0) {
             // Header
-            HStack {
-                Button("Back") { onDismiss() }
-                    .buttonStyle(.borderless)
+            HStack(spacing: 12) {
+                Button(action: { onDismiss() }) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 12, weight: .semibold))
+                        .frame(width: 28, height: 28)
+                        .background(Circle().fill(.ultraThinMaterial))
+                }
+                .buttonStyle(.plain)
 
                 Spacer()
 
                 Text("Event Details")
-                    .font(.headline)
+                    .font(.system(.headline, design: .rounded))
 
                 Spacer()
 
-                Button("Edit") { onEdit() }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
+                Button(action: { onEdit() }) {
+                    Text("Edit")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundColor(.warmPrimary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Capsule().fill(Color.warmPrimary.opacity(0.1)))
+                }
+                .buttonStyle(.plain)
             }
-            .padding()
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
 
             Divider()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    // Title with calendar color bar
-                    HStack(spacing: 10) {
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(calendarBarColor)
-                            .frame(width: 4, height: 32)
+                    // Title card
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 10) {
+                            RoundedRectangle(cornerRadius: 3)
+                                .fill(
+                                    LinearGradient(colors: [calendarBarColor, calendarBarColor.opacity(0.6)],
+                                                   startPoint: .top, endPoint: .bottom)
+                                )
+                                .frame(width: 4, height: 36)
 
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(event.title)
-                                .font(.title3)
-                                .fontWeight(.semibold)
-                                .lineLimit(2)
-                                .truncationMode(.tail)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(event.title)
+                                    .font(.system(.title3, design: .rounded, weight: .bold))
+                                    .lineLimit(2)
 
-                            if let calName = event.calendarName {
-                                Text(calName)
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
+                                if let calName = event.calendarName {
+                                    Text(calName)
+                                        .font(.system(size: 12, design: .rounded))
+                                        .foregroundColor(.secondary)
+                                }
                             }
                         }
                     }
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(.ultraThinMaterial)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5)
+                            )
+                    )
 
                     // Time section
                     timeSection
