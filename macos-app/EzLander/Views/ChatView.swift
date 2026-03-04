@@ -177,15 +177,15 @@ struct ChatView: View {
                     Button(action: sendMessage) {
                         Image(systemName: "arrow.up.circle.fill")
                             .font(.title2)
-                            .foregroundColor(inputText.isEmpty ? .secondary : .warmPrimary)
+                            .foregroundColor(inputText.isEmpty || viewModel.isQuotaExhausted ? .secondary : .warmPrimary)
                     }
                     .buttonStyle(.plain)
-                    .disabled(inputText.isEmpty || viewModel.isLoading)
+                    .disabled(inputText.isEmpty || viewModel.isLoading || viewModel.isQuotaExhausted)
 
-                    if viewModel.sessionInputTokens + viewModel.sessionOutputTokens > 0 {
-                        Text(TokenEstimator.format(viewModel.sessionInputTokens + viewModel.sessionOutputTokens))
+                    if ProxyAIService.shared.tokensUsed > 0 && ProxyAIService.shared.tokensLimit > 0 {
+                        Text("\(formatTokens(ProxyAIService.shared.tokensUsed))/\(formatTokens(ProxyAIService.shared.tokensLimit))")
                             .font(.system(size: 8))
-                            .foregroundColor(.secondary)
+                            .foregroundColor(ProxyAIService.shared.tokensRemaining <= 0 ? .red : .secondary)
                     }
                 }
             }
@@ -295,6 +295,15 @@ struct ChatView: View {
         let text = inputText
         inputText = ""
         viewModel.sendMessage(text)
+    }
+
+    private func formatTokens(_ count: Int) -> String {
+        if count >= 1_000_000 {
+            return String(format: "%.1fM", Double(count) / 1_000_000.0)
+        } else if count >= 1_000 {
+            return String(format: "%.0fK", Double(count) / 1_000.0)
+        }
+        return "\(count)"
     }
 }
 
@@ -550,8 +559,11 @@ class ChatViewModel: ObservableObject {
     @Published var actionResultMessageId: UUID?
 
     private let aiService = AIService.shared
-    @Published var sessionInputTokens: Int = 0
-    @Published var sessionOutputTokens: Int = 0
+
+    var isQuotaExhausted: Bool {
+        let proxy = ProxyAIService.shared
+        return proxy.tokensLimit > 0 && proxy.tokensRemaining <= 0
+    }
 
     // MARK: - Persistence
     private static let messagesKey = "saved_chat_messages"
@@ -657,7 +669,6 @@ class ChatViewModel: ObservableObject {
 
         isLoading = true
         actionResult = nil
-        sessionInputTokens += TokenEstimator.estimate(text)
 
         Task {
             // Try streaming first (OpenAI and Claude support it)
@@ -703,9 +714,6 @@ class ChatViewModel: ObservableObject {
             await MainActor.run {
                 isLoading = false
 
-                // Track estimated tokens
-                sessionOutputTokens += TokenEstimator.estimate(fullText)
-
                 // Check if the completed response contains an action
                 if let action = parseActionFromResponse(fullText, userMessage: userMessage) {
                     // Replace the streamed message with the action prompt
@@ -723,24 +731,22 @@ class ChatViewModel: ObservableObject {
         } catch {
             await MainActor.run {
                 isLoading = false
+                let errorMsg = friendlyErrorMessage(error)
                 if let index = messages.firstIndex(where: { $0.id == placeholderId }) {
-                    messages[index] = ChatMessage(id: placeholderId, role: .assistant, content: "Sorry, I encountered an error: \(error.localizedDescription)")
+                    messages[index] = ChatMessage(id: placeholderId, role: .assistant, content: errorMsg)
                 }
                 trimMessagesIfNeeded()
             }
         }
     }
 
-    /// Handle non-streaming responses (Gemini, Kimi, or Claude tool-use fallback).
+    /// Handle non-streaming responses.
     private func handleNonStreamingResponse(text: String) async {
         do {
             let response = try await aiService.sendMessage(text, conversationHistory: messages)
 
             await MainActor.run {
                 isLoading = false
-
-                // Track estimated tokens
-                sessionOutputTokens += TokenEstimator.estimate(response.content)
 
                 if response.toolCall != nil {
                     messages.append(response)
@@ -762,11 +768,27 @@ class ChatViewModel: ObservableObject {
                 isLoading = false
                 messages.append(ChatMessage(
                     role: .assistant,
-                    content: "Sorry, I encountered an error: \(error.localizedDescription)"
+                    content: friendlyErrorMessage(error)
                 ))
                 trimMessagesIfNeeded()
             }
         }
+    }
+
+    private func friendlyErrorMessage(_ error: Error) -> String {
+        if let proxyError = error as? ProxyAIError {
+            switch proxyError {
+            case .quotaExceeded:
+                return "You've reached your monthly token limit. Upgrade your plan in Settings for more tokens."
+            case .noSubscription:
+                return "An active subscription is required to use the AI assistant. Please subscribe to continue."
+            case .notAuthenticated:
+                return "Please sign in to use the AI assistant."
+            default:
+                return proxyError.localizedDescription
+            }
+        }
+        return "Sorry, I encountered an error: \(error.localizedDescription)"
     }
 
     func confirmAction(_ editedAction: AIAction? = nil) {

@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import bcrypt from 'bcryptjs'
 import { db } from '@/lib/db'
-import { users } from '@/lib/db/schema'
+import { users, authUsers } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
+import { getActiveSubscription } from '@/lib/db/subscription-repo'
+import { getUsage } from '@/lib/db/token-usage'
+import { getTierTokenLimit } from '@/lib/tiers'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2023-10-16',
@@ -42,6 +45,31 @@ function isAdminEmail(email: string): boolean {
     'shahar.harel200@gmail.com',
   ].filter(Boolean)
   return adminEmails.includes(lower)
+}
+
+async function getTokenUsageData(email: string) {
+  try {
+    const authUser = await db.query.authUsers.findFirst({
+      where: eq(authUsers.email, email),
+    })
+    if (!authUser) return {}
+
+    const subscription = await getActiveSubscription(authUser.id)
+    if (!subscription) return {}
+
+    const usage = await getUsage(authUser.id)
+    const tokenLimit = getTierTokenLimit(subscription.tier)
+
+    return {
+      tier: subscription.tier,
+      token_limit: tokenLimit,
+      tokens_used: usage.totalTokens,
+      tokens_remaining: Math.max(0, tokenLimit - usage.totalTokens),
+    }
+  } catch (e) {
+    console.error('Error fetching token usage data:', e)
+  }
+  return {}
 }
 
 export async function POST(request: NextRequest) {
@@ -93,6 +121,10 @@ export async function POST(request: NextRequest) {
         plan: 'admin',
         status: 'admin',
         is_admin_email: true,
+        tier: 'max',
+        token_limit: -1,
+        tokens_used: 0,
+        tokens_remaining: -1,
         message: 'Welcome back, admin!',
       })
     }
@@ -131,6 +163,7 @@ export async function POST(request: NextRequest) {
 
         if (endDate > new Date()) {
           const referralData = await getReferralData(email)
+          const tokenData = await getTokenUsageData(email)
           return NextResponse.json({
             is_active: true,
             plan: getPlanLookupKey(sub),
@@ -139,6 +172,7 @@ export async function POST(request: NextRequest) {
             is_admin_email: false,
             message: `Your subscription is active until ${endDate.toLocaleDateString()}.`,
             ...referralData,
+            ...tokenData,
           })
         }
 
@@ -161,6 +195,7 @@ export async function POST(request: NextRequest) {
     const plan = getPlanLookupKey(subscription)
     const expiresAt = new Date(subscription.current_period_end * 1000)
     const referralData = await getReferralData(email)
+    const tokenData = await getTokenUsageData(email)
 
     return NextResponse.json({
       is_active: true,
@@ -170,6 +205,7 @@ export async function POST(request: NextRequest) {
       is_admin_email: false,
       message: 'Your subscription is active.',
       ...referralData,
+      ...tokenData,
     })
   } catch (error) {
     console.error('License verification error:', error)
@@ -212,6 +248,10 @@ async function checkReferralCredits(email: string) {
           referral_code: user.referralCode,
           referral_credits_days: user.referralCreditsDays,
           referrals_count: user.referralsCount,
+          tier: 'pro',
+          token_limit: 2000000,
+          tokens_used: 0,
+          tokens_remaining: 2000000,
         })
       }
     }

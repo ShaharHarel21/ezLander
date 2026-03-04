@@ -5,8 +5,8 @@ import Combine
 class SubscriptionService: ObservableObject {
     static let shared = SubscriptionService()
 
-    private let verifyURL = "https://website-seven-eta-91.vercel.app/api/license/verify"
-    private let purchaseURL = "https://website-seven-eta-91.vercel.app/pricing"
+    private let verifyURL = "https://ezlander.app/api/license/verify"
+    private let purchaseURL = "https://ezlander.app/pricing"
     private let reVerifyInterval: TimeInterval = 24 * 60 * 60 // 24 hours
     private let offlineGracePeriod: TimeInterval = 7 * 24 * 60 * 60 // 7 days
 
@@ -28,6 +28,10 @@ class SubscriptionService: ObservableObject {
     @Published var isSubscribed: Bool = false
     @Published var subscribedEmail: String = ""
     @Published var plan: String = ""
+    @Published var tier: String = ""
+    @Published var tokensUsed: Int = 0
+    @Published var tokensLimit: Int = 0
+    @Published var tokensRemaining: Int = 0
     @Published var referralCode: String = ""
     @Published var referralCreditsDays: Int = 0
     @Published var referralsCount: Int = 0
@@ -109,6 +113,10 @@ class SubscriptionService: ObservableObject {
             isSubscribed = true
             subscribedEmail = email
             plan = response.plan ?? ""
+            tier = response.tier ?? ""
+            tokensUsed = response.tokensUsed ?? 0
+            tokensLimit = response.tokenLimit ?? 0
+            tokensRemaining = response.tokensRemaining ?? 0
             referralCode = response.referralCode ?? ""
             referralCreditsDays = response.referralCreditsDays ?? 0
             referralsCount = response.referralsCount ?? 0
@@ -131,6 +139,10 @@ class SubscriptionService: ObservableObject {
             isSubscribed = true
             subscribedEmail = email
             plan = response.plan ?? ""
+            tier = response.tier ?? ""
+            tokensUsed = response.tokensUsed ?? 0
+            tokensLimit = response.tokenLimit ?? 0
+            tokensRemaining = response.tokensRemaining ?? 0
             referralCode = response.referralCode ?? ""
             referralCreditsDays = response.referralCreditsDays ?? 0
             referralsCount = response.referralsCount ?? 0
@@ -174,9 +186,14 @@ class SubscriptionService: ObservableObject {
         isSubscribed = false
         subscribedEmail = ""
         plan = ""
+        tier = ""
+        tokensUsed = 0
+        tokensLimit = 0
+        tokensRemaining = 0
         referralCode = ""
         referralCreditsDays = 0
         referralsCount = 0
+        ProxyAIService.shared.clearJWT()
         NotificationCenter.default.post(name: Self.subscriptionInvalidatedNotification, object: nil)
     }
 
@@ -339,6 +356,10 @@ struct SubscriptionResponse: Codable {
     let referralCode: String?
     let referralCreditsDays: Int?
     let referralsCount: Int?
+    let tier: String?
+    let tokenLimit: Int?
+    let tokensUsed: Int?
+    let tokensRemaining: Int?
 
     enum CodingKeys: String, CodingKey {
         case isActive = "is_active"
@@ -351,6 +372,10 @@ struct SubscriptionResponse: Codable {
         case referralCode = "referral_code"
         case referralCreditsDays = "referral_credits_days"
         case referralsCount = "referrals_count"
+        case tier
+        case tokenLimit = "token_limit"
+        case tokensUsed = "tokens_used"
+        case tokensRemaining = "tokens_remaining"
     }
 }
 

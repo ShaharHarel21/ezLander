@@ -4,15 +4,13 @@ import { db } from '@/lib/db'
 import { users } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
 import { REFERRAL_CAP, REFERRED_TRIAL_DAYS } from '@/lib/referral'
+import { STRIPE_PLANS, type StripePlanKey } from '@/lib/stripe'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2023-10-16',
 })
 
-const PRICES = {
-  monthly: process.env.STRIPE_MONTHLY_PRICE_ID!,
-  yearly: process.env.STRIPE_YEARLY_PRICE_ID!,
-}
+const VALID_PLANS: StripePlanKey[] = ['pro_monthly', 'pro_yearly', 'max_monthly', 'max_yearly']
 
 export async function POST(request: NextRequest) {
   try {
@@ -25,12 +23,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!['monthly', 'yearly'].includes(plan)) {
+    if (!VALID_PLANS.includes(plan)) {
       return NextResponse.json(
-        { error: 'Invalid plan' },
+        { error: 'Invalid plan. Must be one of: pro_monthly, pro_yearly, max_monthly, max_yearly' },
         { status: 400 }
       )
     }
+
+    const planDetails = STRIPE_PLANS[plan as StripePlanKey]
 
     // Validate referral code if provided
     let validReferralCode: string | null = null
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Determine trial period
-    let trialDays = plan === 'yearly' ? 14 : 7
+    let trialDays = planDetails.trialDays
     if (validReferralCode) {
       trialDays = REFERRED_TRIAL_DAYS
     }
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
       payment_method_types: ['card'],
       line_items: [
         {
-          price: PRICES[plan as keyof typeof PRICES],
+          price: planDetails.priceId,
           quantity: 1,
         },
       ],
@@ -77,6 +77,7 @@ export async function POST(request: NextRequest) {
         trial_period_days: trialDays,
         metadata: {
           plan,
+          tier: planDetails.tier,
           ...(validReferralCode ? { referral_code: validReferralCode } : {}),
         },
       },

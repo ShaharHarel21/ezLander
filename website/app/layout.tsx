@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
+import SessionProvider from '@/components/SessionProvider'
 import './globals.css'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -69,9 +70,11 @@ export default function RootLayout({
         >
           Skip to main content
         </a>
-        <main id="main-content" className="min-h-screen">
-          {children}
-        </main>
+        <SessionProvider>
+          <main id="main-content" className="min-h-screen">
+            {children}
+          </main>
+        </SessionProvider>
       </body>
     </html>
   )

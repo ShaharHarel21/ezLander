@@ -9,30 +9,65 @@ export const APP_CONFIG = {
   supportEmail: 'support@ezlander.app',
 }
 
-export const PRICING = {
-  monthly: {
-    price: 9.99,
-    interval: 'month',
-    trialDays: 7,
+export const SUBSCRIPTION_TIERS = {
+  pro: {
+    name: 'Pro',
+    tokenLimit: 2_000_000,
+    monthlyPrice: 9.99,
+    yearlyPrice: 99,
     features: [
-      'Unlimited AI conversations',
+      'GPT-4o powered AI assistant',
+      '2M tokens per month',
       'Google Calendar integration',
       'Apple Calendar integration',
       'Gmail integration',
       'Priority support',
     ],
   },
-  yearly: {
-    price: 99,
-    interval: 'year',
-    trialDays: 14,
-    savings: '17%',
+  max: {
+    name: 'Max',
+    tokenLimit: 5_000_000,
+    monthlyPrice: 19.99,
+    yearlyPrice: 199,
     features: [
-      'Everything in Monthly',
-      'Save 17% compared to monthly',
+      'Everything in Pro',
+      '5M tokens per month',
       'Early access to new features',
       'Extended 14-day trial',
     ],
+  },
+}
+
+export const PRICING = {
+  pro: {
+    monthly: {
+      price: 9.99,
+      interval: 'month',
+      trialDays: 7,
+      planKey: 'pro_monthly',
+    },
+    yearly: {
+      price: 99,
+      interval: 'year',
+      trialDays: 14,
+      savings: '17%',
+      planKey: 'pro_yearly',
+    },
+  },
+  max: {
+    monthly: {
+      price: 19.99,
+      interval: 'month',
+      trialDays: 7,
+      planKey: 'max_monthly',
+    },
+    yearly: {
+      price: 199,
+      interval: 'year',
+      trialDays: 14,
+      savings: '17%',
+      planKey: 'max_yearly',
+    },
   },
 }
 
@@ -43,9 +78,11 @@ export const API_ENDPOINTS = {
   stripePortal: '/api/stripe/portal',
   stripeWebhook: '/api/stripe/webhook',
   download: '/api/download',
+  aiProxy: '/api/ai/chat',
+  usage: '/api/usage',
+  authToken: '/api/auth/token',
 
   // External APIs
-  claude: 'https://api.anthropic.com/v1/messages',
   googleCalendar: 'https://www.googleapis.com/calendar/v3',
   gmail: 'https://www.googleapis.com/gmail/v1',
   googleOAuth: 'https://accounts.google.com/o/oauth2/v2/auth',
@@ -59,12 +96,6 @@ export const GOOGLE_SCOPES = [
   'email',
   'profile',
 ]
-
-export const CLAUDE_CONFIG = {
-  model: 'claude-sonnet-4-20250514',
-  maxTokens: 4096,
-  apiVersion: '2023-06-01',
-}
 
 export const FEATURE_FLAGS = {
   enableAppleCalendar: true,
@@ -86,6 +117,7 @@ export const ANALYTICS_EVENTS = {
   trialStarted: 'trial_started',
   subscriptionCreated: 'subscription_created',
   subscriptionCanceled: 'subscription_canceled',
+  subscriptionUpgraded: 'subscription_upgraded',
 
   // Integration events
   googleConnected: 'google_connected',

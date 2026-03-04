@@ -166,8 +166,14 @@ struct SettingsView: View {
 
     // MARK: - AI Tab
     private var aiTabContent: some View {
-        SettingsSection(title: "AI Provider") {
-            aiProviderView
+        VStack(alignment: .leading, spacing: 16) {
+            SettingsSection(title: "AI Model") {
+                aiModelView
+            }
+
+            SettingsSection(title: "Usage") {
+                usageView
+            }
         }
     }
 
@@ -351,64 +357,84 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - AI Provider View
-    private var aiProviderView: some View {
+    // MARK: - AI Model View
+    private var aiModelView: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Provider selector
-            Picker("Active Provider", selection: $viewModel.selectedAIProvider) {
-                ForEach(AIProvider.allCases) { provider in
+            Picker("Model", selection: $viewModel.selectedAIModel) {
+                ForEach(AIModel.allCases) { model in
                     HStack {
-                        Image(systemName: provider.icon)
-                        Text(provider.displayName)
-                        if provider.isConfigured {
-                            Text("Active")
-                                .font(.caption2)
-                                .foregroundColor(.green)
-                        }
+                        Image(systemName: model.icon)
+                        Text(model.displayName)
                     }
-                    .tag(provider)
+                    .tag(model)
                 }
             }
 
-            Text("Configure your API keys below. You can switch between providers anytime.")
+            Text("All AI requests are processed through our secure server. No API key needed.")
                 .font(.caption)
                 .foregroundColor(.secondary)
+        }
+    }
 
-            Divider()
-
-            // API Keys (and OAuth) for each provider
-            ForEach(AIProvider.allCases) { provider in
-                VStack(alignment: .leading, spacing: 8) {
-                    // OAuth row for providers that support it
-                    if provider.supportsOAuth {
-                        OpenAIOAuthRow(
-                            isConnected: provider.isOAuthConnected,
-                            isSigningIn: viewModel.isSigningInOpenAI,
-                            errorMessage: viewModel.openAIOAuthError,
-                            onSignIn: { viewModel.signInWithOpenAI() },
-                            onDisconnect: { viewModel.disconnectOpenAIOAuth() }
+    // MARK: - Usage View
+    private var usageView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Tier badge
+            if !viewModel.tier.isEmpty {
+                HStack {
+                    Text(viewModel.tier.capitalized)
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(
+                            Capsule()
+                                .fill(
+                                    LinearGradient(
+                                        colors: [Color.warmPrimary, Color.warmAccent],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
                         )
 
-                        Text("Or use an API key:")
+                    Spacer()
+
+                    if viewModel.tokensLimit > 0 {
+                        Text("\(viewModel.formattedTokensUsed) / \(viewModel.formattedTokensLimit)")
                             .font(.caption)
                             .foregroundColor(.secondary)
-                            .padding(.leading, 4)
                     }
-
-                    APIKeyRow(
-                        provider: provider,
-                        isConfigured: provider.isConfigured && !provider.isOAuthConnected,
-                        showInput: viewModel.showKeyInput[provider] ?? false,
-                        keyInput: Binding(
-                            get: { viewModel.keyInputs[provider] ?? "" },
-                            set: { viewModel.keyInputs[provider] = $0 }
-                        ),
-                        onAddKey: { viewModel.showKeyInput[provider] = true },
-                        onSaveKey: { viewModel.saveAPIKey(for: provider) },
-                        onRemoveKey: { viewModel.removeAPIKey(for: provider) },
-                        onGetKey: { viewModel.openKeyURL(for: provider) }
-                    )
                 }
+            }
+
+            // Progress bar
+            if viewModel.tokensLimit > 0 {
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(Color.secondary.opacity(0.15))
+                            .frame(height: 8)
+
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(
+                                LinearGradient(
+                                    colors: viewModel.usagePercentage > 0.9
+                                        ? [.red, .orange]
+                                        : [Color.warmPrimary, Color.warmAccent],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .frame(width: geometry.size.width * min(viewModel.usagePercentage, 1.0), height: 8)
+                    }
+                }
+                .frame(height: 8)
+
+                Text("\(viewModel.formattedTokensRemaining) tokens remaining this month")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
         }
     }
@@ -849,20 +875,38 @@ class SettingsViewModel: ObservableObject {
     @Published var referralsCount: Int = 0
     @Published var codeCopied: Bool = false
 
-    // OpenAI OAuth
-    @Published var isSigningInOpenAI: Bool = false
-    @Published var openAIOAuthError: String?
-
-    // AI Provider settings
-    @Published var selectedAIProvider: AIProvider = .claude {
+    // AI Model settings
+    @Published var selectedAIModel: AIModel = .gpt4o {
         didSet {
-            AIService.shared.currentProvider = selectedAIProvider
+            AIService.shared.selectedModel = selectedAIModel
         }
     }
 
-    // Dynamic key management for all providers
-    @Published var showKeyInput: [AIProvider: Bool] = [:]
-    @Published var keyInputs: [AIProvider: String] = [:]
+    // Usage
+    @Published var tier: String = ""
+    @Published var tokensUsed: Int = 0
+    @Published var tokensLimit: Int = 0
+    @Published var tokensRemaining: Int = 0
+
+    var formattedTokensUsed: String { formatTokenCount(tokensUsed) }
+    var formattedTokensLimit: String { formatTokenCount(tokensLimit) }
+    var formattedTokensRemaining: String { formatTokenCount(tokensRemaining) }
+
+    var usagePercentage: CGFloat {
+        guard tokensLimit > 0 else { return 0 }
+        return CGFloat(tokensUsed) / CGFloat(tokensLimit)
+    }
+
+    private func formatTokenCount(_ count: Int) -> String {
+        if count >= 1_000_000 {
+            let millions = Double(count) / 1_000_000.0
+            return String(format: "%.1fM", millions)
+        } else if count >= 1_000 {
+            let thousands = Double(count) / 1_000.0
+            return String(format: "%.0fK", thousands)
+        }
+        return "\(count)"
+    }
 
     var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
@@ -918,8 +962,25 @@ class SettingsViewModel: ObservableObject {
             swipeLeftAction = action
         }
 
-        // Load AI provider settings
-        selectedAIProvider = AIService.shared.currentProvider
+        // Load AI model settings
+        selectedAIModel = AIService.shared.selectedModel
+
+        // Load usage info
+        tier = SubscriptionService.shared.tier
+        tokensUsed = SubscriptionService.shared.tokensUsed
+        tokensLimit = SubscriptionService.shared.tokensLimit
+        tokensRemaining = SubscriptionService.shared.tokensRemaining
+
+        // Fetch fresh usage data
+        Task {
+            await ProxyAIService.shared.fetchUsage()
+            await MainActor.run {
+                tokensUsed = ProxyAIService.shared.tokensUsed
+                tokensLimit = ProxyAIService.shared.tokensLimit
+                tokensRemaining = ProxyAIService.shared.tokensRemaining
+                tier = ProxyAIService.shared.tier
+            }
+        }
 
         // Load subscription info
         licenseEmail = SubscriptionService.shared.subscribedEmail
@@ -938,53 +999,6 @@ class SettingsViewModel: ObservableObject {
                     referralsCount = SubscriptionService.shared.referralsCount
                 }
             }
-        }
-    }
-
-    // MARK: - AI Key Management
-    func saveAPIKey(for provider: AIProvider) {
-        guard let key = keyInputs[provider], !key.isEmpty else { return }
-        AIService.shared.saveAPIKey(key, for: provider)
-        keyInputs[provider] = ""
-        showKeyInput[provider] = false
-        objectWillChange.send()
-    }
-
-    func removeAPIKey(for provider: AIProvider) {
-        AIService.shared.removeAPIKey(for: provider)
-        objectWillChange.send()
-    }
-
-    // MARK: - OpenAI OAuth
-    func signInWithOpenAI() {
-        isSigningInOpenAI = true
-        openAIOAuthError = nil
-        Task {
-            do {
-                try await OAuthService.shared.signInWithOpenAI()
-                await MainActor.run {
-                    isSigningInOpenAI = false
-                    OpenAIService.shared.reloadAPIKey()
-                    objectWillChange.send()
-                }
-            } catch {
-                await MainActor.run {
-                    isSigningInOpenAI = false
-                    openAIOAuthError = error.localizedDescription
-                }
-                print("OpenAI OAuth sign in error: \(error)")
-            }
-        }
-    }
-
-    func disconnectOpenAIOAuth() {
-        AIService.shared.disconnectOAuth(for: .openai)
-        objectWillChange.send()
-    }
-
-    func openKeyURL(for provider: AIProvider) {
-        if let url = URL(string: provider.helpURL) {
-            NSWorkspace.shared.open(url)
         }
     }
 

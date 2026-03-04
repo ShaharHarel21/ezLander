@@ -18,12 +18,13 @@ struct OnboardingView: View {
     @State private var isActivating = false
     @State private var errorMessage: String?
     @State private var showReferralInput = false
-    @State private var selectedPlan: PlanType = .yearly
+    @State private var selectedTier: TierType = .pro
+    @State private var isYearly: Bool = true
     @State private var showSuccess = false
     @State private var iconFloat = false
 
-    private enum PlanType {
-        case monthly, yearly
+    private enum TierType {
+        case pro, max
     }
 
     var body: some View {
@@ -100,30 +101,50 @@ struct OnboardingView: View {
                 .foregroundColor(.secondary)
                 .padding(.top, 2)
 
-            // Pricing cards
+            // Tier selection
             HStack(spacing: 12) {
                 PlanCard(
-                    title: "Monthly",
-                    price: "$10",
+                    title: "Pro",
+                    price: isYearly ? "$8.25" : "$10",
                     period: "/month",
-                    isSelected: selectedPlan == .monthly,
-                    badge: nil
+                    isSelected: selectedTier == .pro,
+                    badge: "2M tokens"
                 ) {
-                    withAnimation(.spring(response: 0.3)) { selectedPlan = .monthly }
+                    withAnimation(.spring(response: 0.3)) { selectedTier = .pro }
                 }
 
                 PlanCard(
-                    title: "Yearly",
-                    price: "$99",
-                    period: "/year",
-                    isSelected: selectedPlan == .yearly,
-                    badge: "Save 17%"
+                    title: "Max",
+                    price: isYearly ? "$16.58" : "$20",
+                    period: "/month",
+                    isSelected: selectedTier == .max,
+                    badge: "5M tokens"
                 ) {
-                    withAnimation(.spring(response: 0.3)) { selectedPlan = .yearly }
+                    withAnimation(.spring(response: 0.3)) { selectedTier = .max }
                 }
             }
             .padding(.horizontal, 36)
             .padding(.top, 22)
+
+            // Billing toggle
+            HStack(spacing: 8) {
+                Text("Monthly")
+                    .font(.caption)
+                    .foregroundColor(!isYearly ? .primary : .secondary)
+                Toggle("", isOn: $isYearly)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                    .scaleEffect(0.7)
+                Text("Yearly")
+                    .font(.caption)
+                    .foregroundColor(isYearly ? .primary : .secondary)
+                if isYearly {
+                    Text("Save 17%")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(.green)
+                }
+            }
+            .padding(.top, 4)
 
             // Subscribe button
             Button(action: subscribe) {
@@ -370,15 +391,18 @@ struct OnboardingView: View {
     // MARK: - Actions
 
     private func subscribe() {
+        let tierKey = selectedTier == .pro ? "pro" : "max"
+        let billingKey = isYearly ? "yearly" : "monthly"
+        let planParam = "\(tierKey)_\(billingKey)"
         let trimmedCode = referralCode.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedCode.isEmpty,
-           let url = URL(string: "https://ezlander.app/pricing?ref=\(trimmedCode)") {
+
+        var urlString = "https://ezlander.app/pricing?plan=\(planParam)"
+        if !trimmedCode.isEmpty {
+            urlString += "&ref=\(trimmedCode)"
+        }
+
+        if let url = URL(string: urlString) {
             NSWorkspace.shared.open(url)
-        } else if selectedPlan == .yearly,
-                  let url = URL(string: "https://ezlander.app/pricing?plan=yearly") {
-            NSWorkspace.shared.open(url)
-        } else {
-            SubscriptionService.shared.openPurchasePage()
         }
     }
 

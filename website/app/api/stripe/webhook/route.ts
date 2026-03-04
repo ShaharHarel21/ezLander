@@ -1,15 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { db } from '@/lib/db'
-import { users, referrals } from '@/lib/db/schema'
+import { users, referrals, authUsers } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
 import { generateReferralCode, REFERRAL_CAP, REFERRAL_REWARD_DAYS } from '@/lib/referral'
+import { getTierFromPriceId } from '@/lib/stripe'
+import { upsertSubscription, updateSubscriptionStatus, type SubscriptionStatus } from '@/lib/db/subscription-repo'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2023-10-16',
 })
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!
+
+function getPriceId(subscription: Stripe.Subscription): string {
+  return subscription.items.data[0]?.price?.id ?? ''
+}
 
 function getPlanLookupKey(subscription: Stripe.Subscription): string {
   return (
@@ -84,6 +90,23 @@ export async function POST(request: NextRequest) {
   }
 }
 
+async function findOrCreateAuthUser(email: string): Promise<string | null> {
+  // Try to find existing auth user
+  const existing = await db.query.authUsers.findFirst({
+    where: eq(authUsers.email, email),
+  })
+  if (existing) return existing.id
+
+  // Create new auth user
+  const id = crypto.randomUUID()
+  await db.insert(authUsers).values({
+    id,
+    email,
+    name: email.split('@')[0],
+  })
+  return id
+}
+
 async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
   const customerId = session.customer as string
   const email = session.customer_email || session.customer_details?.email
@@ -104,16 +127,31 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
     })
   }
 
-  // Check for referral code in subscription metadata
+  // Upsert subscription in our DB
   const subscriptionId = session.subscription as string
   if (!subscriptionId) return
 
   const subscription = await stripe.subscriptions.retrieve(subscriptionId)
-  const referralCode = subscription.metadata?.referral_code
+  const priceId = getPriceId(subscription)
+  const tier = subscription.metadata?.tier
+    ? (subscription.metadata.tier as 'pro' | 'max')
+    : getTierFromPriceId(priceId)
 
+  const authUserId = await findOrCreateAuthUser(email)
+  if (authUserId) {
+    await upsertSubscription(authUserId, {
+      stripeCustomerId: customerId,
+      stripeSubscriptionId: subscriptionId,
+      tier,
+      status: subscription.status === 'trialing' ? 'trialing' : 'active',
+      currentPeriodEnd: new Date(subscription.current_period_end * 1000).toISOString(),
+    })
+  }
+
+  // Process referral code
+  const referralCode = subscription.metadata?.referral_code
   if (!referralCode) return
 
-  // Find referrer
   const referrer = await db.query.users.findFirst({
     where: eq(users.referralCode, referralCode),
   })
@@ -188,15 +226,54 @@ async function handleSubscriptionCreated(subscription: Stripe.Subscription) {
 
       console.log(`Credits paused for re-subscribing user: ${email}`)
     }
+
+    // Ensure subscription record exists
+    const priceId = getPriceId(subscription)
+    const tier = subscription.metadata?.tier
+      ? (subscription.metadata.tier as 'pro' | 'max')
+      : getTierFromPriceId(priceId)
+
+    const authUserId = await findOrCreateAuthUser(email)
+    if (authUserId) {
+      await upsertSubscription(authUserId, {
+        stripeCustomerId: customerId,
+        stripeSubscriptionId: subscription.id,
+        tier,
+        status: subscription.status === 'trialing' ? 'trialing' : 'active',
+        currentPeriodEnd: new Date(subscription.current_period_end * 1000).toISOString(),
+      })
+    }
   }
 }
 
 async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
   console.log(`Subscription updated: ${subscription.id}, status: ${subscription.status}`)
+
+  const priceId = getPriceId(subscription)
+  const tier = subscription.metadata?.tier
+    ? (subscription.metadata.tier as 'pro' | 'max')
+    : getTierFromPriceId(priceId)
+
+  const statusMap: Record<string, SubscriptionStatus> = {
+    active: 'active',
+    trialing: 'trialing',
+    canceled: 'canceled',
+    past_due: 'past_due',
+    unpaid: 'expired',
+  }
+
+  const mappedStatus: SubscriptionStatus = statusMap[subscription.status] ?? 'expired'
+
+  await updateSubscriptionStatus(subscription.id, mappedStatus, {
+    tier,
+    currentPeriodEnd: new Date(subscription.current_period_end * 1000).toISOString(),
+  })
 }
 
 async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
   console.log(`Subscription deleted: ${subscription.id}`)
+
+  await updateSubscriptionStatus(subscription.id, 'expired')
 }
 
 async function handlePaymentSucceeded(invoice: Stripe.Invoice) {

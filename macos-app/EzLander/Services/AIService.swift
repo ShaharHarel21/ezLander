@@ -1,84 +1,6 @@
 import Foundation
 import Combine
 
-// MARK: - AI Provider Enum
-enum AIProvider: String, CaseIterable, Codable, Identifiable {
-    case openai = "openai"
-    case claude = "claude"
-    case gemini = "gemini"
-    case kimi = "kimi"
-
-    var id: String { rawValue }
-
-    var displayName: String {
-        switch self {
-        case .openai: return "OpenAI"
-        case .claude: return "Claude"
-        case .gemini: return "Google Gemini"
-        case .kimi: return "Kimi (NVIDIA)"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .openai: return "brain"
-        case .claude: return "brain.head.profile"
-        case .gemini: return "sparkles"
-        case .kimi: return "cpu"
-        }
-    }
-
-    var keychainKey: String {
-        switch self {
-        case .openai: return "openai_api_key"
-        case .claude: return "anthropic_api_key"
-        case .gemini: return "gemini_api_key"
-        case .kimi: return "kimi_api_key"
-        }
-    }
-
-    var keyPlaceholder: String {
-        switch self {
-        case .openai: return "sk-..."
-        case .claude: return "sk-ant-..."
-        case .gemini: return "AI..."
-        case .kimi: return "nvapi-..."
-        }
-    }
-
-    var helpURL: String {
-        switch self {
-        case .openai: return "https://platform.openai.com/api-keys"
-        case .claude: return "https://console.anthropic.com/settings/keys"
-        case .gemini: return "https://aistudio.google.com/apikey"
-        case .kimi: return "https://build.nvidia.com"
-        }
-    }
-
-    var isConfigured: Bool {
-        switch self {
-        case .openai: return OpenAIService.shared.isConfigured
-        case .claude: return ClaudeService.shared.isConfigured
-        case .gemini: return GeminiService.shared.isConfigured
-        case .kimi: return KimiService.shared.isConfigured
-        }
-    }
-
-    var supportsOAuth: Bool {
-        switch self {
-        case .openai: return true
-        default: return false
-        }
-    }
-
-    var isOAuthConnected: Bool {
-        switch self {
-        case .openai: return OAuthService.shared.isSignedInWithOpenAI
-        default: return false
-        }
-    }
-}
-
 // MARK: - Reply Tone
 enum ReplyTone: String, CaseIterable, Identifiable {
     case formal
@@ -107,53 +29,59 @@ enum ReplyTone: String, CaseIterable, Identifiable {
     }
 }
 
+// MARK: - AI Model Selection
+enum AIModel: String, CaseIterable, Identifiable {
+    case gpt4o = "gpt-4o"
+    case gpt4oMini = "gpt-4o-mini"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .gpt4o: return "GPT-4o"
+        case .gpt4oMini: return "GPT-4o Mini"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .gpt4o: return "brain"
+        case .gpt4oMini: return "brain.head.profile"
+        }
+    }
+}
+
 // MARK: - AI Service Manager
 class AIService: ObservableObject {
     static let shared = AIService()
 
-    @Published var currentProvider: AIProvider {
+    private let proxyService = ProxyAIService.shared
+
+    @Published var selectedModel: AIModel {
         didSet {
-            UserDefaults.standard.set(currentProvider.rawValue, forKey: "ai_provider")
+            proxyService.selectedModel = selectedModel.rawValue
+            UserDefaults.standard.set(selectedModel.rawValue, forKey: "ai_model")
         }
     }
 
     private init() {
-        if let savedProvider = UserDefaults.standard.string(forKey: "ai_provider"),
-           let provider = AIProvider(rawValue: savedProvider) {
-            currentProvider = provider
+        if let savedModel = UserDefaults.standard.string(forKey: "ai_model"),
+           let model = AIModel(rawValue: savedModel) {
+            selectedModel = model
         } else {
-            currentProvider = .claude
+            selectedModel = .gpt4o
         }
+        proxyService.selectedModel = selectedModel.rawValue
     }
 
     // MARK: - Send Message
     func sendMessage(_ text: String, conversationHistory: [ChatMessage]) async throws -> ChatMessage {
-        switch currentProvider {
-        case .openai:
-            return try await OpenAIService.shared.sendMessage(text, conversationHistory: conversationHistory)
-        case .claude:
-            return try await ClaudeService.shared.sendMessage(text, conversationHistory: conversationHistory)
-        case .gemini:
-            return try await GeminiService.shared.sendMessage(text, conversationHistory: conversationHistory)
-        case .kimi:
-            return try await KimiService.shared.sendMessage(text, conversationHistory: conversationHistory)
-        }
+        return try await proxyService.sendMessage(text, conversationHistory: conversationHistory)
     }
 
     // MARK: - Stream Message
-    /// Returns an AsyncThrowingStream of text chunks for streaming-capable providers.
-    /// Falls back to nil for providers that don't support streaming (Gemini, Kimi).
     func streamMessage(_ text: String, conversationHistory: [ChatMessage]) -> AsyncThrowingStream<String, Error>? {
-        switch currentProvider {
-        case .openai:
-            return OpenAIService.shared.streamMessage(text, conversationHistory: conversationHistory)
-        case .claude:
-            return ClaudeService.shared.streamMessage(text, conversationHistory: conversationHistory)
-        case .gemini:
-            return GeminiService.shared.streamMessage(text, conversationHistory: conversationHistory)
-        case .kimi:
-            return KimiService.shared.streamMessage(text, conversationHistory: conversationHistory)
-        }
+        return proxyService.streamMessage(text, conversationHistory: conversationHistory)
     }
 
     // MARK: - Summarize Email
@@ -170,53 +98,13 @@ class AIService: ObservableObject {
         return response.content
     }
 
-    // MARK: - Check if any provider is configured
-    var hasAnyProviderConfigured: Bool {
-        AIProvider.allCases.contains { $0.isConfigured }
-    }
+    // MARK: - Usage Info
+    var tokensUsed: Int { proxyService.tokensUsed }
+    var tokensLimit: Int { proxyService.tokensLimit }
+    var tokensRemaining: Int { proxyService.tokensRemaining }
+    var tier: String { proxyService.tier }
 
-    // MARK: - Get configured providers
-    var configuredProviders: [AIProvider] {
-        AIProvider.allCases.filter { $0.isConfigured }
-    }
-
-    // MARK: - Save API Key
-    func saveAPIKey(_ key: String, for provider: AIProvider) {
-        let trimmedKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedKey.isEmpty else { return }
-
-        KeychainService.shared.save(key: provider.keychainKey, value: trimmedKey)
-
-        // Reload the service
-        switch provider {
-        case .openai: OpenAIService.shared.reloadAPIKey()
-        case .claude: ClaudeService.shared.reloadAPIKey()
-        case .gemini: GeminiService.shared.reloadAPIKey()
-        case .kimi: KimiService.shared.reloadAPIKey()
-        }
-    }
-
-    // MARK: - Disconnect OAuth
-    func disconnectOAuth(for provider: AIProvider) {
-        switch provider {
-        case .openai:
-            OAuthService.shared.signOutOpenAI()
-            OpenAIService.shared.reloadAPIKey()
-        default:
-            break
-        }
-    }
-
-    // MARK: - Remove API Key
-    func removeAPIKey(for provider: AIProvider) {
-        KeychainService.shared.delete(key: provider.keychainKey)
-
-        // Reload the service to clear the cached key
-        switch provider {
-        case .openai: OpenAIService.shared.reloadAPIKey()
-        case .claude: ClaudeService.shared.reloadAPIKey()
-        case .gemini: GeminiService.shared.reloadAPIKey()
-        case .kimi: KimiService.shared.reloadAPIKey()
-        }
+    var isAuthenticated: Bool {
+        proxyService.isAuthenticated
     }
 }

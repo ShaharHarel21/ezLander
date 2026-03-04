@@ -1,4 +1,5 @@
 import Stripe from 'stripe'
+import type { SubscriptionTier } from '@/lib/tiers'
 
 export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2023-10-16',
@@ -6,18 +7,51 @@ export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 })
 
 export const STRIPE_PLANS = {
-  monthly: {
-    priceId: process.env.STRIPE_MONTHLY_PRICE_ID!,
+  pro_monthly: {
+    priceId: process.env.STRIPE_PRO_MONTHLY_PRICE_ID!,
+    tier: 'pro' as SubscriptionTier,
     price: 9.99,
     interval: 'month' as const,
     trialDays: 7,
   },
-  yearly: {
-    priceId: process.env.STRIPE_YEARLY_PRICE_ID!,
+  pro_yearly: {
+    priceId: process.env.STRIPE_PRO_YEARLY_PRICE_ID!,
+    tier: 'pro' as SubscriptionTier,
     price: 99,
     interval: 'year' as const,
     trialDays: 14,
   },
+  max_monthly: {
+    priceId: process.env.STRIPE_MAX_MONTHLY_PRICE_ID!,
+    tier: 'max' as SubscriptionTier,
+    price: 19.99,
+    interval: 'month' as const,
+    trialDays: 7,
+  },
+  max_yearly: {
+    priceId: process.env.STRIPE_MAX_YEARLY_PRICE_ID!,
+    tier: 'max' as SubscriptionTier,
+    price: 199,
+    interval: 'year' as const,
+    trialDays: 14,
+  },
+}
+
+export type StripePlanKey = keyof typeof STRIPE_PLANS
+
+// Legacy plan IDs for backward compatibility during migration
+const LEGACY_PRICE_IDS: Record<string, SubscriptionTier> = {
+  [process.env.STRIPE_MONTHLY_PRICE_ID ?? '']: 'pro',
+  [process.env.STRIPE_YEARLY_PRICE_ID ?? '']: 'pro',
+}
+
+export function getTierFromPriceId(priceId: string): SubscriptionTier {
+  // Check new plans first
+  for (const plan of Object.values(STRIPE_PLANS)) {
+    if (plan.priceId === priceId) return plan.tier
+  }
+  // Fall back to legacy mapping
+  return LEGACY_PRICE_IDS[priceId] ?? 'pro'
 }
 
 function getSubscriptionPlanLookupKey(subscription: Stripe.Subscription): string | null {
@@ -49,7 +83,7 @@ export async function getActiveSubscription(customerId: string) {
 
 export async function createCheckoutSession(
   email: string,
-  plan: 'monthly' | 'yearly'
+  plan: StripePlanKey
 ) {
   const planDetails = STRIPE_PLANS[plan]
 
@@ -69,6 +103,10 @@ export async function createCheckoutSession(
     ],
     subscription_data: {
       trial_period_days: planDetails.trialDays,
+      metadata: {
+        tier: planDetails.tier,
+        plan,
+      },
     },
     success_url: `${process.env.NEXT_PUBLIC_APP_URL}/download?success=true`,
     cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/pricing?canceled=true`,

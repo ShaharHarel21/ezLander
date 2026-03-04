@@ -10,11 +10,12 @@ struct LicenseView: View {
     @State private var isActivating: Bool = false
     @State private var errorMessage: String?
     @State private var showReferralField: Bool = false
-    @State private var selectedPlan: PricingPlan = .monthly
+    @State private var selectedTier: TierType = .pro
+    @State private var isYearly: Bool = false
     @Binding var isLicenseActivated: Bool
 
-    private enum PricingPlan {
-        case monthly, yearly
+    private enum TierType {
+        case pro, max
     }
 
     var body: some View {
@@ -63,33 +64,53 @@ struct LicenseView: View {
 
                     Spacer().frame(height: 20)
 
-                    // Pricing cards
+                    // Tier selection
                     HStack(spacing: 10) {
                         PricingCard(
-                            title: "Monthly",
-                            price: "$10",
+                            title: "Pro",
+                            price: isYearly ? "$8.25" : "$10",
                             period: "/month",
-                            isSelected: selectedPlan == .monthly,
-                            badge: nil
+                            isSelected: selectedTier == .pro,
+                            badge: "2M tokens"
                         ) {
                             withAnimation(.easeInOut(duration: 0.15)) {
-                                selectedPlan = .monthly
+                                selectedTier = .pro
                             }
                         }
 
                         PricingCard(
-                            title: "Yearly",
-                            price: "$99",
-                            period: "/year",
-                            isSelected: selectedPlan == .yearly,
-                            badge: "Save 17%"
+                            title: "Max",
+                            price: isYearly ? "$16.58" : "$20",
+                            period: "/month",
+                            isSelected: selectedTier == .max,
+                            badge: "5M tokens"
                         ) {
                             withAnimation(.easeInOut(duration: 0.15)) {
-                                selectedPlan = .yearly
+                                selectedTier = .max
                             }
                         }
                     }
                     .padding(.horizontal, 32)
+
+                    // Monthly/Yearly toggle
+                    HStack(spacing: 8) {
+                        Text("Monthly")
+                            .font(.caption)
+                            .foregroundColor(!isYearly ? .primary : .secondary)
+                        Toggle("", isOn: $isYearly)
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+                            .scaleEffect(0.7)
+                        Text("Yearly")
+                            .font(.caption)
+                            .foregroundColor(isYearly ? .primary : .secondary)
+                        if isYearly {
+                            Text("Save 17%")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundColor(.green)
+                        }
+                    }
+                    .padding(.top, 4)
 
                     Spacer().frame(height: 14)
 
@@ -275,12 +296,18 @@ struct LicenseView: View {
     // MARK: - Actions
 
     private func openPurchasePage() {
+        let tierKey = selectedTier == .pro ? "pro" : "max"
+        let billingKey = isYearly ? "yearly" : "monthly"
+        let planParam = "\(tierKey)_\(billingKey)"
         let trimmedCode = referralCode.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedCode.isEmpty,
-           let url = URL(string: "https://ezlander.app/pricing?ref=\(trimmedCode)") {
+
+        var urlString = "https://ezlander.app/pricing?plan=\(planParam)"
+        if !trimmedCode.isEmpty {
+            urlString += "&ref=\(trimmedCode)"
+        }
+
+        if let url = URL(string: urlString) {
             NSWorkspace.shared.open(url)
-        } else {
-            SubscriptionService.shared.openPurchasePage()
         }
     }
 
