@@ -120,6 +120,13 @@ struct ChatView: View {
                         }
                     }
                 }
+                // Also scroll when the last message's content grows (streaming updates).
+                // Without this, streaming tokens append silently above the fold.
+                .onChange(of: viewModel.messages.last?.content) { _ in
+                    if let lastMessage = viewModel.messages.last {
+                        proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                    }
+                }
             }
 
             conversationListOverlay
@@ -280,7 +287,19 @@ struct ChatView: View {
         panel.allowedContentTypes = [.plainText]
         panel.begin { response in
             if response == .OK, let url = panel.url {
-                try? text.write(to: url, atomically: true, encoding: String.Encoding.utf8)
+                do {
+                    try text.write(to: url, atomically: true, encoding: .utf8)
+                } catch {
+                    // Show a modal error so the user knows the export failed instead of silently dropping data.
+                    DispatchQueue.main.async {
+                        let alert = NSAlert()
+                        alert.messageText = "Export Failed"
+                        alert.informativeText = error.localizedDescription
+                        alert.alertStyle = .warning
+                        alert.addButton(withTitle: "OK")
+                        alert.runModal()
+                    }
+                }
             }
         }
     }
@@ -683,9 +702,10 @@ class ChatViewModel: ObservableObject {
             for try await chunk in stream {
                 fullText += chunk
 
-                // Check if Claude detected a tool use — fall back to non-streaming
+                // Check if Claude detected a tool use — fall back to non-streaming.
+                // We check before updating the placeholder so the internal sentinel
+                // never appears in the UI regardless of timing.
                 if fullText.contains("[TOOL_USE_DETECTED]") {
-                    // Remove placeholder and retry non-streaming
                     await MainActor.run {
                         messages.removeAll { $0.id == placeholderId }
                     }
@@ -693,22 +713,28 @@ class ChatViewModel: ObservableObject {
                     return
                 }
 
+                // Strip the internal sentinel before rendering — it must never appear in the UI.
+                let displayText = fullText.replacingOccurrences(of: "\n[TOOL_USE_DETECTED]", with: "")
+                                         .replacingOccurrences(of: "[TOOL_USE_DETECTED]", with: "")
                 await MainActor.run {
                     if isLoading { isLoading = false }  // Hide typing indicator after first chunk
                     if let index = messages.firstIndex(where: { $0.id == placeholderId }) {
-                        messages[index] = ChatMessage(id: placeholderId, role: .assistant, content: fullText)
+                        messages[index] = ChatMessage(id: placeholderId, role: .assistant, content: displayText)
                     }
                 }
             }
 
+            // Final sanitised text (sentinel already stripped in per-chunk update above)
+            let finalText = fullText.replacingOccurrences(of: "\n[TOOL_USE_DETECTED]", with: "")
+                                    .replacingOccurrences(of: "[TOOL_USE_DETECTED]", with: "")
             await MainActor.run {
                 isLoading = false
 
                 // Track estimated tokens
-                sessionOutputTokens += TokenEstimator.estimate(fullText)
+                sessionOutputTokens += TokenEstimator.estimate(finalText)
 
                 // Check if the completed response contains an action
-                if let action = parseActionFromResponse(fullText, userMessage: userMessage) {
+                if let action = parseActionFromResponse(finalText, userMessage: userMessage) {
                     // Replace the streamed message with the action prompt
                     messages.removeAll { $0.id == placeholderId }
                     pendingAction = action

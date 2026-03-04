@@ -29,6 +29,9 @@ struct Conversation: Identifiable, Codable {
 }
 
 /// Manages multiple conversations with persistence.
+/// @MainActor ensures all @Published mutations happen on the main thread,
+/// preventing "Publishing changes from background threads is not allowed" crashes.
+@MainActor
 class ConversationStore: ObservableObject {
     static let shared = ConversationStore()
 

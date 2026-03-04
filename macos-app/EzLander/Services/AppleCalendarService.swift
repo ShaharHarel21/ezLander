@@ -13,13 +13,23 @@ class AppleCalendarService {
     func requestAccess(completion: @escaping (Bool) -> Void) {
         if #available(macOS 14.0, *) {
             eventStore.requestFullAccessToEvents { [weak self] granted, error in
-                self?.hasAccess = granted
-                completion(granted)
+                if let error = error {
+                    NSLog("AppleCalendarService: requestFullAccessToEvents error: \(error)")
+                }
+                DispatchQueue.main.async {
+                    self?.hasAccess = granted
+                    completion(granted)
+                }
             }
         } else {
             eventStore.requestAccess(to: .event) { [weak self] granted, error in
-                self?.hasAccess = granted
-                completion(granted)
+                if let error = error {
+                    NSLog("AppleCalendarService: requestAccess error: \(error)")
+                }
+                DispatchQueue.main.async {
+                    self?.hasAccess = granted
+                    completion(granted)
+                }
             }
         }
     }
