@@ -133,7 +133,7 @@ export default function FAQ() {
         >
           <h3 className="text-xl font-semibold mb-2">Still have questions?</h3>
           <p className="text-gray-600 dark:text-gray-400 mb-4">
-            We're here to help. Reach out and we'll get back to you.
+            We&apos;re here to help. Reach out and we&apos;ll get back to you.
           </p>
           <a
             href="mailto:support@ezlander.app"

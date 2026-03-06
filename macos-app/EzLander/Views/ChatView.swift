@@ -62,7 +62,7 @@ struct ChatView: View {
 
                 Button(action: {
                     viewModel.clearConversation()
-                    let conv = store.createConversation(provider: AIService.shared.currentProvider.rawValue)
+                    let conv = store.createConversation(provider: AIService.shared.selectedModel.rawValue)
                     store.activeConversationId = conv.id
                 }) {
                     HStack(spacing: 4) {

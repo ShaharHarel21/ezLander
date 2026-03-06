@@ -250,7 +250,7 @@ struct EmailView: View {
                     .help("Move to")
                 }
 
-                if AIService.shared.hasAnyProviderConfigured {
+                if AIService.shared.isAuthenticated {
                     Button(action: { viewModel.summarizeEmail(email) }) {
                         Image(systemName: "sparkles")
                     }
@@ -1144,7 +1144,7 @@ struct ReplyEmailView: View {
                 Divider()
 
                 // AI Smart Reply
-                if AIService.shared.hasAnyProviderConfigured {
+                if AIService.shared.isAuthenticated {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack(spacing: 4) {
                             Image(systemName: "sparkles")

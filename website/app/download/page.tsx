@@ -178,7 +178,7 @@ export default function DownloadPage() {
                       Notarized by Apple
                     </p>
                     <p className="text-sm text-gray-600 dark:text-gray-400">
-                      ezLander is signed and notarized by Apple, ensuring it's safe to install.
+                      ezLander is signed and notarized by Apple, ensuring it&apos;s safe to install.
                     </p>
                   </div>
                 </div>

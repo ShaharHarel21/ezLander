@@ -135,7 +135,7 @@ export default function Hero() {
                       </div>
                       <div className="flex justify-start">
                         <div className="bg-gray-700 text-white px-4 py-2 rounded-2xl rounded-bl-md max-w-sm">
-                          Done! I've created "Meeting with John" for tomorrow at 2:00 PM on your Google Calendar.
+                          Done! I&apos;ve created &quot;Meeting with John&quot; for tomorrow at 2:00 PM on your Google Calendar.
                         </div>
                       </div>
                     </div>

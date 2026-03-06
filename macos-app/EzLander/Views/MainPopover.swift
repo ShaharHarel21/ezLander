@@ -60,7 +60,7 @@ struct MainPopover: View {
             Spacer()
 
             // Provider pill
-            Text(aiService.currentProvider.displayName)
+            Text(aiService.selectedModel.displayName)
                 .font(.system(size: 10, weight: .medium, design: .rounded))
                 .foregroundColor(.warmPrimary)
                 .padding(.horizontal, 8)

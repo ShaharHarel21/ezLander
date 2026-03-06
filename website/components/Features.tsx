@@ -102,7 +102,7 @@ export default function Features() {
           >
             Everything you need,
             <br />
-            <span className="gradient-text">nothing you don't</span>
+            <span className="gradient-text">nothing you don&apos;t</span>
           </motion.h2>
           <motion.p
             initial={{ opacity: 0, y: 20 }}
