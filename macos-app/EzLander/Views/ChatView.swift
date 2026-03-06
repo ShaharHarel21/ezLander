@@ -135,17 +135,17 @@ struct ChatView: View {
                     QuickActionButton(icon: "calendar.badge.plus", label: "Tomorrow") {
                         viewModel.sendMessage("What's on my calendar tomorrow?")
                     }
-                    QuickActionButton(icon: "envelope", label: "Draft Email") {
-                        viewModel.sendMessage("Help me draft an email")
-                    }
-                    QuickActionButton(icon: "envelope.open", label: "Summarize Emails") {
-                        viewModel.sendMessage("Summarize my latest unread emails")
-                    }
-                    QuickActionButton(icon: "magnifyingglass", label: "Search") {
-                        viewModel.sendMessage("Search my recent emails")
+                    QuickActionButton(icon: "calendar.badge.clock", label: "This Week") {
+                        viewModel.sendMessage("What's on my calendar this week?")
                     }
                     QuickActionButton(icon: "clock", label: "Next Meeting") {
                         viewModel.sendMessage("When is my next meeting and help me prepare for it")
+                    }
+                    QuickActionButton(icon: "clock.badge.checkmark", label: "Free Time") {
+                        viewModel.sendMessage("When do I have free time today?")
+                    }
+                    QuickActionButton(icon: "envelope", label: "Draft Email") {
+                        viewModel.sendMessage("Help me draft an email")
                     }
                 }
                 .padding(.horizontal)
@@ -704,9 +704,10 @@ class ChatViewModel: ObservableObject {
                     return
                 }
 
+                let displayText = Self.stripActionMarkers(from: fullText)
                 await MainActor.run {
                     if let index = messages.firstIndex(where: { $0.id == placeholderId }) {
-                        messages[index] = ChatMessage(id: placeholderId, role: .assistant, content: fullText)
+                        messages[index] = ChatMessage(id: placeholderId, role: .assistant, content: displayText)
                     }
                 }
             }
@@ -719,12 +720,22 @@ class ChatViewModel: ObservableObject {
                     // Replace the streamed message with the action prompt
                     messages.removeAll { $0.id == placeholderId }
                     pendingAction = action
+                    let strippedContent = Self.stripActionMarkers(from: fullText)
+                    let displayContent = strippedContent.isEmpty
+                        ? "I've prepared the following action for you. Please review and confirm:"
+                        : strippedContent
                     let actionMsg = ChatMessage(
                         role: .assistant,
-                        content: "I've prepared the following action for you. Please review and confirm:"
+                        content: displayContent
                     )
                     pendingActionMessageId = actionMsg.id
                     messages.append(actionMsg)
+                } else {
+                    // Ensure final stored message has markers stripped
+                    let strippedFinal = Self.stripActionMarkers(from: fullText)
+                    if let index = messages.firstIndex(where: { $0.id == placeholderId }) {
+                        messages[index] = ChatMessage(id: placeholderId, role: .assistant, content: strippedFinal)
+                    }
                 }
                 trimMessagesIfNeeded()
             }
@@ -752,14 +763,26 @@ class ChatViewModel: ObservableObject {
                     messages.append(response)
                 } else if let action = parseActionFromResponse(response.content, userMessage: text) {
                     pendingAction = action
+                    let strippedContent = Self.stripActionMarkers(from: response.content)
+                    let displayContent = strippedContent.isEmpty
+                        ? "I've prepared the following action for you. Please review and confirm:"
+                        : strippedContent
                     let actionMsg = ChatMessage(
                         role: .assistant,
-                        content: "I've prepared the following action for you. Please review and confirm:"
+                        content: displayContent
                     )
                     pendingActionMessageId = actionMsg.id
                     messages.append(actionMsg)
                 } else {
-                    messages.append(response)
+                    // Strip any stray markers from displayed content
+                    let cleaned = Self.stripActionMarkers(from: response.content)
+                    let displayMsg = ChatMessage(
+                        id: response.id,
+                        role: response.role,
+                        content: cleaned,
+                        toolCall: response.toolCall
+                    )
+                    messages.append(displayMsg)
                 }
                 trimMessagesIfNeeded()
             }
@@ -878,13 +901,83 @@ class ChatViewModel: ObservableObject {
         ))
     }
 
-    // Parse action requests from AI response
-    private func parseActionFromResponse(_ content: String, userMessage: String = "") -> AIAction? {
-        // Look for action markers in the response
-        // Format: [ACTION:type] followed by JSON data
+    // MARK: - Structured Action Marker Stripping
 
-        // Check for event creation pattern
-        if content.contains("[CREATE_EVENT]") || content.lowercased().contains("i'll create") || content.lowercased().contains("i will create") {
+    /// Remove `[CREATE_EVENT]{...}` and `[SEND_EMAIL]{...}` markers from displayed text.
+    static func stripActionMarkers(from text: String) -> String {
+        var result = text
+        let patterns = [
+            "\\[CREATE_EVENT\\]\\{[^}]*\\}",
+            "\\[SEND_EMAIL\\]\\{[^}]*\\}",
+        ]
+        for pattern in patterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: []) {
+                let range = NSRange(result.startIndex..<result.endIndex, in: result)
+                result = regex.stringByReplacingMatches(in: result, range: range, withTemplate: "")
+            }
+        }
+        return result.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    // MARK: - Parse Action from AI Response
+
+    /// Parse action requests from AI response text.
+    /// Primary: structured `[CREATE_EVENT]{...}` / `[SEND_EMAIL]{...}` JSON markers.
+    /// Fallback: legacy regex-based heuristic parsing.
+    private func parseActionFromResponse(_ content: String, userMessage: String = "") -> AIAction? {
+        // --- Primary: structured [CREATE_EVENT] JSON marker ---
+        if let markerRange = content.range(of: "\\[CREATE_EVENT\\](\\{[^}]*\\})", options: .regularExpression) {
+            let markerText = String(content[markerRange])
+            if let jsonStart = markerText.firstIndex(of: "{") {
+                let jsonString = String(markerText[jsonStart...])
+                if let jsonData = jsonString.data(using: .utf8),
+                   let dict = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
+                    let title = dict["title"] as? String ?? "New Event"
+                    let dateStr = dict["date"] as? String ?? ""
+                    let timeStr = dict["time"] as? String ?? ""
+                    let durationMinutes = dict["duration_minutes"] as? Int ?? 60
+                    let location = dict["location"] as? String
+                    let startDate = EventParser.parseDateTime(date: dateStr, time: timeStr)
+                    let endDate = startDate.addingTimeInterval(TimeInterval(durationMinutes * 60))
+                    let eventData = EventActionData(
+                        title: title,
+                        startDate: startDate,
+                        endDate: endDate,
+                        location: location,
+                        description: nil
+                    )
+                    return AIAction(
+                        type: .createEvent,
+                        eventData: eventData,
+                        summary: "Create '\(title)'"
+                    )
+                }
+            }
+        }
+
+        // --- Primary: structured [SEND_EMAIL] JSON marker ---
+        if let markerRange = content.range(of: "\\[SEND_EMAIL\\](\\{[^}]*\\})", options: .regularExpression) {
+            let markerText = String(content[markerRange])
+            if let jsonStart = markerText.firstIndex(of: "{") {
+                let jsonString = String(markerText[jsonStart...])
+                if let jsonData = jsonString.data(using: .utf8),
+                   let dict = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
+                    let to = dict["to"] as? String ?? ""
+                    let subject = dict["subject"] as? String ?? "No Subject"
+                    let body = dict["body"] as? String ?? ""
+                    guard !to.isEmpty else { return nil }
+                    let emailData = EmailActionData(to: to, subject: subject, body: body)
+                    return AIAction(
+                        type: .sendEmail,
+                        emailData: emailData,
+                        summary: "Send email to \(to)"
+                    )
+                }
+            }
+        }
+
+        // --- Fallback: legacy regex/heuristic parsing ---
+        if content.lowercased().contains("i'll create") || content.lowercased().contains("i will create") {
             if let eventData = EventParser.parseEventData(from: content, userMessage: userMessage) {
                 return AIAction(
                     type: .createEvent,
@@ -894,8 +987,7 @@ class ChatViewModel: ObservableObject {
             }
         }
 
-        // Check for email sending pattern
-        if content.contains("[SEND_EMAIL]") || content.lowercased().contains("i'll send") || content.lowercased().contains("i will send") {
+        if content.lowercased().contains("i'll send") || content.lowercased().contains("i will send") {
             if let emailData = EmailParser.parseEmailData(from: content) {
                 return AIAction(
                     type: .sendEmail,
