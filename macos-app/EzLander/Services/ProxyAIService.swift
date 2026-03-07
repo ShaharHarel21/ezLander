@@ -2,26 +2,21 @@ import Foundation
 import Combine
 
 /// Sends AI requests through the backend proxy instead of calling providers directly.
-/// The proxy uses a server-side OpenAI API key and tracks token usage per user.
+/// The proxy uses the app's managed server-side AI credentials and tracks token usage per user.
 class ProxyAIService: ObservableObject {
     static let shared = ProxyAIService()
 
     private let baseURL = "https://ezlander.app/api/ai/chat"
+    let serviceLabel = "Managed AI"
 
     @Published var tokensUsed: Int = 0
     @Published var tokensLimit: Int = 0
     @Published var tokensRemaining: Int = 0
     @Published var tier: String = ""
-
-    /// Selected model (user preference). Allowed: gpt-4o, gpt-4o-mini.
-    @Published var selectedModel: String = "gpt-4o" {
-        didSet {
-            UserDefaults.standard.set(selectedModel, forKey: "proxy_ai_model")
-        }
-    }
+    @Published private(set) var isAuthenticated: Bool = false
 
     private init() {
-        selectedModel = UserDefaults.standard.string(forKey: "proxy_ai_model") ?? "gpt-4o"
+        isAuthenticated = jwtToken != nil
     }
 
     // MARK: - JWT Token
@@ -32,14 +27,20 @@ class ProxyAIService: ObservableObject {
 
     func saveJWT(_ token: String) {
         KeychainService.shared.save(key: "proxy_jwt_token", value: token)
+        DispatchQueue.main.async {
+            self.isAuthenticated = true
+        }
     }
 
     func clearJWT() {
         KeychainService.shared.delete(key: "proxy_jwt_token")
-    }
-
-    var isAuthenticated: Bool {
-        jwtToken != nil
+        DispatchQueue.main.async {
+            self.isAuthenticated = false
+            self.tokensUsed = 0
+            self.tokensLimit = 0
+            self.tokensRemaining = 0
+            self.tier = ""
+        }
     }
 
     // MARK: - Send Message (non-streaming)
@@ -65,7 +66,6 @@ class ProxyAIService: ObservableObject {
         messages.append(["role": "user", "content": text])
 
         let requestBody: [String: Any] = [
-            "model": selectedModel,
             "messages": messages,
             "temperature": 0.5,
             "max_tokens": 2048,
@@ -137,7 +137,6 @@ class ProxyAIService: ObservableObject {
                     messages.append(["role": "user", "content": text])
 
                     let requestBody: [String: Any] = [
-                        "model": self.selectedModel,
                         "messages": messages,
                         "temperature": 0.5,
                         "max_tokens": 2048,

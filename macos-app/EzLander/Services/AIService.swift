@@ -29,50 +29,12 @@ enum ReplyTone: String, CaseIterable, Identifiable {
     }
 }
 
-// MARK: - AI Model Selection
-enum AIModel: String, CaseIterable, Identifiable {
-    case gpt4o = "gpt-4o"
-    case gpt4oMini = "gpt-4o-mini"
-
-    var id: String { rawValue }
-
-    var displayName: String {
-        switch self {
-        case .gpt4o: return "GPT-4o (Smartest)"
-        case .gpt4oMini: return "GPT-4o Mini (Fast)"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .gpt4o: return "brain"
-        case .gpt4oMini: return "brain.head.profile"
-        }
-    }
-}
-
 // MARK: - AI Service Manager
 class AIService: ObservableObject {
     static let shared = AIService()
 
     private let proxyService = ProxyAIService.shared
-
-    @Published var selectedModel: AIModel {
-        didSet {
-            proxyService.selectedModel = selectedModel.rawValue
-            UserDefaults.standard.set(selectedModel.rawValue, forKey: "ai_model")
-        }
-    }
-
-    private init() {
-        if let savedModel = UserDefaults.standard.string(forKey: "ai_model"),
-           let model = AIModel(rawValue: savedModel) {
-            selectedModel = model
-        } else {
-            selectedModel = .gpt4oMini
-        }
-        proxyService.selectedModel = selectedModel.rawValue
-    }
+    private init() {}
 
     // MARK: - Send Message
     func sendMessage(_ text: String, conversationHistory: [ChatMessage]) async throws -> ChatMessage {
@@ -104,7 +66,7 @@ class AIService: ObservableObject {
     var tokensRemaining: Int { proxyService.tokensRemaining }
     var tier: String { proxyService.tier }
 
-    var currentModelName: String { selectedModel.displayName }
+    var currentModelName: String { proxyService.serviceLabel }
 
     var isAuthenticated: Bool {
         proxyService.isAuthenticated

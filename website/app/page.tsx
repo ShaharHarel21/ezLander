@@ -10,7 +10,7 @@ const softwareJsonLd = {
   '@context': 'https://schema.org',
   '@type': 'SoftwareApplication',
   name: 'ezLander',
-  description: 'A macOS menu bar AI assistant that connects to your calendar and email. Supports OpenAI, Claude, Google Gemini, and Kimi.',
+  description: 'A macOS menu bar AI assistant that connects to your calendar and email with subscription-managed AI access built in.',
   url: 'https://ezlander.app',
   applicationCategory: 'ProductivityApplication',
   operatingSystem: 'macOS 13+',
@@ -60,7 +60,7 @@ const faqJsonLd = {
       name: 'What AI powers ezLander?',
       acceptedAnswer: {
         '@type': 'Answer',
-        text: "ezLander supports multiple AI providers: OpenAI (GPT-4o), Anthropic's Claude, Google Gemini, and Kimi. You choose which provider to use and provide your own API key — your key stays securely on your device and is never sent to our servers.",
+        text: 'ezLander uses managed server-side AI for subscribers. You sign in to the app and your subscription unlocks AI access automatically, so there are no user API keys or model settings to manage.',
       },
     },
     {

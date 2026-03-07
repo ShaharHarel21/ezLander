@@ -14,20 +14,8 @@ struct EzLanderApp: App {
     }
 }
 
-/// Prevents the user from closing onboarding/license windows without completing the flow.
-class NonClosableWindowDelegate: NSObject, NSWindowDelegate {
-    func windowShouldClose(_ sender: NSWindow) -> Bool {
-        // Block close — user must complete onboarding or license activation
-        NSSound.beep()
-        return false
-    }
-}
-
 class AppDelegate: NSObject, NSApplicationDelegate {
     var menuBarController: MenuBarController?
-    private var onboardingWindow: NSWindow?
-    private var licenseWindow: NSWindow?
-    private let windowDelegate = NonClosableWindowDelegate()
     static var isPreviewMode: Bool {
         CommandLine.arguments.contains("--preview-mode")
     }
@@ -66,19 +54,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        // Gate: onboarding for new users, license check for returning users
         if !Self.isPreviewMode {
-            if !UserDefaults.standard.bool(forKey: "onboardingComplete") {
-                // First-time user: show onboarding (subscription step at end)
-                showOnboarding()
-            } else {
-                // Returning user: check license
-                Task {
-                    let isLicensed = await SubscriptionService.shared.checkSubscriptionOnLaunch()
-                    await MainActor.run {
-                        if !isLicensed {
-                            showLicenseActivation()
-                        }
+            Task { [weak self] in
+                let isLicensed = await SubscriptionService.shared.checkSubscriptionOnLaunch()
+                await MainActor.run {
+                    let shouldShowAccess = !isLicensed
+                        || !ProxyAIService.shared.isAuthenticated
+                        || !UserDefaults.standard.bool(forKey: "onboardingComplete")
+
+                    if shouldShowAccess {
+                        self?.menuBarController?.showPopover()
                     }
                 }
             }
@@ -111,71 +96,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Cleanup
     }
 
-    private func showOnboarding() {
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 400, height: 500),
-            styleMask: [.titled],
-            backing: .buffered,
-            defer: false
-        )
-        window.center()
-        window.title = "Welcome to ezLander"
-        window.isReleasedWhenClosed = false
-        window.delegate = windowDelegate
-        window.level = .floating
-
-        let onboardingView = OnboardingView(isOnboardingComplete: Binding(
-            get: { UserDefaults.standard.bool(forKey: "onboardingComplete") },
-            set: { [weak self] complete in
-                if complete {
-                    self?.onboardingWindow?.delegate = nil
-                    self?.onboardingWindow?.close()
-                    self?.onboardingWindow = nil
-                }
-            }
-        ))
-        window.contentViewController = NSHostingController(rootView: onboardingView)
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-        onboardingWindow = window
-    }
-
-    func showLicenseActivation() {
-        // Don't show multiple license windows
-        if licenseWindow != nil { return }
-
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 400, height: 500),
-            styleMask: [.titled],
-            backing: .buffered,
-            defer: false
-        )
-        window.center()
-        window.title = "Activate ezLander"
-        window.isReleasedWhenClosed = false
-        window.delegate = windowDelegate
-        window.level = .floating
-
-        let licenseView = LicenseView(isLicenseActivated: Binding(
-            get: { SubscriptionService.shared.isSubscribed },
-            set: { [weak self] activated in
-                if activated {
-                    self?.licenseWindow?.delegate = nil
-                    self?.licenseWindow?.close()
-                    self?.licenseWindow = nil
-                }
-            }
-        ))
-        window.contentViewController = NSHostingController(rootView: licenseView)
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-        licenseWindow = window
-    }
-
     @objc private func subscriptionInvalidated() {
         DispatchQueue.main.async { [weak self] in
             self?.menuBarController?.closePopover()
-            self?.showLicenseActivation()
+            self?.menuBarController?.showPopover()
         }
     }
 

@@ -7,6 +7,7 @@ import { eq } from 'drizzle-orm'
 import { getActiveSubscription } from '@/lib/db/subscription-repo'
 import { getUsage } from '@/lib/db/token-usage'
 import { getTierTokenLimit } from '@/lib/tiers'
+import { resolveRequestUser } from '@/lib/request-auth'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2023-10-16',
@@ -72,9 +73,71 @@ async function getTokenUsageData(email: string) {
   return {}
 }
 
+async function getTokenUsageDataByUserId(userId: string) {
+  try {
+    const subscription = await getActiveSubscription(userId)
+    if (!subscription) return {}
+
+    const usage = await getUsage(userId)
+    const tokenLimit = getTierTokenLimit(subscription.tier)
+
+    return {
+      tier: subscription.tier,
+      token_limit: tokenLimit,
+      tokens_used: usage.totalTokens,
+      tokens_remaining: Math.max(0, tokenLimit - usage.totalTokens),
+    }
+  } catch (e) {
+    console.error('Error fetching token usage data:', e)
+  }
+  return {}
+}
+
+async function getAuthenticatedSubscriptionResponse(userId: string, email: string) {
+  const subscription = await getActiveSubscription(userId)
+  if (!subscription) {
+    return checkReferralCredits(email)
+  }
+
+  const referralData = await getReferralData(email)
+  const tokenData = await getTokenUsageDataByUserId(userId)
+
+  return NextResponse.json({
+    is_active: true,
+    plan: subscription.tier,
+    expires_at: subscription.currentPeriodEnd,
+    status: subscription.status,
+    is_admin_email: false,
+    message: 'Your subscription is active.',
+    ...referralData,
+    ...tokenData,
+  })
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const { email, password } = await request.json()
+    const body = await request.json().catch(() => ({}))
+    const email = typeof body?.email === 'string' ? body.email.toLowerCase().trim() : ''
+    const password = typeof body?.password === 'string' ? body.password : undefined
+    const authUser = await resolveRequestUser(request)
+
+    if (authUser?.email) {
+      if (isAdminEmail(authUser.email)) {
+        return NextResponse.json({
+          is_active: true,
+          plan: 'admin',
+          status: 'admin',
+          is_admin_email: true,
+          tier: 'max',
+          token_limit: -1,
+          tokens_used: 0,
+          tokens_remaining: -1,
+          message: 'Welcome back, admin!',
+        })
+      }
+
+      return await getAuthenticatedSubscriptionResponse(authUser.userId, authUser.email)
+    }
 
     if (!email) {
       return NextResponse.json(

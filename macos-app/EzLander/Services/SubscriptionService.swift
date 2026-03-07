@@ -6,6 +6,8 @@ class SubscriptionService: ObservableObject {
     static let shared = SubscriptionService()
 
     private let verifyURL = "https://ezlander.app/api/license/verify"
+    private let authTokenURL = "https://ezlander.app/api/auth/token"
+    private let registerURL = "https://ezlander.app/api/auth/register"
     private let purchaseURL = "https://ezlander.app/pricing"
     private let reVerifyInterval: TimeInterval = 24 * 60 * 60 // 24 hours
     private let offlineGracePeriod: TimeInterval = 7 * 24 * 60 * 60 // 7 days
@@ -18,6 +20,8 @@ class SubscriptionService: ObservableObject {
     private let udKeyIsActive = "subscription_is_active"
     private let udKeyPlan = "subscription_plan"
     private let udKeyExpiresAt = "subscription_expiry"
+    private let udKeyAccountEmail = "account_email"
+    private let udKeyAccountName = "account_name"
     private let udKeyReferralCode = "referral_code"
     private let udKeyReferralCreditsDays = "referral_credits_days"
     private let udKeyReferralsCount = "referrals_count"
@@ -27,6 +31,8 @@ class SubscriptionService: ObservableObject {
 
     @Published var isSubscribed: Bool = false
     @Published var subscribedEmail: String = ""
+    @Published var accountEmail: String = ""
+    @Published var accountName: String = ""
     @Published var plan: String = ""
     @Published var tier: String = ""
     @Published var tokensUsed: Int = 0
@@ -45,7 +51,10 @@ class SubscriptionService: ObservableObject {
     // MARK: - Check on Launch
 
     func checkSubscriptionOnLaunch() async -> Bool {
-        guard let storedEmail = KeychainService.shared.get(key: keychainKeyEmail) else {
+        let fallbackEmail = accountEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+        let storedEmail = KeychainService.shared.get(key: keychainKeyEmail) ?? (fallbackEmail.isEmpty ? nil : fallbackEmail)
+
+        guard let storedEmail else {
             await MainActor.run { isSubscribed = false }
             return false
         }
@@ -71,6 +80,9 @@ class SubscriptionService: ObservableObject {
                 return true
             } else {
                 cacheInvalid()
+                clearStored()
+                clearAccountInfo()
+                ProxyAIService.shared.clearJWT()
                 await MainActor.run { isSubscribed = false }
                 return false
             }
@@ -112,6 +124,7 @@ class SubscriptionService: ObservableObject {
         await MainActor.run {
             isSubscribed = true
             subscribedEmail = email
+            accountEmail = accountEmail.isEmpty ? email : accountEmail
             plan = response.plan ?? ""
             tier = response.tier ?? ""
             tokensUsed = response.tokensUsed ?? 0
@@ -121,6 +134,7 @@ class SubscriptionService: ObservableObject {
             referralCreditsDays = response.referralCreditsDays ?? 0
             referralsCount = response.referralsCount ?? 0
         }
+        UserDefaults.standard.set(true, forKey: "onboardingComplete")
 
         startReVerifyTimer()
     }
@@ -138,6 +152,7 @@ class SubscriptionService: ObservableObject {
         await MainActor.run {
             isSubscribed = true
             subscribedEmail = email
+            accountEmail = accountEmail.isEmpty ? email : accountEmail
             plan = response.plan ?? ""
             tier = response.tier ?? ""
             tokensUsed = response.tokensUsed ?? 0
@@ -147,6 +162,7 @@ class SubscriptionService: ObservableObject {
             referralCreditsDays = response.referralCreditsDays ?? 0
             referralsCount = response.referralsCount ?? 0
         }
+        UserDefaults.standard.set(true, forKey: "onboardingComplete")
 
         startReVerifyTimer()
     }
@@ -167,6 +183,8 @@ class SubscriptionService: ObservableObject {
             } else {
                 cacheInvalid()
                 clearStored()
+                clearAccountInfo()
+                ProxyAIService.shared.clearJWT()
                 await MainActor.run { isSubscribed = false }
                 NotificationCenter.default.post(name: Self.subscriptionInvalidatedNotification, object: nil)
                 return false
@@ -193,8 +211,37 @@ class SubscriptionService: ObservableObject {
         referralCode = ""
         referralCreditsDays = 0
         referralsCount = 0
+        clearAccountInfo()
         ProxyAIService.shared.clearJWT()
         NotificationCenter.default.post(name: Self.subscriptionInvalidatedNotification, object: nil)
+    }
+
+    // MARK: - App Account Auth
+
+    func signInToApp(email: String, password: String) async throws {
+        let normalizedEmail = email.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        let auth = try await authenticateWithServer(email: normalizedEmail, password: password)
+
+        ProxyAIService.shared.saveJWT(auth.token)
+        cacheAccountInfo(email: auth.user.email, name: auth.user.name)
+
+        do {
+            if Self.isAdminEmail(normalizedEmail) {
+                try await activateAdminSubscription(email: normalizedEmail, password: password)
+            } else {
+                try await activateSubscription(email: normalizedEmail)
+            }
+        } catch SubscriptionError.noActiveSubscription {
+            throw AppSessionError.noActiveSubscription
+        } catch {
+            throw error
+        }
+    }
+
+    func registerAppAccount(name: String, email: String, password: String) async throws {
+        let normalizedEmail = email.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        try await registerWithServer(name: name.trimmingCharacters(in: .whitespacesAndNewlines), email: normalizedEmail, password: password)
+        try await signInToApp(email: normalizedEmail, password: password)
     }
 
     // MARK: - Admin Detection
@@ -256,6 +303,9 @@ class SubscriptionService: ObservableObject {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 15
+        if let token = KeychainService.shared.get(key: "proxy_jwt_token") {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
 
         var body: [String: String] = ["email": email]
         if let password = password {
@@ -289,8 +339,77 @@ class SubscriptionService: ObservableObject {
         return try JSONDecoder().decode(SubscriptionResponse.self, from: data)
     }
 
+    private func authenticateWithServer(email: String, password: String) async throws -> AppAuthResponse {
+        guard let url = URL(string: authTokenURL) else {
+            throw AppSessionError.networkError("Invalid auth URL")
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 15
+        request.httpBody = try JSONEncoder().encode([
+            "email": email,
+            "password": password,
+        ])
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AppSessionError.invalidResponse
+        }
+
+        switch httpResponse.statusCode {
+        case 200:
+            return try JSONDecoder().decode(AppAuthResponse.self, from: data)
+        case 401:
+            throw AppSessionError.invalidCredentials
+        default:
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let message = json["error"] as? String {
+                throw AppSessionError.networkError(message)
+            }
+            throw AppSessionError.networkError("Server returned \(httpResponse.statusCode)")
+        }
+    }
+
+    private func registerWithServer(name: String, email: String, password: String) async throws {
+        guard let url = URL(string: registerURL) else {
+            throw AppSessionError.networkError("Invalid registration URL")
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 15
+        request.httpBody = try JSONEncoder().encode([
+            "name": name,
+            "email": email,
+            "password": password,
+        ])
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AppSessionError.invalidResponse
+        }
+
+        switch httpResponse.statusCode {
+        case 200:
+            return
+        case 409:
+            throw AppSessionError.accountExists
+        default:
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let message = json["error"] as? String {
+                throw AppSessionError.networkError(message)
+            }
+            throw AppSessionError.networkError("Server returned \(httpResponse.statusCode)")
+        }
+    }
+
     private func loadCachedState() {
         subscribedEmail = KeychainService.shared.get(key: keychainKeyEmail) ?? ""
+        accountEmail = UserDefaults.standard.string(forKey: udKeyAccountEmail) ?? ""
+        accountName = UserDefaults.standard.string(forKey: udKeyAccountName) ?? ""
         plan = UserDefaults.standard.string(forKey: udKeyPlan) ?? ""
         referralCode = UserDefaults.standard.string(forKey: udKeyReferralCode) ?? ""
         referralCreditsDays = UserDefaults.standard.integer(forKey: udKeyReferralCreditsDays)
@@ -331,6 +450,29 @@ class SubscriptionService: ObservableObject {
         UserDefaults.standard.removeObject(forKey: udKeyReferralCode)
         UserDefaults.standard.removeObject(forKey: udKeyReferralCreditsDays)
         UserDefaults.standard.removeObject(forKey: udKeyReferralsCount)
+    }
+
+    private func cacheAccountInfo(email: String, name: String?) {
+        UserDefaults.standard.set(email, forKey: udKeyAccountEmail)
+        if let name, !name.isEmpty {
+            UserDefaults.standard.set(name, forKey: udKeyAccountName)
+        } else {
+            UserDefaults.standard.removeObject(forKey: udKeyAccountName)
+        }
+
+        DispatchQueue.main.async {
+            self.accountEmail = email
+            self.accountName = name ?? ""
+        }
+    }
+
+    private func clearAccountInfo() {
+        UserDefaults.standard.removeObject(forKey: udKeyAccountEmail)
+        UserDefaults.standard.removeObject(forKey: udKeyAccountName)
+        DispatchQueue.main.async {
+            self.accountEmail = ""
+            self.accountName = ""
+        }
     }
 
     private func startReVerifyTimer() {
@@ -391,6 +533,17 @@ struct ReferralCodeResponse: Codable {
     }
 }
 
+struct AppAuthResponse: Codable {
+    let token: String
+    let user: AppAuthUser
+}
+
+struct AppAuthUser: Codable {
+    let id: String
+    let email: String
+    let name: String?
+}
+
 // MARK: - Errors
 
 enum SubscriptionError: Error, LocalizedError {
@@ -412,6 +565,29 @@ enum SubscriptionError: Error, LocalizedError {
             return "Password required."
         case .invalidPassword:
             return "Invalid password."
+        }
+    }
+}
+
+enum AppSessionError: Error, LocalizedError {
+    case invalidCredentials
+    case accountExists
+    case noActiveSubscription
+    case networkError(String)
+    case invalidResponse
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidCredentials:
+            return "Invalid email or password."
+        case .accountExists:
+            return "An account with this email already exists."
+        case .noActiveSubscription:
+            return "Your account is ready, but there is no active subscription on it yet."
+        case .networkError(let message):
+            return message
+        case .invalidResponse:
+            return "Unexpected response from server."
         }
     }
 }

@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getToken } from "next-auth/jwt";
 import { getActiveSubscription } from "@/lib/db/subscription-repo";
 import { getUsage, recordUsage } from "@/lib/db/token-usage";
 import { getTierTokenLimit } from "@/lib/tiers";
-import { isAllowedModel } from "@/lib/ai/models";
+import { resolveRequestUser } from "@/lib/request-auth";
 
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
+const MANAGED_OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
 function isAdminUser(email: string | null | undefined): boolean {
   if (!email) return false;
@@ -20,16 +20,16 @@ function isAdminUser(email: string | null | undefined): boolean {
 export async function POST(request: NextRequest) {
   try {
     // 1. Auth: verify JWT
-    const token = await getToken({ req: request });
-    if (!token?.sub) {
+    const authUser = await resolveRequestUser(request);
+    if (!authUser?.userId) {
       return NextResponse.json(
         { error: "Authentication required" },
         { status: 401 }
       );
     }
 
-    const userId = token.sub;
-    const userEmail = token.email as string | undefined;
+    const userId = authUser.userId;
+    const userEmail = authUser.email;
     const isAdmin = isAdminUser(userEmail);
 
     // 2. Subscription check (skip for admin)
@@ -67,18 +67,11 @@ export async function POST(request: NextRequest) {
 
     // 4. Parse and validate request
     const body = await request.json();
-    const { model, messages, stream } = body;
+    const { messages, stream } = body;
 
-    if (!model || !messages || !Array.isArray(messages)) {
+    if (!messages || !Array.isArray(messages)) {
       return NextResponse.json(
-        { error: "model and messages are required" },
-        { status: 400 }
-      );
-    }
-
-    if (!isAllowedModel(model)) {
-      return NextResponse.json(
-        { error: `Model '${model}' is not allowed. Use gpt-4o or gpt-4o-mini.` },
+        { error: "messages are required" },
         { status: 400 }
       );
     }
@@ -87,7 +80,7 @@ export async function POST(request: NextRequest) {
     const isStreaming = stream ?? false;
 
     const openaiBody = {
-      model,
+      model: MANAGED_OPENAI_MODEL,
       messages,
       temperature: body.temperature ?? 0.5,
       max_tokens: body.max_tokens ?? 2048,

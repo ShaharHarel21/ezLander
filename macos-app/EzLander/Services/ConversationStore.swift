@@ -10,7 +10,7 @@ struct Conversation: Identifiable, Codable {
     var updatedAt: Date
     var provider: String
 
-    init(title: String = "New Chat", messages: [ChatMessage] = [], provider: String = "claude") {
+    init(title: String = "New Chat", messages: [ChatMessage] = [], provider: String = "Managed AI") {
         self.id = UUID()
         self.title = title
         self.messages = messages
@@ -48,8 +48,8 @@ class ConversationStore: ObservableObject {
 
     // MARK: - CRUD
 
-    func createConversation(provider: String = "claude") -> Conversation {
-        var conversation = Conversation(provider: provider)
+    func createConversation(provider: String = "Managed AI") -> Conversation {
+        let conversation = Conversation(provider: provider)
         conversations.insert(conversation, at: 0)
         activeConversationId = conversation.id
         trimIfNeeded()

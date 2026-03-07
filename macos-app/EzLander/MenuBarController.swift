@@ -194,7 +194,7 @@ class MenuBarController: NSObject {
         statusMenu.addItem(accountItem)
 
         let manageSubItem = NSMenuItem(
-            title: sub.isSubscribed ? "Manage Subscription..." : "Subscribe...",
+            title: sub.isSubscribed ? "Billing & Plans..." : "Subscribe...",
             action: #selector(manageSubscription),
             keyEquivalent: ""
         )
@@ -307,7 +307,7 @@ class MenuBarController: NSObject {
 
     private func setupPopover() {
         popover = NSPopover()
-        popover.contentSize = NSSize(width: 400, height: 500)
+        popover.contentSize = NSSize(width: 420, height: 520)
         // In preview mode, keep popover open for screenshot capture
         popover.behavior = AppDelegate.isPreviewMode ? .applicationDefined : .transient
         popover.contentViewController = NSHostingController(rootView: MainPopover())
@@ -335,14 +335,6 @@ class MenuBarController: NSObject {
             return
         }
 
-        // Block popover if not subscribed
-        guard SubscriptionService.shared.isSubscribed else {
-            if let appDelegate = NSApp.delegate as? AppDelegate {
-                appDelegate.showLicenseActivation()
-            }
-            return
-        }
-
         if let button = statusItem.button {
             // Reset to the default Chat (AI Agent) tab each time
             NotificationCenter.default.post(name: Self.switchTabNotification, object: "chat")
@@ -364,16 +356,16 @@ class MenuBarController: NSObject {
         AppDelegate.previewLog("showPreviewWindow called, existing=\(previewWindow != nil)")
         if previewWindow != nil { return }
         let hostingController = NSHostingController(rootView: MainPopover())
-        hostingController.preferredContentSize = NSSize(width: 400, height: 500)
+        hostingController.preferredContentSize = NSSize(width: 420, height: 520)
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 400, height: 500),
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 520),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
         )
         window.contentViewController = hostingController
-        window.setContentSize(NSSize(width: 400, height: 500))
+        window.setContentSize(NSSize(width: 420, height: 520))
         window.center()
         window.title = "ezLander Preview"
         window.isReleasedWhenClosed = false

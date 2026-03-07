@@ -18,7 +18,7 @@ const faqs = [
   },
   {
     question: 'What AI powers ezLander?',
-    answer: 'ezLander supports multiple AI providers: OpenAI (GPT-4o), Anthropic\'s Claude, Google Gemini, and Kimi. You choose which provider to use and provide your own API key — your key stays securely on your device and is never sent to our servers.',
+    answer: 'ezLander uses managed server-side AI for subscribers. You sign in to the app and your subscription unlocks AI access automatically, so there are no user API keys or model settings to manage.',
   },
   {
     question: 'Can I cancel anytime?',

@@ -62,7 +62,7 @@ struct ChatView: View {
 
                 Button(action: {
                     viewModel.clearConversation()
-                    let conv = store.createConversation(provider: AIService.shared.selectedModel.rawValue)
+                    let conv = store.createConversation(provider: AIService.shared.currentModelName)
                     store.activeConversationId = conv.id
                 }) {
                     HStack(spacing: 4) {
@@ -679,7 +679,7 @@ class ChatViewModel: ObservableObject {
         sessionInputTokens += TokenEstimator.estimate(text)
 
         Task {
-            // Try streaming first (OpenAI and Claude support it)
+            // Try streaming first through the managed AI proxy.
             if let stream = aiService.streamMessage(text, conversationHistory: messages) {
                 await handleStreamingResponse(stream: stream, userMessage: text)
             } else {
@@ -702,7 +702,7 @@ class ChatViewModel: ObservableObject {
             for try await chunk in stream {
                 fullText += chunk
 
-                // Check if Claude detected a tool use — fall back to non-streaming.
+                // Check if the managed AI response detected a tool use — fall back to non-streaming.
                 // We check before updating the placeholder so the internal sentinel
                 // never appears in the UI regardless of timing.
                 if fullText.contains("[TOOL_USE_DETECTED]") {
@@ -758,7 +758,7 @@ class ChatViewModel: ObservableObject {
         }
     }
 
-    /// Handle non-streaming responses (Gemini, Kimi, or Claude tool-use fallback).
+    /// Handle non-streaming responses when the proxy does not stream or falls back for tool use.
     private func handleNonStreamingResponse(text: String) async {
         do {
             let response = try await aiService.sendMessage(text, conversationHistory: messages)
@@ -798,7 +798,6 @@ class ChatViewModel: ObservableObject {
 
     func confirmAction(_ editedAction: AIAction? = nil) {
         guard let action = editedAction ?? pendingAction else { return }
-        let resultMsgId = pendingActionMessageId
 
         Task {
             do {

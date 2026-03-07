@@ -7,8 +7,9 @@ import { authUsers } from "@/lib/db/schema";
 export async function POST(request: NextRequest) {
   try {
     const { name, email, password } = await request.json();
+    const normalizedEmail = email?.toLowerCase().trim();
 
-    if (!email || !password) {
+    if (!normalizedEmail || !password) {
       return NextResponse.json(
         { error: "Email and password are required" },
         { status: 400 }
@@ -23,21 +24,35 @@ export async function POST(request: NextRequest) {
     }
 
     const existing = await db.query.authUsers.findFirst({
-      where: eq(authUsers.email, email),
+      where: eq(authUsers.email, normalizedEmail),
     });
 
     if (existing) {
-      return NextResponse.json(
-        { error: "An account with this email already exists" },
-        { status: 409 }
-      );
+      if (existing.passwordHash) {
+        return NextResponse.json(
+          { error: "An account with this email already exists" },
+          { status: 409 }
+        );
+      }
+
+      const passwordHash = await bcrypt.hash(password, 12);
+
+      await db
+        .update(authUsers)
+        .set({
+          name: name || existing.name || null,
+          passwordHash,
+        })
+        .where(eq(authUsers.id, existing.id));
+
+      return NextResponse.json({ success: true, claimed: true });
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
 
     await db.insert(authUsers).values({
       name: name || null,
-      email,
+      email: normalizedEmail,
       passwordHash,
     });
 

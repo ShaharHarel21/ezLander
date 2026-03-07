@@ -1,24 +1,45 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { getToken } from "next-auth/jwt";
 import { getActiveSubscription } from "@/lib/db/subscription-repo";
 import { getUsage } from "@/lib/db/token-usage";
 import { getTierTokenLimit } from "@/lib/tiers";
+import { resolveRequestUser } from "@/lib/request-auth";
+
+function isAdminUser(email: string | undefined): boolean {
+  if (!email) return false;
+
+  const lower = email.toLowerCase();
+  const adminEmails = [
+    process.env.ADMIN_EMAIL?.toLowerCase(),
+    "shahar.harel200@gmail.com",
+  ].filter(Boolean);
+
+  return adminEmails.includes(lower);
+}
 
 export async function GET(request: NextRequest) {
   try {
-    const token = await getToken({ req: request });
-    if (!token?.sub) {
+    const authUser = await resolveRequestUser(request);
+    if (!authUser?.userId) {
       return NextResponse.json(
         { error: "Authentication required" },
         { status: 401 }
       );
     }
 
-    const userId = token.sub;
+    if (isAdminUser(authUser.email)) {
+      return NextResponse.json({
+        tier: "admin",
+        period: "unlimited",
+        tokens_used: 0,
+        tokens_limit: -1,
+        tokens_remaining: -1,
+        request_count: 0,
+      });
+    }
 
-    const subscription = await getActiveSubscription(userId);
+    const subscription = await getActiveSubscription(authUser.userId);
     if (!subscription) {
       return NextResponse.json(
         { error: "No active subscription", code: "NO_SUBSCRIPTION" },
@@ -26,7 +47,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const usage = await getUsage(userId);
+    const usage = await getUsage(authUser.userId);
     const tokenLimit = getTierTokenLimit(subscription.tier);
     const tokensRemaining = Math.max(0, tokenLimit - usage.totalTokens);
 

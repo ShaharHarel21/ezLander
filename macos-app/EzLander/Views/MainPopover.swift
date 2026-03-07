@@ -1,8 +1,8 @@
 import SwiftUI
 
 struct MainPopover: View {
-    @StateObject private var viewModel = MainPopoverViewModel()
-    @ObservedObject private var aiService = AIService.shared
+    @ObservedObject private var subscriptionService = SubscriptionService.shared
+    @ObservedObject private var proxyService = ProxyAIService.shared
     @ObservedObject private var themeManager = ThemeManager.shared
     @State private var selectedTab: Tab = .chat
 
@@ -10,7 +10,31 @@ struct MainPopover: View {
         case chat, calendar, email, settings
     }
 
+    private var isAccessUnlocked: Bool {
+        subscriptionService.isSubscribed && proxyService.isAuthenticated
+    }
+
     var body: some View {
+        Group {
+            if isAccessUnlocked {
+                unlockedView
+            } else {
+                OnboardingView()
+            }
+        }
+        .frame(width: 420, height: 520)
+        .background(Color.surfacePrimary)
+        .preferredColorScheme(themeManager.resolvedColorScheme)
+        .onReceive(NotificationCenter.default.publisher(for: MenuBarController.switchTabNotification)) { notification in
+            guard isAccessUnlocked else { return }
+            if let tabName = notification.object as? String,
+               let tab = Tab(rawValue: tabName) {
+                selectedTab = tab
+            }
+        }
+    }
+
+    private var unlockedView: some View {
         VStack(spacing: 0) {
             // Header — hidden on the email tab for maximum reading space
             if selectedTab != .email {
@@ -26,15 +50,6 @@ struct MainPopover: View {
             // Tab bar
             tabBar
         }
-        .frame(width: 420, height: 520)
-        .background(Color.surfacePrimary)
-        .preferredColorScheme(themeManager.resolvedColorScheme)
-        .onReceive(NotificationCenter.default.publisher(for: MenuBarController.switchTabNotification)) { notification in
-            if let tabName = notification.object as? String,
-               let tab = Tab(rawValue: tabName) {
-                selectedTab = tab
-            }
-        }
     }
 
     private var headerView: some View {
@@ -49,8 +64,8 @@ struct MainPopover: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text("ezLander")
                     .font(.system(.headline, design: .rounded))
-                if !viewModel.userName.isEmpty {
-                    Text("Hi, \(viewModel.userName)")
+                if !displayName.isEmpty {
+                    Text("Hi, \(displayName)")
                         .font(.system(.caption, design: .rounded))
                         .foregroundColor(.secondary)
                         .lineLimit(1)
@@ -59,19 +74,8 @@ struct MainPopover: View {
 
             Spacer()
 
-            // Provider pill
-            Text(aiService.selectedModel.displayName)
-                .font(.system(size: 10, weight: .medium, design: .rounded))
-                .foregroundColor(.warmPrimary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(
-                    Capsule()
-                        .fill(Color.warmPrimary.opacity(0.1))
-                )
-
-            if viewModel.isSubscribed {
-                Text("PRO")
+            if subscriptionService.isSubscribed {
+                Text(subscriptionBadgeText)
                     .font(.system(size: 9, weight: .bold, design: .rounded))
                     .foregroundColor(.proBadge)
                     .padding(.horizontal, 6)
@@ -96,6 +100,26 @@ struct MainPopover: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
+    }
+
+    private var displayName: String {
+        if !subscriptionService.accountName.isEmpty {
+            return subscriptionService.accountName
+        }
+        if !subscriptionService.accountEmail.isEmpty {
+            return subscriptionService.accountEmail
+        }
+        return subscriptionService.subscribedEmail
+    }
+
+    private var subscriptionBadgeText: String {
+        if !subscriptionService.tier.isEmpty {
+            return subscriptionService.tier.uppercased()
+        }
+        if !subscriptionService.plan.isEmpty {
+            return subscriptionService.plan.uppercased()
+        }
+        return "ACTIVE"
     }
 
     @ViewBuilder
@@ -158,29 +182,6 @@ struct MainPopover: View {
             }
         }
         .buttonStyle(.plain)
-    }
-}
-
-// MARK: - View Model
-class MainPopoverViewModel: ObservableObject {
-    @Published var isSubscribed: Bool = false
-    @Published var userName: String = ""
-    @Published var userEmail: String = ""
-
-    private let subscriptionService = SubscriptionService.shared
-
-    init() {
-        loadUserInfo()
-        checkSubscription()
-    }
-
-    func loadUserInfo() {
-        userName = UserDefaults.standard.string(forKey: "user_name") ?? ""
-        userEmail = UserDefaults.standard.string(forKey: "user_email") ?? ""
-    }
-
-    func checkSubscription() {
-        isSubscribed = subscriptionService.isSubscribed
     }
 }
 

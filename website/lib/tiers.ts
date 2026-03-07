@@ -5,7 +5,7 @@ export const SUBSCRIPTION_TIERS = {
     monthlyPrice: 9.99,
     yearlyPrice: 99,
     features: [
-      'GPT-4o powered AI assistant',
+      'Managed AI assistant included',
       '2M tokens per month',
       'Google Calendar integration',
       'Apple Calendar integration',

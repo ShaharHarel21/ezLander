@@ -63,18 +63,12 @@ struct UserPreferences: Codable {
     var launchAtLogin: Bool = false
     var showNotifications: Bool = true
     var theme: Theme = .system
-    var aiModel: AIModel = .claude35Sonnet
     var sendConfirmation: Bool = true
 
     enum Theme: String, Codable {
         case light
         case dark
         case system
-    }
-
-    enum AIModel: String, Codable {
-        case claude35Sonnet = "claude-sonnet-4-20250514"
-        case claude35Opus = "claude-3-opus-20240229"
     }
 }
 

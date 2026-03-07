@@ -1,27 +1,19 @@
 # ezLander
 
-A macOS menu bar AI assistant that connects to your calendar and email. Supports multiple AI providers including OpenAI, Claude, Google Gemini, and Kimi.
+A macOS menu bar AI assistant that connects to your calendar and email with subscription-managed AI access built in.
 
 ![ezLander](https://img.shields.io/badge/macOS-13.0+-blue) ![Swift](https://img.shields.io/badge/Swift-5.9+-orange) ![License](https://img.shields.io/badge/License-MIT-green)
 
 ## Features
 
-- **Multi-AI Provider Support**: Choose between OpenAI, Claude, Google Gemini, or Kimi (NVIDIA NIM)
+- **Managed AI Access**: Subscribers use ezLander's built-in server-side AI access
+- **In-App Sign In**: Access the app from inside the menu bar popover
 - **Natural Language Interface**: Chat with AI to manage your day
 - **Calendar Integration**: Google Calendar & Apple Calendar support
 - **Email Management**: Send, draft, and search emails via Gmail
 - **Menu Bar App**: Always one click away
 - **Auto-Updates**: Check for and download updates automatically
-- **Privacy First**: Your API keys stay securely on your device
-
-## Supported AI Providers
-
-| Provider | Models | Get API Key |
-|----------|--------|-------------|
-| **OpenAI** | GPT-4o, GPT-4 Turbo, GPT-3.5 Turbo | [platform.openai.com](https://platform.openai.com/api-keys) |
-| **Claude** | Claude 3.5 Sonnet, Claude 3 Opus | [console.anthropic.com](https://console.anthropic.com/settings/keys) |
-| **Google Gemini** | Gemini 2.0 Flash, 1.5 Pro, 1.5 Flash | [aistudio.google.com](https://aistudio.google.com/apikey) |
-| **Kimi (NVIDIA)** | Kimi K2.5 via NVIDIA NIM | [build.nvidia.com](https://build.nvidia.com) |
+- **Privacy First**: Calendar and email integrations stay on-device unless required for the connected provider APIs
 
 ---
 
@@ -88,17 +80,16 @@ cp -R "/path/to/EzLander.app" /Applications/
 
 ## Setup Guide
 
-### 1. Add an AI Provider API Key
+### 1. Sign In Inside the App
 
 After launching ezLander:
 
-1. Click the menu bar icon and open **Settings**
-2. Go to **AI Provider** section
-3. Click **Get Key** to open the provider's API key page
-4. Click **Add Key** and paste your API key
-5. Click **Save**
+1. Click the menu bar icon
+2. Sign in or create your ezLander account from the in-app access screen
+3. Subscribe on `ezlander.app` if your account does not already have an active plan
+4. Return to the app and refresh access
 
-You can add multiple provider keys and switch between them anytime.
+Subscribers automatically use ezLander's managed AI access. There are no API keys or model settings to configure in the app.
 
 ### 2. Set Up Google Calendar & Gmail (Optional)
 
@@ -150,11 +141,8 @@ ezLander/
 │       │   ├── ChatView.swift    # Chat messages view
 │       │   └── SettingsView.swift# Settings panel
 │       ├── Services/
-│       │   ├── AIService.swift   # AI provider manager
-│       │   ├── OpenAIService.swift
-│       │   ├── ClaudeService.swift
-│       │   ├── GeminiService.swift
-│       │   ├── KimiService.swift
+│       │   ├── AIService.swift   # Managed AI gateway
+│       │   ├── ProxyAIService.swift
 │       │   ├── GoogleCalendarService.swift
 │       │   ├── AppleCalendarService.swift
 │       │   ├── GmailService.swift
@@ -199,21 +187,17 @@ NEXT_PUBLIC_APP_URL=https://ezlander.app
 6. Wait a few minutes for changes to propagate
 7. Reconnect in ezLander settings
 
-### API Key Not Saving
-
-The app stores API keys in UserDefaults for unsigned builds. For production builds with proper code signing, keys are stored in Keychain.
-
 ### Calendar Shows "No Upcoming Events"
 
 1. Make sure you've completed the Google OAuth flow
 2. Check that Google Calendar API is enabled in your Google Cloud project
 3. Try disconnecting and reconnecting Google Calendar
 
-### Kimi API Authentication Error
+### Access Is Still Locked After Subscribing
 
-1. Make sure you're using a valid NVIDIA NIM API key
-2. The key should start with `nvapi-`
-3. Get a new key from [build.nvidia.com](https://build.nvidia.com)
+1. Make sure you signed in inside the app with the same email used for billing
+2. Complete checkout on `ezlander.app`
+3. Return to the app and use **Refresh Access**
 
 ---
 

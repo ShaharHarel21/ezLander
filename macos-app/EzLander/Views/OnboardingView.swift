@@ -1,402 +1,406 @@
 import SwiftUI
 
-// MARK: - Onboarding Phase
+private enum AccessMode: String, CaseIterable, Identifiable {
+    case signIn
+    case createAccount
 
-private enum OnboardingPhase {
-    case welcome
-    case activate
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .signIn: return "Sign In"
+        case .createAccount: return "Create Account"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .signIn:
+            return "Use the email tied to your subscription."
+        case .createAccount:
+            return "Create your ezLander account with the same billing email."
+        }
+    }
+}
+
+private enum AccessTier {
+    case pro
+    case max
 }
 
 struct OnboardingView: View {
-    @Binding var isOnboardingComplete: Bool
+    @ObservedObject private var subscriptionService = SubscriptionService.shared
+    @ObservedObject private var proxyService = ProxyAIService.shared
 
-    @State private var phase: OnboardingPhase = .welcome
+    @State private var accessMode: AccessMode = .signIn
+    @State private var name = ""
     @State private var email = ""
     @State private var password = ""
     @State private var referralCode = ""
-    @State private var needsPassword = false
-    @State private var isActivating = false
+    @State private var isYearly = true
+    @State private var selectedTier: AccessTier = .pro
+    @State private var isWorking = false
     @State private var errorMessage: String?
-    @State private var showReferralInput = false
-    @State private var selectedTier: TierType = .pro
-    @State private var isYearly: Bool = true
-    @State private var showSuccess = false
-    @State private var iconFloat = false
-
-    private enum TierType {
-        case pro, max
-    }
+    @State private var infoMessage: String?
 
     var body: some View {
-        ZStack {
-            Color(NSColor.windowBackgroundColor)
+        ScrollView {
+            VStack(spacing: 18) {
+                hero
+                statusMessage
 
-            if showSuccess {
-                successView
-                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
-            } else {
-                Group {
-                    switch phase {
-                    case .welcome:
-                        welcomePhase
-                    case .activate:
-                        activatePhase
-                    }
+                if shouldShowSubscriptionRefresh {
+                    subscriptionRefreshCard
+                } else {
+                    authCard
                 }
-                .transition(.asymmetric(
-                    insertion: .move(edge: .trailing).combined(with: .opacity),
-                    removal: .move(edge: .leading).combined(with: .opacity)
-                ))
+
+                pricingCard
             }
+            .padding(20)
         }
-        .frame(width: 400, height: 500)
-        .animation(.spring(response: 0.45, dampingFraction: 0.82), value: phase)
-        .animation(.spring(response: 0.5, dampingFraction: 0.8), value: showSuccess)
+        .background(Color.surfacePrimary)
         .onAppear {
-            withAnimation(.easeInOut(duration: 2.5).repeatForever(autoreverses: true)) {
-                iconFloat = true
+            if email.isEmpty {
+                email = subscriptionService.accountEmail.isEmpty
+                    ? subscriptionService.subscribedEmail
+                    : subscriptionService.accountEmail
             }
         }
     }
 
-    // MARK: - Welcome Phase
+    private var shouldShowSubscriptionRefresh: Bool {
+        proxyService.isAuthenticated && !subscriptionService.isSubscribed
+    }
 
-    private var welcomePhase: some View {
-        VStack(spacing: 0) {
-            Spacer().frame(height: 28)
-
-            // Hero: App icon with warm glow
+    private var hero: some View {
+        VStack(spacing: 12) {
             ZStack {
                 Circle()
                     .fill(
                         RadialGradient(
                             colors: [
-                                Color.warmPrimary.opacity(0.25),
-                                Color.warmAccent.opacity(0.1),
+                                Color.warmPrimary.opacity(0.22),
+                                Color.warmAccent.opacity(0.10),
                                 .clear
                             ],
                             center: .center,
-                            startRadius: 20,
-                            endRadius: 80
+                            startRadius: 16,
+                            endRadius: 84
                         )
                     )
                     .frame(width: 150, height: 150)
-                    .blur(radius: 8)
+                    .blur(radius: 10)
 
                 Image(nsImage: NSApp.applicationIconImage)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(width: 72, height: 72)
+                    .frame(width: 70, height: 70)
                     .cornerRadius(16)
-                    .shadow(color: Color.warmPrimary.opacity(0.25), radius: 12, y: 4)
-                    .offset(y: iconFloat ? -3 : 3)
+                    .shadow(color: Color.warmPrimary.opacity(0.24), radius: 10, y: 4)
             }
 
-            Text("Welcome to ezLander")
-                .font(.system(size: 22, weight: .bold))
-                .padding(.top, 4)
+            Text(shouldShowSubscriptionRefresh ? "Finish Unlocking ezLander" : "Welcome to ezLander")
+                .font(.system(size: 24, weight: .bold))
 
-            Text("Your AI-powered calendar & email assistant")
+            Text("Sign in inside the app. Active subscribers get included AI access with no API keys and no model setup.")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
-                .padding(.top, 2)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
 
-            // Tier selection
+    @ViewBuilder
+    private var statusMessage: some View {
+        if let infoMessage {
+            statusPill(text: infoMessage, color: Color.green, icon: "checkmark.circle.fill")
+        } else if let errorMessage {
+            statusPill(text: errorMessage, color: Color.red, icon: "exclamationmark.triangle.fill")
+        }
+    }
+
+    private func statusPill(text: String, color: Color, icon: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 12))
+            Text(text)
+                .font(.caption)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .foregroundColor(color)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(color.opacity(0.08))
+        )
+    }
+
+    private var authCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Picker("Access", selection: $accessMode) {
+                ForEach(AccessMode.allCases) { mode in
+                    Text(mode.title).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(accessMode.title)
+                    .font(.headline)
+                Text(accessMode.subtitle)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            VStack(spacing: 10) {
+                if accessMode == .createAccount {
+                    TextField("Your name", text: $name)
+                        .textFieldStyle(.roundedBorder)
+                        .disabled(isWorking)
+                }
+
+                TextField("you@example.com", text: $email)
+                    .textFieldStyle(.roundedBorder)
+                    .disabled(isWorking)
+
+                SecureField("Password", text: $password)
+                    .textFieldStyle(.roundedBorder)
+                    .disabled(isWorking)
+            }
+
+            Button(action: submit) {
+                HStack(spacing: 8) {
+                    if isWorking {
+                        ProgressView()
+                            .scaleEffect(0.75)
+                    } else {
+                        Image(systemName: accessMode == .signIn ? "person.crop.circle.badge.checkmark" : "person.crop.circle.badge.plus")
+                            .font(.system(size: 13))
+                    }
+                    Text(accessMode == .signIn ? "Sign In" : "Create Account")
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 40)
+            }
+            .buttonStyle(WarmGradientButtonStyle())
+            .disabled(isWorking || email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || password.isEmpty || (accessMode == .createAccount && name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
+
+            Text("After you sign in, ezLander checks your subscription automatically and unlocks the app here in the popover.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color(NSColor.controlBackgroundColor))
+        )
+    }
+
+    private var subscriptionRefreshCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Signed in as")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(subscriptionService.accountName.isEmpty ? "ezLander Account" : subscriptionService.accountName)
+                    .font(.headline)
+                Text(subscriptionService.accountEmail)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            Text("Your account is connected. Start or renew a subscription below, then refresh access here.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 10) {
+                Button(action: refreshAccess) {
+                    if isWorking {
+                        ProgressView()
+                            .scaleEffect(0.75)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 38)
+                    } else {
+                        Text("Refresh Access")
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 38)
+                    }
+                }
+                .buttonStyle(WarmGradientButtonStyle())
+                .disabled(isWorking)
+
+                Button("Sign Out") {
+                    subscriptionService.deactivateSubscription()
+                    infoMessage = nil
+                    errorMessage = nil
+                    password = ""
+                }
+                .buttonStyle(.bordered)
+                .disabled(isWorking)
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color(NSColor.controlBackgroundColor))
+        )
+    }
+
+    private var pricingCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Subscription")
+                .font(.headline)
+
             HStack(spacing: 12) {
-                PlanCard(
+                AccessPlanCard(
                     title: "Pro",
                     price: isYearly ? "$8.25" : "$10",
                     period: "/month",
-                    isSelected: selectedTier == .pro,
-                    badge: "2M tokens"
+                    badge: "2M tokens",
+                    isSelected: selectedTier == .pro
                 ) {
-                    withAnimation(.spring(response: 0.3)) { selectedTier = .pro }
+                    selectedTier = .pro
                 }
 
-                PlanCard(
+                AccessPlanCard(
                     title: "Max",
                     price: isYearly ? "$16.58" : "$20",
                     period: "/month",
-                    isSelected: selectedTier == .max,
-                    badge: "5M tokens"
+                    badge: "5M tokens",
+                    isSelected: selectedTier == .max
                 ) {
-                    withAnimation(.spring(response: 0.3)) { selectedTier = .max }
+                    selectedTier = .max
                 }
             }
-            .padding(.horizontal, 36)
-            .padding(.top, 22)
 
-            // Billing toggle
             HStack(spacing: 8) {
                 Text("Monthly")
                     .font(.caption)
                     .foregroundColor(!isYearly ? .primary : .secondary)
+
                 Toggle("", isOn: $isYearly)
-                    .toggleStyle(.switch)
                     .labelsHidden()
-                    .scaleEffect(0.7)
+                    .toggleStyle(.switch)
+                    .scaleEffect(0.75)
+
                 Text("Yearly")
                     .font(.caption)
                     .foregroundColor(isYearly ? .primary : .secondary)
+
                 if isYearly {
                     Text("Save 17%")
-                        .font(.system(size: 9, weight: .bold))
+                        .font(.system(size: 10, weight: .bold))
                         .foregroundColor(.green)
                 }
             }
-            .padding(.top, 4)
 
-            // Subscribe button
+            TextField("Referral code (optional)", text: $referralCode)
+                .textFieldStyle(.roundedBorder)
+                .disabled(isWorking)
+
             Button(action: subscribe) {
-                HStack(spacing: 6) {
+                HStack(spacing: 8) {
                     Image(systemName: "crown.fill")
                         .font(.system(size: 13))
-                    Text("Subscribe Now")
+                    Text(subscriptionService.isSubscribed ? "Manage Subscription" : "Subscribe Now")
                 }
                 .frame(maxWidth: .infinity)
-                .frame(height: 38)
+                .frame(height: 40)
             }
             .buttonStyle(WarmGradientButtonStyle())
-            .padding(.horizontal, 36)
-            .padding(.top, 16)
+            .disabled(isWorking)
 
-            // Referral code toggle
-            Button(action: {
-                withAnimation(.spring(response: 0.3)) {
-                    showReferralInput.toggle()
-                }
-            }) {
-                HStack(spacing: 4) {
-                    Image(systemName: "tag.fill")
-                        .font(.system(size: 10))
-                    Text("Have a referral code?")
-                        .font(.caption)
-                    Image(systemName: showReferralInput ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 8, weight: .bold))
-                }
+            Text("Billing opens on ezlander.app, then you return here and tap Refresh Access.")
+                .font(.caption)
                 .foregroundColor(.secondary)
-            }
-            .buttonStyle(.plain)
-            .padding(.top, 12)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color(NSColor.controlBackgroundColor))
+        )
+    }
 
-            if showReferralInput {
-                TextField("Enter referral code", text: $referralCode)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 200)
-                    .padding(.top, 6)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
+    private func submit() {
+        let normalizedEmail = email.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
 
-            Spacer()
+        isWorking = true
+        errorMessage = nil
+        infoMessage = nil
 
-            // Already subscribed link
-            Button(action: {
-                withAnimation {
-                    phase = .activate
+        Task {
+            do {
+                if accessMode == .signIn {
+                    try await subscriptionService.signInToApp(email: normalizedEmail, password: password)
+                    await MainActor.run {
+                        isWorking = false
+                        infoMessage = "Subscription active. ezLander is unlocked."
+                    }
+                } else {
+                    try await subscriptionService.registerAppAccount(name: trimmedName, email: normalizedEmail, password: password)
+                    await MainActor.run {
+                        isWorking = false
+                        infoMessage = "Account created and subscription verified."
+                    }
                 }
-            }) {
-                Text("I already have a subscription")
-                    .font(.callout)
-                    .foregroundColor(.warmPrimary)
+            } catch AppSessionError.noActiveSubscription {
+                await MainActor.run {
+                    isWorking = false
+                    infoMessage = "Your account is ready. Subscribe below, then tap Refresh Access."
+                }
+            } catch {
+                await MainActor.run {
+                    isWorking = false
+                    errorMessage = friendlyMessage(for: error)
+                }
             }
-            .buttonStyle(.plain)
-            .padding(.bottom, 28)
         }
     }
 
-    // MARK: - Activate Phase
+    private func refreshAccess() {
+        let targetEmail = subscriptionService.accountEmail.isEmpty
+            ? email.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+            : subscriptionService.accountEmail
 
-    private var activatePhase: some View {
-        VStack(spacing: 0) {
-            Spacer().frame(height: 36)
+        guard !targetEmail.isEmpty else {
+            errorMessage = "Sign in first so ezLander knows which subscription to refresh."
+            return
+        }
 
-            // Icon
-            ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color.warmPrimary.opacity(0.12),
-                                Color.warmAccent.opacity(0.06)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 80, height: 80)
+        isWorking = true
+        errorMessage = nil
+        infoMessage = nil
 
-                Image(systemName: needsPassword ? "lock.shield.fill" : "envelope.badge.shield.half.filled.fill")
-                    .font(.system(size: 32))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [Color.warmPrimary, Color.warmAccent],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
+        Task {
+            do {
+                try await subscriptionService.activateSubscription(email: targetEmail)
+                await MainActor.run {
+                    isWorking = false
+                    infoMessage = "Subscription active. ezLander is unlocked."
+                }
+            } catch {
+                await MainActor.run {
+                    isWorking = false
+                    errorMessage = friendlyMessage(for: error)
+                }
             }
-
-            Text(needsPassword ? "Admin Login" : "Activate Your Account")
-                .font(.system(size: 20, weight: .bold))
-                .padding(.top, 16)
-
-            Text(needsPassword
-                 ? "Enter your admin password to continue"
-                 : "Enter the email you used to subscribe")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.top, 4)
-                .padding(.horizontal, 48)
-
-            // Input fields
-            VStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Email")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    TextField("your@email.com", text: $email)
-                        .textFieldStyle(.roundedBorder)
-                        .disabled(isActivating || needsPassword)
-                }
-
-                if needsPassword {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Password")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        SecureField("Enter password", text: $password)
-                            .textFieldStyle(.roundedBorder)
-                            .disabled(isActivating)
-                    }
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-                }
-
-                if let errorMessage {
-                    HStack(spacing: 4) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.caption2)
-                        Text(errorMessage)
-                            .font(.caption)
-                    }
-                    .foregroundColor(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .transition(.opacity)
-                }
-
-                Button(action: needsPassword ? authenticateAdmin : verifySubscription) {
-                    HStack(spacing: 6) {
-                        if isActivating {
-                            ProgressView()
-                                .scaleEffect(0.7)
-                                .frame(width: 16, height: 16)
-                        } else {
-                            Image(systemName: needsPassword ? "lock.open.fill" : "checkmark.shield.fill")
-                                .font(.system(size: 13))
-                        }
-                        Text(needsPassword ? "Authenticate" : "Verify & Activate")
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 38)
-                }
-                .buttonStyle(WarmGradientButtonStyle())
-                .disabled(email.isEmpty || (needsPassword && password.isEmpty) || isActivating)
-                .padding(.top, 4)
-            }
-            .padding(.horizontal, 44)
-            .padding(.top, 24)
-            .animation(.spring(response: 0.35), value: needsPassword)
-            .animation(.easeOut(duration: 0.2), value: errorMessage != nil)
-
-            Spacer()
-
-            // Back
-            Button(action: {
-                withAnimation {
-                    phase = .welcome
-                    needsPassword = false
-                    errorMessage = nil
-                    password = ""
-                }
-            }) {
-                HStack(spacing: 4) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 11, weight: .semibold))
-                    Text("Back")
-                }
-                .font(.callout)
-                .foregroundColor(.secondary)
-            }
-            .buttonStyle(.plain)
-            .padding(.bottom, 28)
         }
     }
-
-    // MARK: - Success View
-
-    private var successView: some View {
-        VStack(spacing: 0) {
-            Spacer()
-
-            ZStack {
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.warmPrimary.opacity(0.2), .clear],
-                            center: .center,
-                            startRadius: 20,
-                            endRadius: 80
-                        )
-                    )
-                    .frame(width: 160, height: 160)
-
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 64))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [Color.warmPrimary, Color.warmAccent],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-            }
-
-            Text("You're All Set!")
-                .font(.system(size: 24, weight: .bold))
-                .padding(.top, 12)
-
-            Text("ezLander is ready to help manage\nyour calendar and email.")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.top, 6)
-
-            Button(action: completeOnboarding) {
-                HStack(spacing: 6) {
-                    Text("Get Started")
-                    Image(systemName: "arrow.right")
-                        .font(.system(size: 12, weight: .semibold))
-                }
-                .frame(maxWidth: .infinity)
-                .frame(height: 38)
-            }
-            .buttonStyle(WarmGradientButtonStyle())
-            .padding(.horizontal, 64)
-            .padding(.top, 20)
-
-            Spacer()
-        }
-    }
-
-    // MARK: - Actions
 
     private func subscribe() {
         let tierKey = selectedTier == .pro ? "pro" : "max"
         let billingKey = isYearly ? "yearly" : "monthly"
-        let planParam = "\(tierKey)_\(billingKey)"
         let trimmedCode = referralCode.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        var urlString = "https://ezlander.app/pricing?plan=\(planParam)"
+        var urlString = "https://ezlander.app/pricing?plan=\(tierKey)_\(billingKey)"
         if !trimmedCode.isEmpty {
             urlString += "&ref=\(trimmedCode)"
         }
@@ -406,95 +410,53 @@ struct OnboardingView: View {
         }
     }
 
-    private func verifySubscription() {
-        isActivating = true
-        errorMessage = nil
-
-        Task {
-            do {
-                try await SubscriptionService.shared.activateSubscription(
-                    email: email.trimmingCharacters(in: .whitespacesAndNewlines)
-                )
-                await MainActor.run {
-                    isActivating = false
-                    showSuccess = true
-                }
-            } catch SubscriptionError.passwordRequired {
-                await MainActor.run {
-                    isActivating = false
-                    needsPassword = true
-                }
-            } catch {
-                await MainActor.run {
-                    isActivating = false
-                    errorMessage = error.localizedDescription
-                }
+    private func friendlyMessage(for error: Error) -> String {
+        if let sessionError = error as? AppSessionError {
+            return sessionError.localizedDescription
+        }
+        if let subscriptionError = error as? SubscriptionError {
+            switch subscriptionError {
+            case .noActiveSubscription:
+                return "No active subscription found for this account yet."
+            case .networkError:
+                return "Couldn’t reach ezLander. Check your connection and try again."
+            case .invalidResponse:
+                return "ezLander returned an unexpected response. Try again in a moment."
+            case .passwordRequired, .invalidPassword:
+                return "Admin sign-in requires valid admin credentials."
             }
         }
-    }
 
-    private func authenticateAdmin() {
-        isActivating = true
-        errorMessage = nil
-
-        Task {
-            do {
-                try await SubscriptionService.shared.activateAdminSubscription(
-                    email: email.trimmingCharacters(in: .whitespacesAndNewlines),
-                    password: password
-                )
-                await MainActor.run {
-                    isActivating = false
-                    showSuccess = true
-                }
-            } catch {
-                await MainActor.run {
-                    isActivating = false
-                    errorMessage = error.localizedDescription
-                }
-            }
-        }
-    }
-
-    private func completeOnboarding() {
-        UserDefaults.standard.set(true, forKey: "onboardingComplete")
-        isOnboardingComplete = true
+        return error.localizedDescription
     }
 }
 
-// MARK: - Plan Card
-
-private struct PlanCard: View {
+private struct AccessPlanCard: View {
     let title: String
     let price: String
     let period: String
+    let badge: String
     let isSelected: Bool
-    let badge: String?
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 6) {
-                if let badge {
-                    Text(badge)
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 2)
-                        .background(
-                            Capsule()
-                                .fill(
-                                    LinearGradient(
-                                        colors: [Color.warmPrimary, Color.warmAccent],
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    )
+            VStack(spacing: 8) {
+                Text(badge)
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(
+                        Capsule()
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color.warmPrimary, Color.warmAccent],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
                                 )
-                        )
-                } else {
-                    Color.clear
-                        .frame(height: 15)
-                }
+                            )
+                    )
 
                 Text(title)
                     .font(.caption)
@@ -502,8 +464,8 @@ private struct PlanCard: View {
 
                 HStack(alignment: .firstTextBaseline, spacing: 2) {
                     Text(price)
-                        .font(.system(size: 24, weight: .bold))
-                        .foregroundColor(isSelected ? Color.warmPrimary : .primary)
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundColor(isSelected ? .warmPrimary : .primary)
                     Text(period)
                         .font(.caption2)
                         .foregroundColor(.secondary)
@@ -512,17 +474,12 @@ private struct PlanCard: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
             .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(isSelected
-                          ? Color.warmPrimary.opacity(0.08)
-                          : Color(NSColor.controlBackgroundColor))
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(isSelected ? Color.warmPrimary.opacity(0.08) : Color(NSColor.windowBackgroundColor))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(
-                        isSelected ? Color.warmPrimary : Color.secondary.opacity(0.2),
-                        lineWidth: isSelected ? 2 : 1
-                    )
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(isSelected ? Color.warmPrimary : Color.secondary.opacity(0.18), lineWidth: isSelected ? 1.5 : 1)
             )
         }
         .buttonStyle(.plain)
@@ -530,5 +487,6 @@ private struct PlanCard: View {
 }
 
 #Preview {
-    OnboardingView(isOnboardingComplete: .constant(false))
+    OnboardingView()
+        .frame(width: 420, height: 520)
 }

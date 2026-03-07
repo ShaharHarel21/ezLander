@@ -87,15 +87,7 @@ struct SettingsView: View {
     // MARK: - Account Tab
     private var accountTabContent: some View {
         VStack(alignment: .leading, spacing: 16) {
-            SettingsSection(title: "Account") {
-                if viewModel.isSignedIn {
-                    signedInView
-                } else {
-                    signInButtons
-                }
-            }
-
-            SettingsSection(title: "License") {
+            SettingsSection(title: "Subscription") {
                 licenseInfoView
             }
 
@@ -167,7 +159,7 @@ struct SettingsView: View {
     // MARK: - AI Tab
     private var aiTabContent: some View {
         VStack(alignment: .leading, spacing: 16) {
-            SettingsSection(title: "AI Model") {
+            SettingsSection(title: "AI Access") {
                 aiModelView
             }
 
@@ -213,96 +205,12 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - Signed In View
-    private var signedInView: some View {
-        HStack {
-            // Profile picture
-            if let pictureURL = viewModel.userPicture, let url = URL(string: pictureURL) {
-                AsyncImage(url: url) { image in
-                    image
-                        .resizable()
-                        .scaledToFill()
-                } placeholder: {
-                    Circle()
-                        .fill(Color.warmPrimary.opacity(0.15))
-                        .overlay(
-                            Text(String(viewModel.userName.prefix(1)).uppercased())
-                                .font(.headline)
-                                .foregroundColor(.warmPrimary)
-                        )
-                }
-                .frame(width: 40, height: 40)
-                .clipShape(Circle())
-            } else {
-                Circle()
-                    .fill(Color.warmPrimary.opacity(0.15))
-                    .frame(width: 40, height: 40)
-                    .overlay(
-                        Text(String(viewModel.userName.prefix(1)).uppercased())
-                            .font(.headline)
-                            .foregroundColor(.warmPrimary)
-                    )
-            }
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Hi, \(viewModel.userName)!")
-                    .font(.headline)
-                Text(viewModel.userEmail)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-
-            Spacer()
-
-            Button("Sign Out") {
-                viewModel.signOut()
-            }
-            .buttonStyle(.bordered)
-        }
-    }
-
-    // MARK: - Sign In Buttons
-    private var signInButtons: some View {
-        VStack(spacing: 12) {
-            Button(action: viewModel.signInWithGoogle) {
-                HStack {
-                    if viewModel.isSigningIn {
-                        ProgressView()
-                            .scaleEffect(0.7)
-                    } else {
-                        Image(systemName: "globe")
-                    }
-                    Text("Sign in with Google")
-                }
-                .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            .disabled(viewModel.isSigningIn)
-
-            Button(action: viewModel.signInWithApple) {
-                HStack {
-                    if viewModel.isSigningIn {
-                        ProgressView()
-                            .scaleEffect(0.7)
-                    } else {
-                        Image(systemName: "apple.logo")
-                    }
-                    Text("Sign in with Apple")
-                }
-                .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(.black)
-            .disabled(viewModel.isSigningIn)
-        }
-    }
-
     // MARK: - License Info View
     private var licenseInfoView: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 VStack(alignment: .leading) {
-                    Text("Licensed")
+                    Text(viewModel.accountName.isEmpty ? "Signed in" : viewModel.accountName)
                         .font(.headline)
                     Text(viewModel.licenseEmail)
                         .font(.caption)
@@ -320,11 +228,22 @@ struct SettingsView: View {
                     .cornerRadius(8)
             }
 
-            Button("Deactivate Subscription") {
-                viewModel.deactivateSubscription()
+            Text("ezLander AI is included with your subscription. Billing is managed through ezlander.app.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            HStack(spacing: 10) {
+                Button("Billing & Plans") {
+                    viewModel.manageSubscription()
+                }
+                .buttonStyle(.bordered)
+
+                Button("Sign Out on This Mac") {
+                    viewModel.signOutOfEzLander()
+                }
+                .buttonStyle(.bordered)
+                .foregroundColor(.red)
             }
-            .buttonStyle(.bordered)
-            .foregroundColor(.red)
         }
     }
 
@@ -360,17 +279,10 @@ struct SettingsView: View {
     // MARK: - AI Model View
     private var aiModelView: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Picker("Model", selection: $viewModel.selectedAIModel) {
-                ForEach(AIModel.allCases) { model in
-                    HStack {
-                        Image(systemName: model.icon)
-                        Text(model.displayName)
-                    }
-                    .tag(model)
-                }
-            }
+            Label("Managed AI", systemImage: "brain")
+                .font(.headline)
 
-            Text("All AI requests are processed through our secure server. No API key needed.")
+            Text("All AI requests are processed through ezLander's managed server-side setup. No API key or model selection is required in the app.")
                 .font(.caption)
                 .foregroundColor(.secondary)
         }
@@ -679,77 +591,9 @@ struct IntegrationRow: View {
     }
 }
 
-// MARK: - OpenAI OAuth Row
-struct OpenAIOAuthRow: View {
-    let isConnected: Bool
-    let isSigningIn: Bool
-    let errorMessage: String?
-    let onSignIn: () -> Void
-    let onDisconnect: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Image(systemName: "brain")
-                    .frame(width: 24)
-                    .foregroundColor(.warmAccent)
-
-                Text("OpenAI Account")
-                    .fontWeight(.medium)
-
-                Spacer()
-
-                if isConnected {
-                    HStack(spacing: 8) {
-                        Text("Connected")
-                            .font(.caption)
-                            .foregroundColor(.green)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(Color.green.opacity(0.12))
-                            .cornerRadius(8)
-
-                        Button("Disconnect") {
-                            onDisconnect()
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                    }
-                } else {
-                    Button(action: onSignIn) {
-                        HStack(spacing: 4) {
-                            if isSigningIn {
-                                ProgressView()
-                                    .scaleEffect(0.6)
-                            }
-                            Text("Sign in with OpenAI")
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .disabled(isSigningIn)
-                }
-            }
-
-            if let errorMessage {
-                Text(errorMessage)
-                    .font(.caption)
-                    .foregroundColor(.red)
-                    .padding(.leading, 28)
-            }
-        }
-        .padding()
-        .padding(.vertical, 2)
-    }
-}
-
 // MARK: - View Model
 class SettingsViewModel: ObservableObject {
-    @Published var isSignedIn: Bool = false
-    @Published var isSigningIn: Bool = false
-    @Published var userEmail: String = ""
-    @Published var userName: String = ""
-    @Published var userPicture: String? = nil
+    @Published var accountName: String = ""
     @Published var licenseEmail: String = ""
     @Published var googleCalendarConnected: Bool = false
     @Published var appleCalendarConnected: Bool = false
@@ -792,13 +636,6 @@ class SettingsViewModel: ObservableObject {
     @Published var referralsCount: Int = 0
     @Published var codeCopied: Bool = false
 
-    // AI Model settings
-    @Published var selectedAIModel: AIModel = .gpt4o {
-        didSet {
-            AIService.shared.selectedModel = selectedAIModel
-        }
-    }
-
     // Usage
     @Published var tier: String = ""
     @Published var tokensUsed: Int = 0
@@ -834,19 +671,6 @@ class SettingsViewModel: ObservableObject {
     }
 
     func loadSettings() {
-        // Load user info from UserDefaults
-        userEmail = UserDefaults.standard.string(forKey: "user_email") ?? ""
-        userName = UserDefaults.standard.string(forKey: "user_name") ?? ""
-        userPicture = UserDefaults.standard.string(forKey: "user_picture")
-
-        // Check if signed in via Google or Apple
-        isSignedIn = OAuthService.shared.isSignedIn
-
-        // If signed in but no name, set a default
-        if isSignedIn && userName.isEmpty {
-            userName = "User"
-        }
-
         // Check integration status (Google services require Google sign in)
         googleCalendarConnected = OAuthService.shared.isSignedInWithGoogle
         gmailConnected = OAuthService.shared.isSignedInWithGoogle
@@ -879,9 +703,6 @@ class SettingsViewModel: ObservableObject {
             swipeLeftAction = action
         }
 
-        // Load AI model settings
-        selectedAIModel = AIService.shared.selectedModel
-
         // Load usage info
         tier = SubscriptionService.shared.tier
         tokensUsed = SubscriptionService.shared.tokensUsed
@@ -900,6 +721,7 @@ class SettingsViewModel: ObservableObject {
         }
 
         // Load subscription info
+        accountName = SubscriptionService.shared.accountName
         licenseEmail = SubscriptionService.shared.subscribedEmail
 
         // Load referral info
@@ -919,50 +741,12 @@ class SettingsViewModel: ObservableObject {
         }
     }
 
-    func signInWithGoogle() {
-        isSigningIn = true
-        Task {
-            do {
-                try await OAuthService.shared.signInWithGoogle()
-                await MainActor.run {
-                    isSigningIn = false
-                    loadSettings()
-                }
-            } catch {
-                await MainActor.run {
-                    isSigningIn = false
-                }
-                print("Google sign in error: \(error)")
-            }
-        }
-    }
-
-    func signInWithApple() {
-        isSigningIn = true
-        Task {
-            do {
-                try await OAuthService.shared.signInWithApple()
-                await MainActor.run {
-                    isSigningIn = false
-                    loadSettings()
-                }
-            } catch {
-                await MainActor.run {
-                    isSigningIn = false
-                }
-                print("Apple sign in error: \(error)")
-            }
-        }
-    }
-
-    func signOut() {
-        OAuthService.shared.signOut()
-        isSignedIn = false
-        userEmail = ""
-    }
-
-    func deactivateSubscription() {
+    func signOutOfEzLander() {
         SubscriptionService.shared.deactivateSubscription()
+    }
+
+    func manageSubscription() {
+        SubscriptionService.shared.openPurchasePage()
     }
 
     func connectGoogleCalendar() {

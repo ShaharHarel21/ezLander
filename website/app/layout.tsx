@@ -16,8 +16,8 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL('https://ezlander.app'),
   title: 'ezLander - AI Menu Bar Assistant for macOS',
-  description: 'Manage your calendar and email with natural language from your Mac menu bar. Supports OpenAI, Claude, Gemini, and Kimi.',
-  keywords: ['AI assistant', 'macOS', 'menu bar', 'calendar', 'email', 'productivity', 'ChatGPT', 'Claude', 'Gemini'],
+  description: 'Manage your calendar and email with natural language from your Mac menu bar using ezLander’s subscription-managed AI access.',
+  keywords: ['AI assistant', 'macOS', 'menu bar', 'calendar', 'email', 'productivity', 'subscription AI'],
   authors: [{ name: 'ezLander' }],
   creator: 'ezLander',
   publisher: 'ezLander',
@@ -29,7 +29,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: 'ezLander - AI Menu Bar Assistant for macOS',
-    description: 'Manage your calendar and email with natural language from your Mac menu bar. Supports OpenAI, Claude, Gemini, and Kimi.',
+    description: 'Manage your calendar and email with natural language from your Mac menu bar using ezLander’s subscription-managed AI access.',
     url: 'https://ezlander.app',
     siteName: 'ezLander',
     images: [
