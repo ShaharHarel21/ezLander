@@ -120,6 +120,13 @@ struct ChatView: View {
                         }
                     }
                 }
+                // Also scroll when the last message's content grows (streaming updates).
+                // Without this, streaming tokens append silently above the fold.
+                .onChange(of: viewModel.messages.last?.content) { _ in
+                    if let lastMessage = viewModel.messages.last {
+                        proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                    }
+                }
             }
 
             conversationListOverlay
@@ -135,17 +142,17 @@ struct ChatView: View {
                     QuickActionButton(icon: "calendar.badge.plus", label: "Tomorrow") {
                         viewModel.sendMessage("What's on my calendar tomorrow?")
                     }
-                    QuickActionButton(icon: "calendar.badge.clock", label: "This Week") {
-                        viewModel.sendMessage("What's on my calendar this week?")
+                    QuickActionButton(icon: "envelope", label: "Draft Email") {
+                        viewModel.sendMessage("Help me draft an email")
+                    }
+                    QuickActionButton(icon: "envelope.open", label: "Summarize Emails") {
+                        viewModel.sendMessage("Summarize my latest unread emails")
+                    }
+                    QuickActionButton(icon: "magnifyingglass", label: "Search") {
+                        viewModel.sendMessage("Search my recent emails")
                     }
                     QuickActionButton(icon: "clock", label: "Next Meeting") {
                         viewModel.sendMessage("When is my next meeting and help me prepare for it")
-                    }
-                    QuickActionButton(icon: "clock.badge.checkmark", label: "Free Time") {
-                        viewModel.sendMessage("When do I have free time today?")
-                    }
-                    QuickActionButton(icon: "envelope", label: "Draft Email") {
-                        viewModel.sendMessage("Help me draft an email")
                     }
                 }
                 .padding(.horizontal)
@@ -177,15 +184,15 @@ struct ChatView: View {
                     Button(action: sendMessage) {
                         Image(systemName: "arrow.up.circle.fill")
                             .font(.title2)
-                            .foregroundColor(inputText.isEmpty || viewModel.isQuotaExhausted ? .secondary : .warmPrimary)
+                            .foregroundColor(inputText.isEmpty ? .secondary : .warmPrimary)
                     }
                     .buttonStyle(.plain)
-                    .disabled(inputText.isEmpty || viewModel.isLoading || viewModel.isQuotaExhausted)
+                    .disabled(inputText.isEmpty || viewModel.isLoading)
 
-                    if ProxyAIService.shared.tokensUsed > 0 && ProxyAIService.shared.tokensLimit > 0 {
-                        Text("\(formatTokens(ProxyAIService.shared.tokensUsed))/\(formatTokens(ProxyAIService.shared.tokensLimit))")
+                    if viewModel.sessionInputTokens + viewModel.sessionOutputTokens >= 100 {
+                        Text(TokenEstimator.format(viewModel.sessionInputTokens + viewModel.sessionOutputTokens))
                             .font(.system(size: 8))
-                            .foregroundColor(ProxyAIService.shared.tokensRemaining <= 0 ? .red : .secondary)
+                            .foregroundColor(.secondary)
                     }
                 }
             }
@@ -280,7 +287,19 @@ struct ChatView: View {
         panel.allowedContentTypes = [.plainText]
         panel.begin { response in
             if response == .OK, let url = panel.url {
-                try? text.write(to: url, atomically: true, encoding: String.Encoding.utf8)
+                do {
+                    try text.write(to: url, atomically: true, encoding: .utf8)
+                } catch {
+                    // Show a modal error so the user knows the export failed instead of silently dropping data.
+                    DispatchQueue.main.async {
+                        let alert = NSAlert()
+                        alert.messageText = "Export Failed"
+                        alert.informativeText = error.localizedDescription
+                        alert.alertStyle = .warning
+                        alert.addButton(withTitle: "OK")
+                        alert.runModal()
+                    }
+                }
             }
         }
     }
@@ -295,15 +314,6 @@ struct ChatView: View {
         let text = inputText
         inputText = ""
         viewModel.sendMessage(text)
-    }
-
-    private func formatTokens(_ count: Int) -> String {
-        if count >= 1_000_000 {
-            return String(format: "%.1fM", Double(count) / 1_000_000.0)
-        } else if count >= 1_000 {
-            return String(format: "%.0fK", Double(count) / 1_000.0)
-        }
-        return "\(count)"
     }
 }
 
@@ -559,11 +569,8 @@ class ChatViewModel: ObservableObject {
     @Published var actionResultMessageId: UUID?
 
     private let aiService = AIService.shared
-
-    var isQuotaExhausted: Bool {
-        let proxy = ProxyAIService.shared
-        return proxy.tokensLimit > 0 && proxy.tokensRemaining <= 0
-    }
+    @Published var sessionInputTokens: Int = 0
+    @Published var sessionOutputTokens: Int = 0
 
     // MARK: - Persistence
     private static let messagesKey = "saved_chat_messages"
@@ -669,6 +676,7 @@ class ChatViewModel: ObservableObject {
 
         isLoading = true
         actionResult = nil
+        sessionInputTokens += TokenEstimator.estimate(text)
 
         Task {
             // Try streaming first (OpenAI and Claude support it)
@@ -686,7 +694,7 @@ class ChatViewModel: ObservableObject {
         let placeholderId = UUID()
         await MainActor.run {
             messages.append(ChatMessage(id: placeholderId, role: .assistant, content: ""))
-            isLoading = false  // Hide typing indicator once streaming begins
+            // Keep isLoading true until first chunk arrives, then the growing message itself indicates activity
         }
 
         var fullText = ""
@@ -694,9 +702,10 @@ class ChatViewModel: ObservableObject {
             for try await chunk in stream {
                 fullText += chunk
 
-                // Check if Claude detected a tool use — fall back to non-streaming
+                // Check if Claude detected a tool use — fall back to non-streaming.
+                // We check before updating the placeholder so the internal sentinel
+                // never appears in the UI regardless of timing.
                 if fullText.contains("[TOOL_USE_DETECTED]") {
-                    // Remove placeholder and retry non-streaming
                     await MainActor.run {
                         messages.removeAll { $0.id == placeholderId }
                     }
@@ -704,54 +713,52 @@ class ChatViewModel: ObservableObject {
                     return
                 }
 
-                let displayText = Self.stripActionMarkers(from: fullText)
+                // Strip the internal sentinel before rendering — it must never appear in the UI.
+                let displayText = fullText.replacingOccurrences(of: "\n[TOOL_USE_DETECTED]", with: "")
+                                         .replacingOccurrences(of: "[TOOL_USE_DETECTED]", with: "")
                 await MainActor.run {
+                    if isLoading { isLoading = false }  // Hide typing indicator after first chunk
                     if let index = messages.firstIndex(where: { $0.id == placeholderId }) {
                         messages[index] = ChatMessage(id: placeholderId, role: .assistant, content: displayText)
                     }
                 }
             }
 
+            // Final sanitised text (sentinel already stripped in per-chunk update above)
+            let finalText = fullText.replacingOccurrences(of: "\n[TOOL_USE_DETECTED]", with: "")
+                                    .replacingOccurrences(of: "[TOOL_USE_DETECTED]", with: "")
             await MainActor.run {
                 isLoading = false
 
+                // Track estimated tokens
+                sessionOutputTokens += TokenEstimator.estimate(finalText)
+
                 // Check if the completed response contains an action
-                if let action = parseActionFromResponse(fullText, userMessage: userMessage) {
+                if let action = parseActionFromResponse(finalText, userMessage: userMessage) {
                     // Replace the streamed message with the action prompt
                     messages.removeAll { $0.id == placeholderId }
                     pendingAction = action
-                    let strippedContent = Self.stripActionMarkers(from: fullText)
-                    let displayContent = strippedContent.isEmpty
-                        ? "I've prepared the following action for you. Please review and confirm:"
-                        : strippedContent
                     let actionMsg = ChatMessage(
                         role: .assistant,
-                        content: displayContent
+                        content: "I've prepared the following action for you. Please review and confirm:"
                     )
                     pendingActionMessageId = actionMsg.id
                     messages.append(actionMsg)
-                } else {
-                    // Ensure final stored message has markers stripped
-                    let strippedFinal = Self.stripActionMarkers(from: fullText)
-                    if let index = messages.firstIndex(where: { $0.id == placeholderId }) {
-                        messages[index] = ChatMessage(id: placeholderId, role: .assistant, content: strippedFinal)
-                    }
                 }
                 trimMessagesIfNeeded()
             }
         } catch {
             await MainActor.run {
                 isLoading = false
-                let errorMsg = friendlyErrorMessage(error)
                 if let index = messages.firstIndex(where: { $0.id == placeholderId }) {
-                    messages[index] = ChatMessage(id: placeholderId, role: .assistant, content: errorMsg)
+                    messages[index] = ChatMessage(id: placeholderId, role: .assistant, content: "Sorry, I encountered an error: \(error.localizedDescription)")
                 }
                 trimMessagesIfNeeded()
             }
         }
     }
 
-    /// Handle non-streaming responses.
+    /// Handle non-streaming responses (Gemini, Kimi, or Claude tool-use fallback).
     private func handleNonStreamingResponse(text: String) async {
         do {
             let response = try await aiService.sendMessage(text, conversationHistory: messages)
@@ -759,30 +766,21 @@ class ChatViewModel: ObservableObject {
             await MainActor.run {
                 isLoading = false
 
+                // Track estimated tokens
+                sessionOutputTokens += TokenEstimator.estimate(response.content)
+
                 if response.toolCall != nil {
                     messages.append(response)
                 } else if let action = parseActionFromResponse(response.content, userMessage: text) {
                     pendingAction = action
-                    let strippedContent = Self.stripActionMarkers(from: response.content)
-                    let displayContent = strippedContent.isEmpty
-                        ? "I've prepared the following action for you. Please review and confirm:"
-                        : strippedContent
                     let actionMsg = ChatMessage(
                         role: .assistant,
-                        content: displayContent
+                        content: "I've prepared the following action for you. Please review and confirm:"
                     )
                     pendingActionMessageId = actionMsg.id
                     messages.append(actionMsg)
                 } else {
-                    // Strip any stray markers from displayed content
-                    let cleaned = Self.stripActionMarkers(from: response.content)
-                    let displayMsg = ChatMessage(
-                        id: response.id,
-                        role: response.role,
-                        content: cleaned,
-                        toolCall: response.toolCall
-                    )
-                    messages.append(displayMsg)
+                    messages.append(response)
                 }
                 trimMessagesIfNeeded()
             }
@@ -791,27 +789,11 @@ class ChatViewModel: ObservableObject {
                 isLoading = false
                 messages.append(ChatMessage(
                     role: .assistant,
-                    content: friendlyErrorMessage(error)
+                    content: "Sorry, I encountered an error: \(error.localizedDescription)"
                 ))
                 trimMessagesIfNeeded()
             }
         }
-    }
-
-    private func friendlyErrorMessage(_ error: Error) -> String {
-        if let proxyError = error as? ProxyAIError {
-            switch proxyError {
-            case .quotaExceeded:
-                return "You've reached your monthly token limit. Upgrade your plan in Settings for more tokens."
-            case .noSubscription:
-                return "An active subscription is required to use the AI assistant. Please subscribe to continue."
-            case .notAuthenticated:
-                return "Please sign in to use the AI assistant."
-            default:
-                return proxyError.localizedDescription
-            }
-        }
-        return "Sorry, I encountered an error: \(error.localizedDescription)"
     }
 
     func confirmAction(_ editedAction: AIAction? = nil) {
@@ -901,83 +883,13 @@ class ChatViewModel: ObservableObject {
         ))
     }
 
-    // MARK: - Structured Action Marker Stripping
-
-    /// Remove `[CREATE_EVENT]{...}` and `[SEND_EMAIL]{...}` markers from displayed text.
-    static func stripActionMarkers(from text: String) -> String {
-        var result = text
-        let patterns = [
-            "\\[CREATE_EVENT\\]\\{[^}]*\\}",
-            "\\[SEND_EMAIL\\]\\{[^}]*\\}",
-        ]
-        for pattern in patterns {
-            if let regex = try? NSRegularExpression(pattern: pattern, options: []) {
-                let range = NSRange(result.startIndex..<result.endIndex, in: result)
-                result = regex.stringByReplacingMatches(in: result, range: range, withTemplate: "")
-            }
-        }
-        return result.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    // MARK: - Parse Action from AI Response
-
-    /// Parse action requests from AI response text.
-    /// Primary: structured `[CREATE_EVENT]{...}` / `[SEND_EMAIL]{...}` JSON markers.
-    /// Fallback: legacy regex-based heuristic parsing.
+    // Parse action requests from AI response
     private func parseActionFromResponse(_ content: String, userMessage: String = "") -> AIAction? {
-        // --- Primary: structured [CREATE_EVENT] JSON marker ---
-        if let markerRange = content.range(of: "\\[CREATE_EVENT\\](\\{[^}]*\\})", options: .regularExpression) {
-            let markerText = String(content[markerRange])
-            if let jsonStart = markerText.firstIndex(of: "{") {
-                let jsonString = String(markerText[jsonStart...])
-                if let jsonData = jsonString.data(using: .utf8),
-                   let dict = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
-                    let title = dict["title"] as? String ?? "New Event"
-                    let dateStr = dict["date"] as? String ?? ""
-                    let timeStr = dict["time"] as? String ?? ""
-                    let durationMinutes = dict["duration_minutes"] as? Int ?? 60
-                    let location = dict["location"] as? String
-                    let startDate = EventParser.parseDateTime(date: dateStr, time: timeStr)
-                    let endDate = startDate.addingTimeInterval(TimeInterval(durationMinutes * 60))
-                    let eventData = EventActionData(
-                        title: title,
-                        startDate: startDate,
-                        endDate: endDate,
-                        location: location,
-                        description: nil
-                    )
-                    return AIAction(
-                        type: .createEvent,
-                        eventData: eventData,
-                        summary: "Create '\(title)'"
-                    )
-                }
-            }
-        }
+        // Look for action markers in the response
+        // Format: [ACTION:type] followed by JSON data
 
-        // --- Primary: structured [SEND_EMAIL] JSON marker ---
-        if let markerRange = content.range(of: "\\[SEND_EMAIL\\](\\{[^}]*\\})", options: .regularExpression) {
-            let markerText = String(content[markerRange])
-            if let jsonStart = markerText.firstIndex(of: "{") {
-                let jsonString = String(markerText[jsonStart...])
-                if let jsonData = jsonString.data(using: .utf8),
-                   let dict = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
-                    let to = dict["to"] as? String ?? ""
-                    let subject = dict["subject"] as? String ?? "No Subject"
-                    let body = dict["body"] as? String ?? ""
-                    guard !to.isEmpty else { return nil }
-                    let emailData = EmailActionData(to: to, subject: subject, body: body)
-                    return AIAction(
-                        type: .sendEmail,
-                        emailData: emailData,
-                        summary: "Send email to \(to)"
-                    )
-                }
-            }
-        }
-
-        // --- Fallback: legacy regex/heuristic parsing ---
-        if content.lowercased().contains("i'll create") || content.lowercased().contains("i will create") {
+        // Check for event creation pattern
+        if content.contains("[CREATE_EVENT]") || content.lowercased().contains("i'll create") || content.lowercased().contains("i will create") {
             if let eventData = EventParser.parseEventData(from: content, userMessage: userMessage) {
                 return AIAction(
                     type: .createEvent,
@@ -987,7 +899,8 @@ class ChatViewModel: ObservableObject {
             }
         }
 
-        if content.lowercased().contains("i'll send") || content.lowercased().contains("i will send") {
+        // Check for email sending pattern
+        if content.contains("[SEND_EMAIL]") || content.lowercased().contains("i'll send") || content.lowercased().contains("i will send") {
             if let emailData = EmailParser.parseEmailData(from: content) {
                 return AIAction(
                     type: .sendEmail,

@@ -8,9 +8,13 @@ class CalendarContextService {
     // MARK: - Context Cache
     private var cachedContext: String = ""
     private var lastCacheTime: Date?
-    private let cacheDuration: TimeInterval = 300 // 5 minutes
+    private let cacheDuration: TimeInterval = 120 // 2 minutes
 
-    // MARK: - Build Today Context (for AI system prompt injection)
+    // MARK: - Weekly Context Cache
+    private var cachedWeekContext: String = ""
+    private var lastWeekCacheTime: Date?
+
+    // MARK: - Build Today & Tomorrow Context (for AI system prompt injection)
     func buildTodayContext() async -> String {
         // Return cached context if still fresh
         if let lastTime = lastCacheTime, Date().timeIntervalSince(lastTime) < cacheDuration, !cachedContext.isEmpty {
@@ -23,12 +27,98 @@ class CalendarContextService {
         return context
     }
 
-    // MARK: - Fetch Fresh Context
+    // MARK: - Build Week Context (Mon-Sun grouped by day)
+    func buildWeekContext() async -> String {
+        // Return cached weekly context if still fresh
+        if let lastTime = lastWeekCacheTime, Date().timeIntervalSince(lastTime) < cacheDuration, !cachedWeekContext.isEmpty {
+            return cachedWeekContext
+        }
+
+        let context = await fetchWeekContext()
+        cachedWeekContext = context
+        lastWeekCacheTime = Date()
+        return context
+    }
+
+    // MARK: - Fetch Week Context
+    private func fetchWeekContext() async -> String {
+        let calendar = Calendar.current
+        let now = Date()
+
+        // Find Monday of this week
+        let weekday = calendar.component(.weekday, from: now)
+        // .weekday: 1=Sun, 2=Mon, ..., 7=Sat
+        let daysFromMonday = (weekday + 5) % 7
+        guard let monday = calendar.date(byAdding: .day, value: -daysFromMonday, to: calendar.startOfDay(for: now)),
+              let sundayEnd = calendar.date(byAdding: .day, value: 7, to: monday) else {
+            return ""
+        }
+
+        guard GoogleCalendarService.shared.isAuthorized || AppleCalendarService.shared.isAuthorized else {
+            return ""
+        }
+
+        do {
+            let events: [CalendarEvent]
+            if GoogleCalendarService.shared.isAuthorized {
+                events = try await GoogleCalendarService.shared.listEvents(from: monday, to: sundayEnd)
+            } else {
+                events = try await AppleCalendarService.shared.listEvents(from: monday, to: sundayEnd)
+            }
+
+            if events.isEmpty {
+                return "This week's schedule: No events."
+            }
+
+            let timeFormatter = DateFormatter()
+            timeFormatter.timeStyle = .short
+
+            let dayFormatter = DateFormatter()
+            dayFormatter.dateFormat = "EEEE, MMM d"
+
+            // Group events by day
+            var dayGroups: [(String, [CalendarEvent])] = []
+            for dayOffset in 0..<7 {
+                guard let dayStart = calendar.date(byAdding: .day, value: dayOffset, to: monday) else { continue }
+                let dayLabel = dayFormatter.string(from: dayStart)
+                let isToday = calendar.isDateInToday(dayStart)
+                let label = isToday ? "\(dayLabel) (Today)" : dayLabel
+                let dayEvents = events.filter { calendar.isDate($0.startDate, inSameDayAs: dayStart) }
+                if !dayEvents.isEmpty {
+                    dayGroups.append((label, dayEvents))
+                }
+            }
+
+            var lines: [String] = ["This week's schedule:"]
+            for (dayLabel, dayEvents) in dayGroups {
+                lines.append("\n\(dayLabel):")
+                for event in dayEvents {
+                    var line = "  - "
+                    if event.isAllDay {
+                        line += "[All Day] "
+                    } else {
+                        line += "[\(timeFormatter.string(from: event.startDate)) - \(timeFormatter.string(from: event.endDate))] "
+                    }
+                    line += event.title
+                    if event.hasVideoCall { line += " (video call)" }
+                    if event.attendeeCount > 0 { line += " (\(event.attendeeCount) attendees)" }
+                    if let loc = event.location, !loc.isEmpty { line += " @ \(loc)" }
+                    lines.append(line)
+                }
+            }
+            return lines.joined(separator: "\n")
+        } catch {
+            return ""
+        }
+    }
+
+    // MARK: - Fetch Fresh Context (today + tomorrow + upcoming countdown)
     private func fetchFreshContext() async -> String {
         let calendar = Calendar.current
-        let startOfDay = calendar.startOfDay(for: Date())
-        guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else {
-            return "Calendar: Unable to determine today's date range."
+        let now = Date()
+        let startOfDay = calendar.startOfDay(for: now)
+        guard let endOfTomorrow = calendar.date(byAdding: .day, value: 2, to: startOfDay) else {
+            return "Calendar: Unable to determine date range."
         }
 
         guard GoogleCalendarService.shared.isAuthorized || AppleCalendarService.shared.isAuthorized else {
@@ -36,43 +126,83 @@ class CalendarContextService {
         }
 
         do {
-            let events: [CalendarEvent]
+            let allEvents: [CalendarEvent]
             if GoogleCalendarService.shared.isAuthorized {
-                events = try await GoogleCalendarService.shared.listEvents(from: startOfDay, to: endOfDay)
+                allEvents = try await GoogleCalendarService.shared.listEvents(from: startOfDay, to: endOfTomorrow)
             } else {
-                events = try await AppleCalendarService.shared.listEvents(from: startOfDay, to: endOfDay)
+                allEvents = try await AppleCalendarService.shared.listEvents(from: startOfDay, to: endOfTomorrow)
             }
-            if events.isEmpty {
-                return "Calendar: No events scheduled for today."
-            }
+
+            let todayEvents = allEvents.filter { calendar.isDateInToday($0.startDate) }
+            let tomorrowEvents = allEvents.filter { calendar.isDateInTomorrow($0.startDate) }
 
             let timeFormatter = DateFormatter()
             timeFormatter.timeStyle = .short
 
-            var lines: [String] = ["Today's schedule (\(events.count) event\(events.count == 1 ? "" : "s")):"]
-            for event in events {
-                var line = "- "
-                if event.isAllDay {
-                    line += "[All Day] "
+            var lines: [String] = []
+
+            // Upcoming event countdown
+            let nextEvent = todayEvents.first(where: { !$0.isAllDay && $0.startDate > now })
+            if let next = nextEvent {
+                let minutesUntil = Int(next.startDate.timeIntervalSince(now) / 60)
+                if minutesUntil < 60 {
+                    lines.append("Next: \(next.title) in \(minutesUntil) minutes")
                 } else {
-                    line += "[\(timeFormatter.string(from: event.startDate)) - \(timeFormatter.string(from: event.endDate))] "
+                    let hours = minutesUntil / 60
+                    let mins = minutesUntil % 60
+                    if mins > 0 {
+                        lines.append("Next: \(next.title) in \(hours)h \(mins)m")
+                    } else {
+                        lines.append("Next: \(next.title) in \(hours) hour\(hours == 1 ? "" : "s")")
+                    }
                 }
-                line += event.title
-                if event.hasVideoCall {
-                    line += " (video call)"
-                }
-                if event.attendeeCount > 0 {
-                    line += " (\(event.attendeeCount) attendees)"
-                }
-                if let loc = event.location, !loc.isEmpty {
-                    line += " @ \(loc)"
-                }
-                lines.append(line)
+                lines.append("")
             }
+
+            // Today's events
+            if todayEvents.isEmpty {
+                lines.append("Today's schedule: No events scheduled.")
+            } else {
+                lines.append("Today's schedule (\(todayEvents.count) event\(todayEvents.count == 1 ? "" : "s")):")
+                for event in todayEvents {
+                    lines.append(formatEventLine(event, timeFormatter: timeFormatter))
+                }
+            }
+
+            // Tomorrow's events
+            if !tomorrowEvents.isEmpty {
+                lines.append("")
+                lines.append("Tomorrow (\(tomorrowEvents.count) event\(tomorrowEvents.count == 1 ? "" : "s")):")
+                for event in tomorrowEvents {
+                    lines.append(formatEventLine(event, timeFormatter: timeFormatter))
+                }
+            }
+
             return lines.joined(separator: "\n")
         } catch {
-            return "Calendar: Error fetching today's events."
+            return "Calendar: Error fetching events."
         }
+    }
+
+    // MARK: - Format Event Line
+    private func formatEventLine(_ event: CalendarEvent, timeFormatter: DateFormatter) -> String {
+        var line = "- "
+        if event.isAllDay {
+            line += "[All Day] "
+        } else {
+            line += "[\(timeFormatter.string(from: event.startDate)) - \(timeFormatter.string(from: event.endDate))] "
+        }
+        line += event.title
+        if event.hasVideoCall {
+            line += " (video call)"
+        }
+        if event.attendeeCount > 0 {
+            line += " (\(event.attendeeCount) attendees)"
+        }
+        if let loc = event.location, !loc.isEmpty {
+            line += " @ \(loc)"
+        }
+        return line
     }
 
     // MARK: - Build Upcoming Context (next 24 hours)

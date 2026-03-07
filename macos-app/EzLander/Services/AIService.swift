@@ -38,8 +38,8 @@ enum AIModel: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .gpt4o: return "GPT-4o"
-        case .gpt4oMini: return "GPT-4o Mini"
+        case .gpt4o: return "GPT-4o (Smartest)"
+        case .gpt4oMini: return "GPT-4o Mini (Fast)"
         }
     }
 
@@ -69,7 +69,7 @@ class AIService: ObservableObject {
            let model = AIModel(rawValue: savedModel) {
             selectedModel = model
         } else {
-            selectedModel = .gpt4o
+            selectedModel = .gpt4oMini
         }
         proxyService.selectedModel = selectedModel.rawValue
     }
@@ -103,6 +103,8 @@ class AIService: ObservableObject {
     var tokensLimit: Int { proxyService.tokensLimit }
     var tokensRemaining: Int { proxyService.tokensRemaining }
     var tier: String { proxyService.tier }
+
+    var currentModelName: String { selectedModel.displayName }
 
     var isAuthenticated: Bool {
         proxyService.isAuthenticated

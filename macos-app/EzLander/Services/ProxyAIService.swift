@@ -67,8 +67,8 @@ class ProxyAIService: ObservableObject {
         let requestBody: [String: Any] = [
             "model": selectedModel,
             "messages": messages,
-            "temperature": 0.7,
-            "max_tokens": 4096,
+            "temperature": 0.5,
+            "max_tokens": 2048,
             "stream": false
         ]
 
@@ -77,7 +77,7 @@ class ProxyAIService: ObservableObject {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
-        request.timeoutInterval = 60
+        request.timeoutInterval = 30
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
@@ -139,9 +139,10 @@ class ProxyAIService: ObservableObject {
                     let requestBody: [String: Any] = [
                         "model": self.selectedModel,
                         "messages": messages,
-                        "temperature": 0.7,
-                        "max_tokens": 4096,
-                        "stream": true
+                        "temperature": 0.5,
+                        "max_tokens": 2048,
+                        "stream": true,
+                        "stream_options": ["include_usage": true]
                     ]
 
                     var request = URLRequest(url: URL(string: self.baseURL)!)
@@ -149,7 +150,7 @@ class ProxyAIService: ObservableObject {
                     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
                     request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
                     request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
-                    request.timeoutInterval = 120
+                    request.timeoutInterval = 60
 
                     let (bytes, response) = try await URLSession.shared.bytes(for: request)
 
@@ -183,8 +184,23 @@ class ProxyAIService: ObservableObject {
                         if jsonStr == "[DONE]" { break }
 
                         guard let data = jsonStr.data(using: .utf8),
-                              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                              let choices = json["choices"] as? [[String: Any]],
+                              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
+
+                        // Parse usage data from the final chunk (stream_options: include_usage)
+                        if let usage = json["usage"] as? [String: Any] {
+                            await MainActor.run {
+                                if let used = usage["total_tokens"] as? Int {
+                                    self.tokensUsed = used
+                                }
+                                if let promptTokens = usage["prompt_tokens"] as? Int,
+                                   let completionTokens = usage["completion_tokens"] as? Int {
+                                    let totalUsed = promptTokens + completionTokens
+                                    self.tokensUsed = totalUsed
+                                }
+                            }
+                        }
+
+                        guard let choices = json["choices"] as? [[String: Any]],
                               let delta = choices.first?["delta"] as? [String: Any],
                               let content = delta["content"] as? String else { continue }
 

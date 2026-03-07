@@ -84,12 +84,15 @@ export async function POST(request: NextRequest) {
     }
 
     // 5. Forward to OpenAI
+    const isStreaming = stream ?? false;
+
     const openaiBody = {
       model,
       messages,
-      temperature: body.temperature ?? 0.7,
-      max_tokens: body.max_tokens ?? 4096,
-      stream: stream ?? false,
+      temperature: body.temperature ?? 0.5,
+      max_tokens: body.max_tokens ?? 2048,
+      stream: isStreaming,
+      ...(isStreaming ? { stream_options: { include_usage: true } } : {}),
     };
 
     const openaiResponse = await fetch(OPENAI_API_URL, {
@@ -152,6 +155,10 @@ export async function POST(request: NextRequest) {
 
       const stream2 = openaiResponse.body.pipeThrough(transformStream);
 
+      const tokensRemaining = isAdmin
+        ? -1
+        : Math.max(0, tokenLimit - currentUsage.totalTokens);
+
       return new Response(stream2, {
         headers: {
           "Content-Type": "text/event-stream",
@@ -159,6 +166,7 @@ export async function POST(request: NextRequest) {
           Connection: "keep-alive",
           "X-Tokens-Used": String(currentUsage.totalTokens),
           "X-Tokens-Limit": String(tokenLimit === Infinity ? -1 : tokenLimit),
+          "X-Tokens-Remaining": String(tokensRemaining),
           "X-Tier": tierName,
         },
       });
