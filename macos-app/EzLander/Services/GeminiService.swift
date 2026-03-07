@@ -18,8 +18,10 @@ class GeminiService {
         }
     }
 
+    // NOTE: Callers that need a fresh key should call reloadAPIKey() explicitly first.
+    // Embedding reloadAPIKey() here caused a side-effectful getter which is
+    // not safe to call from concurrent contexts.
     var isConfigured: Bool {
-        reloadAPIKey()
         return !apiKey.isEmpty
     }
 

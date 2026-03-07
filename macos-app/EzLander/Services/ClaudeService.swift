@@ -4,7 +4,8 @@ class ClaudeService {
     static let shared = ClaudeService()
 
     private var apiKey: String
-    private let baseURL = "https://api.anthropic.com/v1/messages"
+    // Pre-built URL — avoids force-unwrap URL(string:)! at every call site.
+    private let baseURL = URL(string: "https://api.anthropic.com/v1/messages")!
     private let model = "claude-sonnet-4-20250514"
 
     private init() {
@@ -30,8 +31,10 @@ class ClaudeService {
     }
 
     // MARK: - Check if configured
+    // NOTE: Callers that need a fresh key should call reloadAPIKey() explicitly first.
+    // Embedding reloadAPIKey() here caused a side-effectful getter which is
+    // not safe to call from concurrent contexts.
     var isConfigured: Bool {
-        reloadAPIKey()
         return !apiKey.isEmpty
     }
 
@@ -144,7 +147,7 @@ class ClaudeService {
             "messages": messages
         ]
 
-        var request = URLRequest(url: URL(string: baseURL)!)
+        var request = URLRequest(url: baseURL)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
@@ -224,7 +227,7 @@ class ClaudeService {
                         "messages": updatedMessages
                     ]
 
-                    var request = URLRequest(url: URL(string: baseURL)!)
+                    var request = URLRequest(url: baseURL)
                     request.httpMethod = "POST"
                     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
                     request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
@@ -593,7 +596,7 @@ extension ClaudeService {
                         "stream": true
                     ]
 
-                    var request = URLRequest(url: URL(string: self.baseURL)!)
+                    var request = URLRequest(url: self.baseURL)
                     request.httpMethod = "POST"
                     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
                     request.setValue(self.apiKey, forHTTPHeaderField: "x-api-key")

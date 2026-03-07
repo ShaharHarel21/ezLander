@@ -5,7 +5,8 @@ class OpenAIService {
 
     private var apiKey: String = ""
     private(set) var isUsingOAuth: Bool = false
-    private let baseURL = "https://api.openai.com/v1/chat/completions"
+    // Pre-built URL — avoids force-unwrap URL(string:)! at every call site.
+    private let baseURL = URL(string: "https://api.openai.com/v1/chat/completions")!
 
     private init() {
         reloadAPIKey()
@@ -25,8 +26,10 @@ class OpenAIService {
         }
     }
 
+    // NOTE: Callers that need a fresh key should call reloadAPIKey() explicitly first.
+    // Embedding reloadAPIKey() here caused a side-effectful getter which is
+    // not safe to call from concurrent contexts.
     var isConfigured: Bool {
-        reloadAPIKey()
         return !apiKey.isEmpty
     }
 
@@ -95,7 +98,7 @@ class OpenAIService {
             "max_tokens": 4096
         ]
 
-        var request = URLRequest(url: URL(string: baseURL)!)
+        var request = URLRequest(url: baseURL)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
@@ -149,12 +152,16 @@ extension OpenAIService {
                 do {
                     self.reloadAPIKey()
 
+                    // Use a local variable for the token to avoid mutating shared state
+                    // from inside an unstructured Task (data race on self.apiKey).
+                    var effectiveApiKey = self.apiKey
                     if self.isUsingOAuth {
                         let freshToken = try await OAuthService.shared.getValidOpenAIAccessToken()
-                        self.apiKey = freshToken
+                        effectiveApiKey = freshToken
+                        self.apiKey = freshToken  // persist for subsequent non-streaming calls
                     }
 
-                    guard !self.apiKey.isEmpty else {
+                    guard !effectiveApiKey.isEmpty else {
                         continuation.finish(throwing: OpenAIError.noAPIKey)
                         return
                     }
@@ -178,10 +185,10 @@ extension OpenAIService {
                         "stream": true
                     ]
 
-                    var request = URLRequest(url: URL(string: self.baseURL)!)
+                    var request = URLRequest(url: self.baseURL)
                     request.httpMethod = "POST"
                     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                    request.setValue("Bearer \(self.apiKey)", forHTTPHeaderField: "Authorization")
+                    request.setValue("Bearer \(effectiveApiKey)", forHTTPHeaderField: "Authorization")
                     request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
 
                     let (bytes, response) = try await URLSession.shared.bytes(for: request)
