@@ -19,12 +19,12 @@ const installSteps = [
   'Extract the ZIP and drag ezLander.app to Applications',
   'Right-click the app and select "Open" on first launch',
   'Click "Allow" when prompted for accessibility permissions',
-  'Sign in with your Google account',
+  'Sign in or create your ezLander account inside the app',
   'Start using ezLander from your menu bar!',
 ]
 
 // GitHub releases URL - direct link to latest version
-const DOWNLOAD_URL = 'https://github.com/ShaharHarel21/ezLander/releases/download/v1.23.0/EzLander-v1.23.0.zip'
+const DOWNLOAD_URL = 'https://github.com/ShaharHarel21/ezLander/releases/download/v1.24.0/EzLander-v1.24.0.zip'
 const RELEASES_PAGE = 'https://github.com/ShaharHarel21/ezLander/releases'
 
 export default function DownloadPage() {
@@ -68,7 +68,7 @@ export default function DownloadPage() {
               <div className="flex-1 text-center md:text-left">
                 <h2 className="text-2xl font-bold mb-2">ezLander for macOS</h2>
                 <p className="text-gray-600 dark:text-gray-400 mb-4">
-                  Version 1.23.0 • ~1.6 MB
+                  Version 1.24.0 • ~2.2 MB
                 </p>
                 <a
                   href={DOWNLOAD_URL}

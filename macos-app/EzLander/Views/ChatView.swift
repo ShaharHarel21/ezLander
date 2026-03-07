@@ -554,6 +554,7 @@ struct TypingIndicator: View {
 }
 
 // MARK: - View Model
+@MainActor
 class ChatViewModel: ObservableObject {
     static let shared = ChatViewModel()
 
