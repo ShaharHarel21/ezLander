@@ -24,7 +24,7 @@ const installSteps = [
 ]
 
 // GitHub releases URL - direct link to latest version
-const DOWNLOAD_URL = 'https://github.com/ShaharHarel21/ezLander/releases/download/v1.24.0/EzLander-v1.24.0.zip'
+const DOWNLOAD_URL = 'https://github.com/ShaharHarel21/ezLander/releases/download/v1.25.0/EzLander-v1.25.0.zip'
 const RELEASES_PAGE = 'https://github.com/ShaharHarel21/ezLander/releases'
 
 export default function DownloadPage() {
@@ -68,7 +68,7 @@ export default function DownloadPage() {
               <div className="flex-1 text-center md:text-left">
                 <h2 className="text-2xl font-bold mb-2">ezLander for macOS</h2>
                 <p className="text-gray-600 dark:text-gray-400 mb-4">
-                  Version 1.24.0 • ~2.2 MB
+                  Version 1.25.0 • ~2.2 MB
                 </p>
                 <a
                   href={DOWNLOAD_URL}

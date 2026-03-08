@@ -3,7 +3,7 @@
 export const APP_CONFIG = {
   name: 'ezLander',
   bundleId: 'com.ezlander.app',
-  version: '1.24.0',
+  version: '1.25.0',
   minMacOSVersion: '13.0',
   website: 'https://ezlander.app',
   supportEmail: 'support@ezlander.app',
