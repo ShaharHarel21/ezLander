@@ -111,7 +111,7 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
   const customerId = session.customer as string
   const email = session.customer_email || session.customer_details?.email
 
-  console.log(`Checkout completed for customer: ${customerId}, email: ${email}`)
+  console.log(`Checkout completed for customer: ${customerId}`)
 
   if (!email) return
 
@@ -160,7 +160,7 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
 
   // Validate: not self-referral
   if (referrer.email === email) {
-    console.log(`Self-referral blocked: ${email}`)
+    console.log(`Self-referral blocked for customer: ${customerId}`)
     return
   }
 
@@ -173,13 +173,13 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
   })
 
   if (existingReferral) {
-    console.log(`Duplicate referral blocked: ${referrer.email} -> ${email}`)
+    console.log(`Duplicate referral blocked for customer: ${customerId}`)
     return
   }
 
   // Validate: not at cap
   if (referrer.referralsCount >= REFERRAL_CAP) {
-    console.log(`Referral cap reached for: ${referrer.email}`)
+    console.log(`Referral cap reached for customer: ${customerId}`)
     return
   }
 
@@ -200,7 +200,7 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
     })
     .where(eq(users.email, referrer.email))
 
-  console.log(`Referral completed: ${referrer.email} earned ${REFERRAL_REWARD_DAYS} days from ${email}`)
+  console.log(`Referral completed: customer ${customerId} earned ${REFERRAL_REWARD_DAYS} days`)
 }
 
 async function handleSubscriptionCreated(subscription: Stripe.Subscription) {
@@ -224,7 +224,7 @@ async function handleSubscriptionCreated(subscription: Stripe.Subscription) {
         .set({ creditsActivatedAt: null })
         .where(eq(users.email, email))
 
-      console.log(`Credits paused for re-subscribing user: ${email}`)
+      console.log(`Credits paused for re-subscribing customer: ${customerId}`)
     }
 
     // Ensure subscription record exists

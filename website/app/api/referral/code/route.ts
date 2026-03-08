@@ -1,15 +1,27 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { generateReferralCode } from "@/lib/referral";
+import { verifyAuthToken, isValidEmail } from "@/lib/auth-utils";
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
+    // Require authentication
+    const auth = await verifyAuthToken(req);
+    if (!auth) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
     const { email } = await req.json();
 
-    if (!email) {
-      return NextResponse.json({ error: "Email is required" }, { status: 400 });
+    if (!email || !isValidEmail(email)) {
+      return NextResponse.json({ error: "Valid email is required" }, { status: 400 });
+    }
+
+    // Verify authenticated user matches requested email
+    if (email.toLowerCase() !== auth.email.toLowerCase()) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const existing = await db.query.users.findFirst({

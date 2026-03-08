@@ -3,19 +3,10 @@ import { getActiveSubscription } from "@/lib/db/subscription-repo";
 import { getUsage, recordUsage } from "@/lib/db/token-usage";
 import { getTierTokenLimit } from "@/lib/tiers";
 import { resolveRequestUser } from "@/lib/request-auth";
+import { isAdminEmail } from "@/lib/auth-utils";
 
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 const MANAGED_OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
-
-function isAdminUser(email: string | null | undefined): boolean {
-  if (!email) return false;
-  const lower = email.toLowerCase();
-  const adminEmails = [
-    process.env.ADMIN_EMAIL?.toLowerCase(),
-    "shahar.harel200@gmail.com",
-  ].filter(Boolean);
-  return adminEmails.includes(lower);
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -30,7 +21,7 @@ export async function POST(request: NextRequest) {
 
     const userId = authUser.userId;
     const userEmail = authUser.email;
-    const isAdmin = isAdminUser(userEmail);
+    const isAdmin = isAdminEmail(userEmail);
 
     // 2. Subscription check (skip for admin)
     let tokenLimit = Infinity;
@@ -83,7 +74,7 @@ export async function POST(request: NextRequest) {
       model: MANAGED_OPENAI_MODEL,
       messages,
       temperature: body.temperature ?? 0.5,
-      max_tokens: body.max_tokens ?? 2048,
+      max_tokens: Math.min(body.max_tokens ?? 2048, 4096),
       stream: isStreaming,
       ...(isStreaming ? { stream_options: { include_usage: true } } : {}),
     };
@@ -101,8 +92,8 @@ export async function POST(request: NextRequest) {
       const errorText = await openaiResponse.text();
       console.error("OpenAI API error:", openaiResponse.status, errorText);
       return NextResponse.json(
-        { error: "AI service error", details: errorText },
-        { status: openaiResponse.status }
+        { error: "AI service temporarily unavailable" },
+        { status: 502 }
       );
     }
 

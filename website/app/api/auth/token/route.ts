@@ -4,19 +4,16 @@ import { db } from "@/lib/db";
 import { authUsers } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { SignJWT } from "jose";
+import { isAdminEmail } from "@/lib/auth-utils";
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || "fallback-secret"
-);
-
-function isAdminEmail(email: string): boolean {
-  const normalized = email.toLowerCase();
-  const adminEmails = [
-    process.env.ADMIN_EMAIL?.toLowerCase(),
-    "shahar.harel200@gmail.com",
-  ].filter(Boolean);
-
-  return adminEmails.includes(normalized);
+function getJwtSecret() {
+  const secret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET;
+  if (!secret) {
+    throw new Error(
+      "JWT secret is not configured. Set AUTH_SECRET or NEXTAUTH_SECRET environment variable."
+    );
+  }
+  return new TextEncoder().encode(secret);
 }
 
 async function issueJWT(payload: { sub: string; email: string; name?: string | null }) {
@@ -28,7 +25,7 @@ async function issueJWT(payload: { sub: string; email: string; name?: string | n
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("30d")
-    .sign(JWT_SECRET);
+    .sign(getJwtSecret());
 }
 
 export async function POST(request: NextRequest) {

@@ -226,11 +226,7 @@ class SubscriptionService: ObservableObject {
         cacheAccountInfo(email: auth.user.email, name: auth.user.name)
 
         do {
-            if Self.isAdminEmail(normalizedEmail) {
-                try await activateAdminSubscription(email: normalizedEmail, password: password)
-            } else {
-                try await activateSubscription(email: normalizedEmail)
-            }
+            try await activateSubscription(email: normalizedEmail)
         } catch SubscriptionError.noActiveSubscription {
             throw AppSessionError.noActiveSubscription
         } catch {
@@ -242,15 +238,6 @@ class SubscriptionService: ObservableObject {
         let normalizedEmail = email.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         try await registerWithServer(name: name.trimmingCharacters(in: .whitespacesAndNewlines), email: normalizedEmail, password: password)
         try await signInToApp(email: normalizedEmail, password: password)
-    }
-
-    // MARK: - Admin Detection
-
-    /// Check if the given email is a known admin email that requires password authentication.
-    /// This allows the UI to immediately show the password field without a server round-trip.
-    static func isAdminEmail(_ email: String) -> Bool {
-        let trimmed = email.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed == "shahar@ezlander.app" || trimmed == "shahar.harel200@gmail.com" || trimmed.hasSuffix("@admin.ezlander.app")
     }
 
     // MARK: - Stored Check

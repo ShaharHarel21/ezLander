@@ -8,6 +8,7 @@ import { getActiveSubscription } from '@/lib/db/subscription-repo'
 import { getUsage } from '@/lib/db/token-usage'
 import { getTierTokenLimit } from '@/lib/tiers'
 import { resolveRequestUser } from '@/lib/request-auth'
+import { isAdminEmail } from '@/lib/auth-utils'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2023-10-16',
@@ -37,15 +38,6 @@ async function getReferralData(email: string) {
     console.error('Error fetching referral data:', e)
   }
   return {}
-}
-
-function isAdminEmail(email: string): boolean {
-  const lower = email.toLowerCase()
-  const adminEmails = [
-    process.env.ADMIN_EMAIL?.toLowerCase(),
-    'shahar.harel200@gmail.com',
-  ].filter(Boolean)
-  return adminEmails.includes(lower)
 }
 
 async function getTokenUsageData(email: string) {

@@ -1,17 +1,29 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { users, referrals } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { verifyAuthToken } from "@/lib/auth-utils";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   try {
+    // Require authentication
+    const auth = await verifyAuthToken(req);
+    if (!auth) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
     const { searchParams } = new URL(req.url);
     const email = searchParams.get("email");
 
     if (!email) {
       return NextResponse.json({ error: "Email is required" }, { status: 400 });
+    }
+
+    // Verify authenticated user matches requested email
+    if (email.toLowerCase() !== auth.email.toLowerCase()) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const user = await db.query.users.findFirst({
