@@ -35,17 +35,13 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const passwordHash = await bcrypt.hash(password, 12);
-
-      await db
-        .update(authUsers)
-        .set({
-          name: name || existing.name || null,
-          passwordHash,
-        })
-        .where(eq(authUsers.id, existing.id));
-
-      return NextResponse.json({ success: true, claimed: true });
+      return NextResponse.json(
+        {
+          error:
+            "An account with this email was created via a third-party provider. Please sign in using your original sign-in method.",
+        },
+        { status: 409 }
+      );
     }
 
     const passwordHash = await bcrypt.hash(password, 12);

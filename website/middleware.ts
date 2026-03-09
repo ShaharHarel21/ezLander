@@ -11,11 +11,18 @@ const RATE_LIMITS: Record<string, { limit: number; windowMs: number }> = {
 const DEFAULT_LIMIT = { limit: 60, windowMs: 60_000 };
 
 function getClientIp(request: NextRequest): string {
-  return (
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    request.headers.get("x-real-ip") ||
-    "anonymous"
-  );
+  // On Vercel, use the platform-verified IP header first
+  const vercelIp = request.headers.get("x-vercel-forwarded-for");
+  if (vercelIp) return vercelIp.split(",")[0]?.trim() || "anonymous";
+
+  // Fallback: use the last IP in x-forwarded-for (added by outermost trusted proxy)
+  const xff = request.headers.get("x-forwarded-for");
+  if (xff) {
+    const ips = xff.split(",").map((s) => s.trim()).filter(Boolean);
+    return ips[ips.length - 1] || "anonymous";
+  }
+
+  return request.headers.get("x-real-ip") || "anonymous";
 }
 
 function getRateConfig(pathname: string) {

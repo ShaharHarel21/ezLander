@@ -5,18 +5,7 @@ import { getActiveSubscription } from "@/lib/db/subscription-repo";
 import { getUsage } from "@/lib/db/token-usage";
 import { getTierTokenLimit } from "@/lib/tiers";
 import { resolveRequestUser } from "@/lib/request-auth";
-
-function isAdminUser(email: string | undefined): boolean {
-  if (!email) return false;
-
-  const lower = email.toLowerCase();
-  const adminEmails = [
-    process.env.ADMIN_EMAIL?.toLowerCase(),
-    "shahar.harel200@gmail.com",
-  ].filter(Boolean);
-
-  return adminEmails.includes(lower);
-}
+import { isAdminEmail } from "@/lib/auth-utils";
 
 export async function GET(request: NextRequest) {
   try {
@@ -28,7 +17,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    if (isAdminUser(authUser.email)) {
+    if (isAdminEmail(authUser.email)) {
       return NextResponse.json({
         tier: "admin",
         period: "unlimited",

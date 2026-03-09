@@ -2,9 +2,13 @@ import { getToken } from "next-auth/jwt";
 import { jwtVerify } from "jose";
 import type { NextRequest } from "next/server";
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || "fallback-secret"
-);
+function getJwtSecret(): Uint8Array {
+  const secret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET;
+  if (!secret) {
+    throw new Error("JWT secret not configured. Set AUTH_SECRET or NEXTAUTH_SECRET.");
+  }
+  return new TextEncoder().encode(secret);
+}
 
 export interface RequestUser {
   userId: string;
@@ -53,7 +57,7 @@ export async function resolveRequestUser(
   }
 
   try {
-    const { payload } = await jwtVerify(bearerToken, JWT_SECRET);
+    const { payload } = await jwtVerify(bearerToken, getJwtSecret());
     return coerceRequestUser({
       sub: typeof payload.sub === "string" ? payload.sub : null,
       email: typeof payload.email === "string" ? payload.email : null,

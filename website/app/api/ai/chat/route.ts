@@ -67,12 +67,46 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const MAX_MESSAGES = 50;
+    const MAX_CONTENT_LENGTH = 10_000;
+    const ALLOWED_ROLES = new Set(["user", "assistant"]);
+
+    if (messages.length > MAX_MESSAGES) {
+      return NextResponse.json(
+        { error: `Too many messages. Maximum allowed is ${MAX_MESSAGES}.` },
+        { status: 400 }
+      );
+    }
+
+    const validatedMessages = [];
+    for (const msg of messages) {
+      if (typeof msg.content !== "string") {
+        return NextResponse.json(
+          { error: "Each message must have a string content field." },
+          { status: 400 }
+        );
+      }
+      if (!ALLOWED_ROLES.has(msg.role)) {
+        // Strip messages with disallowed roles (e.g. "system")
+        continue;
+      }
+      if (msg.content.length > MAX_CONTENT_LENGTH) {
+        return NextResponse.json(
+          {
+            error: `Message content exceeds maximum length of ${MAX_CONTENT_LENGTH} characters.`,
+          },
+          { status: 400 }
+        );
+      }
+      validatedMessages.push({ role: msg.role, content: msg.content });
+    }
+
     // 5. Forward to OpenAI
     const isStreaming = stream ?? false;
 
     const openaiBody = {
       model: MANAGED_OPENAI_MODEL,
-      messages,
+      messages: validatedMessages,
       temperature: body.temperature ?? 0.5,
       max_tokens: Math.min(body.max_tokens ?? 2048, 4096),
       stream: isStreaming,
