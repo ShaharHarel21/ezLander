@@ -1,0 +1,48 @@
+name: Code Review
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Claude Code Review
+        uses: anthropics/claude-code-action@beta
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          review_comment_prompt: |
+            You are a code reviewer for the ezLander project (a macOS menu bar app + Next.js website).
+
+            Dispatch your review across these focus areas like a team of specialized agents:
+
+            **Bug Hunter** — Look for logic errors, null/undefined risks, race conditions,
+            off-by-one errors, and incorrect API usage. Pay special attention to:
+            - Swift optional handling and force-unwraps
+            - TypeScript type safety gaps (any, as casts, missing null checks)
+            - Async/await correctness and error propagation
+
+            **Security Auditor** — Flag injection risks (XSS, SQL injection, command injection),
+            hardcoded secrets, insecure data handling, missing auth checks, and OWASP top-10 issues.
+            Check Stripe webhook signature verification and OAuth flows.
+
+            **Performance Watchdog** — Identify N+1 queries, unnecessary re-renders in SwiftUI/React,
+            memory leaks (retain cycles in Swift, missing cleanup in useEffect), large bundle impacts,
+            and blocking operations on the main thread.
+
+            **Maintainability Reviewer** — Call out code duplication, overly complex functions,
+            missing error handling, inconsistent naming, and violations of existing patterns
+            in the codebase (singleton services, ViewModel-in-View-file convention, Theme constants).
+
+            Be specific and actionable. Reference line numbers. Only comment on real issues,
+            not style nitpicks. If the code looks good, say so briefly.
