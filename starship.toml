@@ -1,0 +1,32 @@
+# Minimal Starship prompt
+# Install: https://starship.rs
+# Usage: Add `eval "$(starship init bash)"` (or zsh/fish) to your shell rc file
+# To use this config: export STARSHIP_CONFIG=~/path/to/this/starship.toml
+
+format = """
+$directory$git_branch$git_status
+$character"""
+
+[directory]
+style = "bold white"
+truncation_length = 5
+truncate_to_repo = false
+
+[git_branch]
+format = " [$branch]($style)"
+style = "bold bright-white"
+
+[git_status]
+format = "[$all_status$ahead_behind]($style)"
+style = "bold bright-white"
+modified = "*"
+staged = "+"
+untracked = "?"
+deleted = "✘"
+ahead = "⇡"
+behind = "⇣"
+diverged = "⇕"
+
+[character]
+success_symbol = "[❯](bold magenta)"
+error_symbol = "[❯](bold red)"
